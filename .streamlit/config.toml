@@ -1,0 +1,11 @@
+# Streamlit production theme + privacy for the Adaptive RAG client
+[theme]
+base = "dark"
+primaryColor = "#10B981"          # emerald — audited/verified accent
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false          # zero telemetry out of the deployment
+
+[client]
+toolbarMode = "minimal"           # hide dev menu in deployed environments

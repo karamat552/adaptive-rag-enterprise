@@ -1,0 +1,59 @@
+# Docker Compose — Adaptive RAG Enterprise Platform
+# backend : FastAPI gateway (main.py)      -> :8000
+# frontend: Streamlit executive client     -> :8501
+# Both share one image; the frontend only overrides the command + API base URL.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_fastapi_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+    # Readiness gate (DB reachable + LLM circuit closed), not just process-alive.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 15s        # allow lifespan close_pool() to finish
+    networks:
+      - enterprise_rag_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_streamlit_frontend
+    restart: always
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      # CRITICAL: inside the compose network the gateway is container DNS 'backend'.
+      - API_BASE_URL=http://backend:8000
+    command: ["streamlit", "run", "app.py", "--server.port=8501",
+              "--server.address=0.0.0.0", "--server.headless=true"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      backend:
+        condition: service_healthy   # UI waits for a READY backend, not a started one
+    networks:
+      - enterprise_rag_network
+
+networks:
+  enterprise_rag_network:
+    driver: bridge

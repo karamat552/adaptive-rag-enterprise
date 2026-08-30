@@ -1,0 +1,61 @@
+{
+  "run_id": "c5820b185835",
+  "schema_version": "2.0.0",
+  "started_at": "2026-08-23T07:45:01+00:00",
+  "finished_at": "2026-08-23T07:45:05+00:00",
+  "duration_s": 4.0,
+  "corpus": {
+    "path": "corpus_chunks.jsonl",
+    "sha256": "d47071f4623cadd7cb6b225206094a4dfdfc7f2b8f862e5b765da3b8df6774d3",
+    "chunks": 186
+  },
+  "totals": {
+    "raw_chunks": 186,
+    "duplicates_skipped": 0
+  },
+  "distribution": {
+    "company": {
+      "Tesla": 104,
+      "Apple": 24,
+      "Meta": 58
+    },
+    "category": {
+      "general": 45,
+      "product": 37,
+      "financial": 84,
+      "risk": 20
+    }
+  },
+  "sources": [
+    {
+      "filename": "Tesla_Q4_2023.pdf",
+      "url": "https://digitalassets.tesla.com/tesla-contents/image/upload/IR/TSLA-Q4-2023-Update.pdf",
+      "status": "reused",
+      "pdf_sha256": "74b08a054d5d9b312d47a1ff043429ac87a2ef5e3a11630445eb779740b73885",
+      "error": null,
+      "raw_chunks": 104,
+      "duplicates_skipped": 0,
+      "chunks_written": 104
+    },
+    {
+      "filename": "Apple_Q4_2023.pdf",
+      "url": "https://www.apple.com/newsroom/pdfs/fy2023-q4/FY23_Q4_Consolidated_Financial_Statements.pdf",
+      "status": "reused",
+      "pdf_sha256": "db786041d2e0f87d77a731323a56a3baa3457750fdfe8c61d88264f1465f4234",
+      "error": null,
+      "raw_chunks": 24,
+      "duplicates_skipped": 0,
+      "chunks_written": 24
+    },
+    {
+      "filename": "Meta_Q4_2023.pdf",
+      "url": "https://s21.q4cdn.com/399680738/files/doc_financials/2023/q4/Meta-12-31-2023-Exhibit-99-1-FINAL.pdf",
+      "status": "reused",
+      "pdf_sha256": "ab92ba0290dd5c1b7f0e0ed7db74a52c03e352f70a1e17d39a90e8a1975b6469",
+      "error": null,
+      "raw_chunks": 58,
+      "duplicates_skipped": 0,
+      "chunks_written": 58
+    }
+  ]
+}

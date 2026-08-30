@@ -1,0 +1,65 @@
+# CI — Adaptive RAG Enterprise Platform
+# (Repackaged from a stray `.github/workflows` *file* that GitHub Actions
+#  could never execute — it must be a directory of *.yml files.)
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unit tests — persistence + gateway + eval + UI + citation guard (no live deps)
+        run: pytest tests --ignore=tests/test_answer_accuracy.py -m "not integration" -v
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16   # Postgres 16 + pgvector + pg_trgm
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ragdb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Migrate schema + bootstrap least-privilege runtime role
+        env:
+          DB_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+          APP_RAG_PASSWORD: ciruntimepw123
+        run: python scripts/bootstrap_roles.py
+
+      - name: Run full suite as the RLS-bound runtime role
+        env:
+          DB_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+          DB_DATABASE_URL: postgresql://app_rag:ciruntimepw123@localhost:5432/ragdb
+        run: pytest tests/test_db.py -v
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image (2-stage, non-root)
+        run: docker build -t adaptive-rag:ci .

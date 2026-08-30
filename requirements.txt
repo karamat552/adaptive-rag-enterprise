@@ -1,0 +1,42 @@
+# --- Ingestion layer (ingest.py) ---
+pymupdf>=1.24
+requests>=2.31
+langchain-text-splitters>=0.2
+
+# --- Contracts & config ---
+pydantic>=2.7
+pydantic-settings>=2.2
+python-dotenv>=1.0
+
+# --- Persistence layer (db.py) ---
+psycopg2-binary>=2.9
+pgvector>=0.3
+tenacity>=8.2
+fastembed>=0.3
+
+# --- Orchestration layer (adaptive_rag.py) ---
+langgraph>=0.2
+langchain-google-genai>=1.0
+langchain-openai>=0.2
+flashrank>=0.2
+
+# --- Serving layer (main.py) ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# --- UX client (app.py) ---
+streamlit>=1.35
+httpx>=0.27
+pandas>=2.2
+
+# --- Evaluation harness (eval.py) ---
+# The ragas PyPI package is incompatible with this stack: 0.4.x pins openai<2
+# and 0.3.x imports langchain_community.chat_models.vertexai (removed in
+# langchain-community 1.x). eval.py implements the three RAGAS metrics natively
+# with the project's judge-LLM seam and only uses the ragas library when it
+# imports cleanly (e.g. on a langchain<1 stack — install it manually there).
+# ragas>=0.3.1,<0.4    (optional, only on langchain<1 stacks)
+# datasets>=2.19       (optional, ragas dependency)
+
+# --- Testing & CI ---
+pytest>=8.0

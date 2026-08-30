@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.vscode
+.idea
+venv/
+data/
+corpus_chunks.json
+corpus_chunks.jsonl
+*.md
