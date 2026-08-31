@@ -280,7 +280,18 @@ def _connect_admin() -> psycopg2.extensions.connection:
             "       set_config('app.rls_bypass', 'on', false);",
             (str(cfg.statement_timeout_ms),),
         )
-        register_vector(conn)
+        try:
+            register_vector(conn)
+        except psycopg2.ProgrammingError:
+            # pgvector re-raises "vector type not found in the database" as a
+            # bare ProgrammingError when the extension is absent — a virgin
+            # database, where migration 001 (CREATE EXTENSION vector) has not
+            # run yet and needs THIS connection to do so. DDL paths don't need
+            # the type registered; every subsequent admin connection
+            # re-registers once the extension exists. (Worked implicitly on
+            # Neon, where the extension long predates this code — CI caught it.)
+            logger.warning("vector type absent — deferring register_vector "
+                           "(fresh database: extension arrives with migration 001).")
         cur.execute("SELECT current_user;")
         logger.info("Admin identity: %s (RLS bypass engaged)", cur.fetchone()[0])
         cur.execute("SELECT set_config('pg_trgm.similarity_threshold', %s, false);",
