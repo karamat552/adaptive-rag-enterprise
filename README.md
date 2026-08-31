@@ -30,6 +30,10 @@ Docker: `docker compose up --build` (backend :8000, frontend :8501).
 > in-process state; extra workers would double the effective rate limit and split
 > `/metrics`. The app is fully async — one worker saturates the LLM concurrency budget.
 
+The production image **bakes the embedding + reranking ONNX models in at build time**
+(`FASTEMBED_CACHE_PATH=/opt/models/fastembed`): a fresh container's first request is a
+warm semantic-cache hit in ~7s — never an ONNX download racing the DB timeout.
+
 ## Gateway API (`main.py`)
 
 | Route | Method | Purpose |
