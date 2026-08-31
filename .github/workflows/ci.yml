@@ -47,6 +47,9 @@ jobs:
       - name: Migrate schema + bootstrap least-privilege runtime role
         env:
           DB_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+          # Required by db.Settings (fail-closed) even though bootstrap only
+          # CONNECTS as owner — this URL becomes valid once the role is created.
+          DB_DATABASE_URL: postgresql://app_rag:ciruntimepw123@localhost:5432/ragdb
           APP_RAG_PASSWORD: ciruntimepw123
         run: python scripts/bootstrap_roles.py
 

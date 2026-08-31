@@ -74,7 +74,9 @@ def _state(draft: str) -> dict:
 
 @pytest.fixture()
 def _spy_auditor(monkeypatch):
-    """Replaces the LLM seam; counts auditor invocations, always certifies."""
+    """Replaces the LLM seam; counts auditor invocations, always certifies.
+    _get_checker is stubbed too: without a provider key in bare CI, merely
+    CONSTRUCTING the engine raises (fail-closed) before _llm_call is entered."""
     import adaptive_rag as ar
     calls = {"n": 0}
 
@@ -87,6 +89,7 @@ def _spy_auditor(monkeypatch):
         return _Audit(), ar.UsageCollector()
 
     monkeypatch.setattr(ar, "_llm_call", _spy)
+    monkeypatch.setattr(ar, "_get_checker", lambda: object())
     monkeypatch.setattr(ar.get_settings(), "disable_cache_writes", True)
     return calls
 
