@@ -38,6 +38,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Bake ML models into the image at build time: a fresh container's first
+# request must never pay an ONNX download (which previously outran the DB
+# timeout on cold start and failed the cache lookup open).
+ENV FASTEMBED_CACHE_PATH=/opt/models/fastembed
+RUN mkdir -p /opt/models/fastembed && \
+    python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')" && \
+    python -c "from flashrank import Ranker; Ranker()"
+
 # Production Python environment flags
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
