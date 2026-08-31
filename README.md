@@ -1,5 +1,7 @@
 # Adaptive RAG — Enterprise Financial Intelligence Platform
 
+![CI](https://github.com/karamat552/adaptive-rag-enterprise/actions/workflows/ci.yml/badge.svg)
+
 Self-correcting, async-first multi-agent RAG over SEC 10-Q filings (Tesla · Apple · Meta),
 with a zero-trust fact-checking audit, epoch-guarded semantic cache, and a hardened
 FastAPI serving layer built for Enterprise K8s/Docker.
