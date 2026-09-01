@@ -2,6 +2,11 @@
 
 ![CI](https://github.com/karamat552/adaptive-rag-enterprise/actions/workflows/ci.yml/badge.svg)
 
+**🚀 Live demo:** [adaptive-rag-enterprise.streamlit.app](https://adaptive-rag-enterprise.streamlit.app)
+· **API:** [adaptive-rag-enterprise.onrender.com](https://adaptive-rag-enterprise.onrender.com)
+([/health](https://adaptive-rag-enterprise.onrender.com/health) ·
+[/metrics](https://adaptive-rag-enterprise.onrender.com/metrics))
+
 Self-correcting, async-first multi-agent RAG over SEC 10-Q filings (Tesla · Apple · Meta),
 with a zero-trust fact-checking audit, epoch-guarded semantic cache, and a hardened
 FastAPI serving layer built for Enterprise K8s/Docker.
