@@ -11,6 +11,8 @@ Self-correcting, async-first multi-agent RAG over SEC 10-Q filings (Tesla · App
 with a zero-trust fact-checking audit, epoch-guarded semantic cache, and a hardened
 FastAPI serving layer built for Enterprise K8s/Docker.
 
+> Design rationale and telemetry-gated roadmap: [`ARCHITECTURE_DECISIONS.md`](ARCHITECTURE_DECISIONS.md)
+
 ```
 app.py (Streamlit) ──SSE──▶ main.py (FastAPI gateway)
                               │  rate limit · auth · disconnect guard · metrics · probes
