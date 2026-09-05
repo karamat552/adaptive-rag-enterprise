@@ -343,3 +343,87 @@ def test_ambiguous_comparison_sentence_never_votes():
     assert all(x["company"] != "meta" for x in m), \
         "no company name in the sentence -> never attributed to a wrong company"
     assert detect_contradictions(m) == []
+
+
+# ============================== nearest-anchor family binding =============
+def test_multi_metric_sentence_binds_figures_to_nearest_family():
+    """Live-found defect (2026-09-05, white-whale trace): 'net income grew
+    201% from $4.652 billion while revenue grew 25% to $40.111 billion'
+    first-match binding lumped BOTH figures into one 'growth' group ->
+    fabricated contradiction between Meta's own net income and revenue."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Meta net income grew 201 percent from $4.652 billion in Q4 2023, "
+            "while revenue grew 25 percent to $40.111 billion.")
+    m = extract_metric_mentions(text, "meta")
+    # 4.652B must bind to net_income; 40.111B must bind to revenue
+    fam_by_val = {}
+    for x in m:
+        if x["unit"] == "$":
+            fam_by_val[round(x["value"] / 1e9, 2)] = x["family"]
+    assert fam_by_val.get(4.65) == "net_income", \
+        f"4.652B binds to {fam_by_val.get(4.65)} — must bind to net_income"
+    assert fam_by_val.get(40.11) == "revenue", \
+        f"40.111B binds to {fam_by_val.get(40.11)} — must bind to revenue"
+    # And no fabricated contradiction within Meta:
+    assert detect_contradictions(m) == []
+
+
+def test_single_metric_sentence_unchanged():
+    from adaptive_rag import extract_metric_mentions
+    m = extract_metric_mentions(
+        "Meta revenue was $40,111 million in Q4 2023.", "meta")
+    assert m and m[0]["family"] == "revenue"
+
+
+def test_growth_percentage_binds_to_growth_word():
+    """'grew 201 percent' — the percent figure must bind to the growth
+    family nearest it, not to a distant revenue term."""
+    from adaptive_rag import extract_metric_mentions
+    m = extract_metric_mentions(
+        "Meta net income grew 201 percent year-over-year.", "meta")
+    assert m and all(x["family"] in ("net_income", "growth") for x in m), \
+        "percent figure near 'net income grew' — nearest-anchor binding"
+
+
+# ============== consult-converged declines (3-model review, live-caught) ===
+def test_arithmetic_transcript_sentence_declined():
+    """'(14,017-4,652)/4,652 = 2.012 = 201.2% ~201%' — a visible DERIVATION.
+    Parsing it as three figures + a percent fabricated a 4-way conflict out
+    of one correct calculation (live capture 2026-09-05)."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = "Net income: (14,017-4,652)/4,652 = 9,365/4,652 = 2.012 = 201.2% ~201% as given."
+    assert extract_metric_mentions(text, "meta") == []
+
+
+def test_from_to_transition_pair_no_self_conflict():
+    """'Net income increased from $20,721 to $22,956' — prior/current pair
+    in one sentence, previously both period=None -> self-conflict. The
+    transition binding separates their groups."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = "Net income increased from $20,721 to $22,956, about 10.8% increase."
+    m = extract_metric_mentions(text, "apple")
+    periods = {x["period"] for x in m if x["unit"] == "$"}
+    assert "RELATIVE_PRIOR" in periods and "RELATIVE_CURRENT" in periods, \
+        f"transition endpoints must bind to distinct periods, got {periods}"
+    assert detect_contradictions(m) == []
+
+
+def test_multi_named_company_sentence_declined():
+    """'Apple revenue reached $22,314M while Meta hit $40,111M' — shared
+    comparison sentences can never attribute reliably; company=None so the
+    figures never vote in either company's conflict groups."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = "Apple revenue reached $22,314 million while Meta revenue hit $40,111 million."
+    m = extract_metric_mentions(text, "apple")
+    assert all(x["company"] is None for x in m), \
+        "multi-named-company sentences must decline attribution entirely"
+    assert detect_contradictions(m) == []
+
+
+def test_single_company_sentences_still_attributed():
+    """The declines must not over-trigger: a plain single-company sentence
+    still attributes and still detects genuine conflicts."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    m = extract_metric_mentions(
+        "Apple revenue was $22,314 million in Q4 2023.", "apple")
+    assert m and m[0]["company"] == "apple"
