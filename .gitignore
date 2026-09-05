@@ -25,3 +25,10 @@ data/*.pdf
 
 # Tooling session artifacts
 .zcode/
+# Secrets backups (NEVER commit)
+.env.bak*
+
+# Personal artifacts
+*.pdf
+unseen_results.json
+q2_attempt*.json

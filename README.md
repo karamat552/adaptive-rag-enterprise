@@ -8,8 +8,8 @@
 [/metrics](https://adaptive-rag-enterprise.onrender.com/metrics))
 
 Self-correcting, async-first multi-agent RAG over SEC 10-Q filings (Tesla · Apple · Meta),
-with a zero-trust fact-checking audit, epoch-guarded semantic cache, and a hardened
-FastAPI serving layer built for Enterprise K8s/Docker.
+with a zero-trust fact-checking audit, **five deterministic zero-token gates** (citation bounds · unit/scale · growth-direction vs the filing's own comparative columns · **XBRL crosscheck against SEC-published facts** · tamper-evident receipt chain), **tamper-evident verification receipts**, epoch-guarded
+semantic cache, and a hardened FastAPI serving layer built for Enterprise K8s/Docker.
 
 > Design rationale and telemetry-gated roadmap: [`ARCHITECTURE_DECISIONS.md`](ARCHITECTURE_DECISIONS.md)
 
@@ -50,6 +50,7 @@ warm semantic-cache hit in ~7s — never an ONNX download racing the DB timeout.
 | `/query` | POST | JSON answer. Disconnect-aware: client abort cancels the run (499). |
 | `/query/stream` | GET | SSE: `start` → `transition`×N (node labels) → `result` \| `error`. Keep-alive comments every 15 s defeat proxy idle timeouts. |
 | `/search` | POST | Raw hybrid search (RRF fusion), tenant-scoped. No LLM. |
+| `/verify/{run_id}` | GET | 🧾 **Verification receipt** for a grounded run: claim list + evidence chain + deterministic on-demand re-verify (slice stored page transcripts, re-hash `company⊣source⊣page⊣slice`, compare to `chunk_hash`). Zero LLM tokens; tamper-evident by construction. 404 for refusals/unverified runs. Response includes page transcripts, per-chunk DB attribution truth, and the source-PDF SHA registry — the data behind the Streamlit **🔏 Prove it** explorer. |
 | `/feedback` | POST | 👎 poison-pill cache eviction. Requires `X-Admin-Key` (fail-closed 503 if unset, 403 on wrong key). |
 | `/health` | GET | Orchestration + DB health (status, epoch, chunks, cache entries). |
 | `/live` | GET | K8s **liveness** — process-alive only, deliberately dependency-free. |
@@ -61,6 +62,8 @@ curl -X POST localhost:8000/query -H "Content-Type: application/json" \
      -d '{"question": "What were Apple Products vs Services revenue in Q4 2023?"}'
 
 curl -N "localhost:8000/query/stream?question=Compare+Apple+and+Meta+revenue"   # watch transitions
+
+curl localhost:8000/verify/$RUN_ID   # 🧾 receipt: claims + evidence + deterministic re-verify
 
 curl -X POST localhost:8000/feedback -H "X-Admin-Key: $ADMIN_API_KEY" \
      -d '{"question": "What were Apple Products vs Services revenue in Q4 2023?"}'
