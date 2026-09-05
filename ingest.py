@@ -55,7 +55,7 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "2.2.0"   # 2.2: table/footnote-aware ingestion + arithmetic checks
 
 Category = Literal["financial", "risk", "product", "general"]
 
@@ -168,6 +168,17 @@ class ChunkMetadata(BaseModel):
     category: Category
     section_title: str = Field(max_length=120)
     contains_table: bool = False
+    # Table-integrity flag (v2.2). None = not a table / no additive rows to
+    # check; True = additive totals verified; False = ≥1 total-vs-sum
+    # violation flagged (surfaced to fleet + /verify, NEVER silently dropped).
+    arithmetic_ok: Optional[bool] = None
+    # Char-span lineage (v2.1). Offsets are into the PAGE TRANSCRIPT — the
+    # "\n\n"-join of section bodies (incl. table markdown) in emit order,
+    # exactly as chunked. Optional so pre-2.1 JSONL/DB rows stay valid;
+    # None means "not locatable" — never a fabricated offset.
+    char_start: Optional[int] = Field(default=None, ge=0)
+    char_end: Optional[int] = Field(default=None, ge=0)
+    transcript_version: Optional[int] = Field(default=None, ge=1)
 
 
 class DocumentChunk(BaseModel):
@@ -185,11 +196,32 @@ class DocumentChunk(BaseModel):
         return cleaned
 
 
+class PageTranscriptRecord(BaseModel):
+    """THE SPINE of the verification chain: the page transcript a chunk's
+    [char_start, char_end) spans point into. With this ledger, /verify
+    recomputes chunk hashes WITHOUT the source PDF — slice the transcript,
+    hash company⊣source⊣page⊣slice, compare. The transcript itself is pinned
+    to the PDF by the ingestion manifest's per-source SHA-256."""
+    schema_version: str = SCHEMA_VERSION
+    transcript_version: int
+    company: str
+    source: str
+    page: int = Field(ge=1)
+    transcript: str
+    transcript_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 def generate_chunk_hash(company: str, source: str, page: int, text: str) -> str:
     # ASCII unit separator (\x1f) prevents ambiguous collisions like
     # ("a:b", 1) vs ("a", "b:1") that a naive ":" join allows.
     key = f"{company}\x1f{source}\x1f{page}\x1f{text.strip()}"
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+# Bump when the transcript derivation changes (layout pass, section rules,
+# separator conventions). Receipts pin their version; a mismatched version is
+# "not locatable under this derivation", never a silent false positive.
+TRANSCRIPT_VERSION = 1
 
 
 # ===========================================================================
@@ -407,25 +439,221 @@ class DocumentParseError(RuntimeError):
     pass
 
 
+_FOOTNOTE_RE = re.compile(r"^\s*[\(\u00b9\u00b2\u00b3\u2070-\u2079](\d{1,2})\)\s+")
+_FOOTNOTE_MARK_RE = re.compile(
+    r"^\s*(\(\d{1,2}\)|[\u00b9\u00b2\u00b3]|\d)\s*[\).:]?\s+\S")
+
+
+def _cell_text(cell) -> str:
+    return "" if cell is None else str(cell).replace("\n", " ").strip()
+
+
+def _is_footnote_line(line: str) -> bool:
+    """'(1) Includes amortization...' / '1) Excludes...' / '¹ Based on...'"""
+    return bool(_FOOTNOTE_RE.match(line) or _FOOTNOTE_MARK_RE.match(line))
+
+
+_NUMBER_RE = re.compile(r"-?\$?\(?\d[\d,\.]*\)?")
+_TOTAL_HINT_RE = re.compile(r"total|sum\b", re.IGNORECASE)
+
+
+def _parse_number(text: str) -> Optional[float]:
+    """'(1,234)' -> -1234 (accounting negative); '$22,314' -> 22314.0;
+    '—' or 'n/a' -> None. Trailing % or unit words are ignored."""
+    t = text.strip().replace("$", "").replace("%", "")
+    if not t or t in {"—", "-", "–", "n/a", "N/A", "–"}:
+        return None
+    neg = t.startswith("(") and t.endswith(")")
+    if neg:
+        t = t[1:-1]
+    t = t.replace(",", "")
+    m = re.fullmatch(r"-?\d+(?:\.\d+)?", t)
+    if not m:
+        return None
+    v = float(t)
+    return -v if neg else v
+
+
+def _group_table_rows(body: str, chunk_size: int) -> List[str]:
+    """Packs table-section lines into chunks WITHOUT splitting a row line.
+    Each chunk starts with the TABLE: marker and the column-header line (the
+    two structural lines of the block) so every chunk is self-describing;
+    row lines then follow whole. A single row longer than chunk_size stays
+    whole (oversize is honest; a split row is a wrong row)."""
+    lines = [ln for ln in body.splitlines() if ln.strip()]
+    if not lines:
+        return []
+    # Structural head: 'TABLE:' marker + the first pipe-grid header line, if
+    # present in the first few lines (the grid's '| ... |' row).
+    head: List[str] = [lines[0]]                      # 'TABLE:'
+    rest = lines[1:]
+    for i, ln in enumerate(rest[:3]):
+        if ln.startswith("| ") or "=" in ln:
+            head.append(ln)
+            rest = rest[i + 1:]
+            break
+    rows = rest
+
+    chunks: List[str] = []
+    current = list(head)
+    current_len = sum(len(ln) for ln in current)
+    for row in rows:
+        if current_len + len(row) + 1 > chunk_size and len(current) > len(head):
+            chunks.append("\n".join(current))
+            current = list(head)
+            current_len = sum(len(ln) for ln in current)
+        current.append(row)
+        current_len += len(row) + 1
+    if len(current) > len(head):
+        chunks.append("\n".join(current))
+    return chunks
+
+
+def verify_table_arithmetic(table_text: str,
+                           tolerance: float = 0.5) -> Dict[str, Any]:
+    """Deterministic additive check over a header-contexted table chunk:
+    `Label :: Column=value | ...` lines. For every column, if a row's label
+    hints TOTAL/SUM and ≥2 sibling rows hold numbers in that column, require
+    total == sum(siblings) within tolerance (absolute, table units). Pure
+    function, zero LLM tokens.
+
+    Returns {'checked': n, 'passed': n, 'violations': [...]}. A violation is
+    NOT proof of a parse error (legit non-additive totals exist — e.g. a
+    'Total' row whose members span pages) — it is a FLAG surfaced to the
+    fleet and /verify, never a silent wrongness. checked==0 means no
+    total-like row had addable members (common, fine)."""
+    checked = passed = 0
+    violations: List[Dict[str, Any]] = []
+    rows: List[Tuple[str, Dict[str, float]]] = []
+
+    for line in table_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("| ") or line in ("TABLE:", "FOOTNOTES:"):
+            continue
+        if " :: " in line:
+            label, _, pairs_str = line.partition(" :: ")
+        elif "=" in line:
+            label, pairs_str = "", line
+        else:
+            continue
+        pairs: Dict[str, float] = {}
+        for token in pairs_str.split(" | "):
+            if "=" in token:
+                k, v = token.split("=", 1)
+                num = _parse_number(v)
+                if num is not None:
+                    pairs[k.strip()] = num
+        if pairs:
+            rows.append((label.strip(), pairs))
+
+    for label, pairs in rows:
+        if not _TOTAL_HINT_RE.search(label):
+            continue
+        for col, total_val in pairs.items():
+            members = [p[col] for l, p in rows
+                       if l != label and col in p
+                       and not _TOTAL_HINT_RE.search(l)]
+            if len(members) < 2:
+                continue
+            s = sum(members)
+            checked += 1
+            if abs(total_val - s) <= tolerance:
+                passed += 1
+            else:
+                violations.append({
+                    "total_row": label, "column": col,
+                    "total": total_val, "member_sum": s,
+                    "members": members,
+                })
+    return {"checked": checked, "passed": passed, "violations": violations}
+
+
+def _render_table(rows: List[List[str]], footnotes: List[str]) -> Optional[str]:
+    """Renders one extracted table for the corpus. Two layouts, chosen by
+    structure:
+    - HEADED tables (header row with ≥2 non-empty cells): every row becomes a
+      self-describing `RowLabel :: Column=value | ...` line — a row can never
+      be retrieved without BOTH its row identity and its column semantics.
+      Consecutive digit-less rows extend the header (merged units), capped at 2.
+    - LABEL-COLUMN tables (balance sheets: first row has <2 non-empty cells —
+      PyMuPDF found no real header): grid-only, where each row carries its own
+      label in cell 0. Fabricating column names there would be worse than none.
+    FOOTNOTES from the same page are appended — a figure modified by a
+    footnote must not be retrievable without that footnote nearby."""
+    rows = [r for r in rows if any(c for c in r)]
+    if not rows:
+        return None
+    # A real header row carries ≥2 non-empty cells AND is not the only
+    # label-bearing row (balance sheets: labels live in column 0 of every
+    # data row, the 'header' slot holds no column names at all).
+    header = rows[0]
+    body = rows[1:]
+    if len([c for c in header if c]) < 2:
+        # LABEL-COLUMN table (balance-sheet style): no real header — grid
+        # only, where each row carries its own label in cell 0. Fabricating
+        # column names there would be worse than none.
+        parts = ["TABLE:"]
+        parts.extend("| " + " | ".join(row) + " |" for row in rows)
+        if footnotes:
+            parts += ["", "FOOTNOTES:", *footnotes]
+        md = "\n".join(parts).strip()
+        return md if len(md) > len("TABLE:") else None
+    merged = 0
+    while (body and merged < 2
+           and any(c for c in body[0])
+           and not any(re.search(r"\d", c) for c in body[0])):
+        header = [f"{h} ({c})".strip(" ()") if h and c else (h or c)
+                  for h, c in zip(header, body[0])]
+        body = body[1:]
+        merged += 1
+
+    parts: List[str] = ["TABLE:"]
+    if len([c for c in header if c]) >= 2:
+        label_col = bool(header[0])
+        for row in body:
+            pairs = [f"{h}={v}" for h, v in zip(header[1:], row[1:])
+                     if h and v]
+            if not pairs:
+                continue
+            label = row[0] if (label_col and row[0]) else ""
+            parts.append(f"{label} :: " + " | ".join(pairs) if label
+                         else " | ".join(pairs))
+    grid = ["| " + " | ".join(row) + " |" for row in ([header] + body)]
+    parts.append("")
+    parts.extend(grid)
+    if footnotes:
+        parts.append("")
+        parts.append("FOOTNOTES:")
+        parts.extend(footnotes)
+    md = "\n".join(parts).strip()
+    return md if len(md) > len("TABLE:") else None
+
+
 def _extract_tables(page: "pymupdf.Page") -> List[str]:
-    """Financial tables flattened by naive extraction lose digit alignment.
-    Pipe-delimited rows keep numbers tokenizable for retrieval."""
+    """Financial tables flattened by naive extraction lose digit alignment AND
+    the row-to-header binding that makes a number interpretable. See
+    _render_table for the layout contract; this handles page-level concerns
+    (find_tables resilience, same-page footnote collection)."""
     tables: List[str] = []
     try:
         found = page.find_tables()
     except Exception as exc:  # find_tables can choke on exotic pages — degrade gracefully
         logger.debug("find_tables failed on page %s: %s", getattr(page, "number", "?"), exc)
         return tables
+
+    # Footnote candidates live in the page's own text blocks, not in table cells.
+    page_lines: List[str] = []
+    try:
+        blocks = [b for b in page.get_text("blocks") if len(b) >= 7 and b[6] == 0]
+        for b in blocks:
+            page_lines.extend(ln for ln in b[4].splitlines() if ln.strip())
+    except Exception:
+        page_lines = []
+    footnotes = [ln.strip() for ln in page_lines if _is_footnote_line(ln)]
+
     for table in getattr(found, "tables", []):
-        rows = table.extract()
-        lines = [
-            "| " + " | ".join(
-                "" if cell is None else str(cell).replace("\n", " ").strip()
-                for cell in row
-            ) + " |"
-            for row in rows
-        ]
-        md = "\n".join(lines).strip()
+        rows = [[_cell_text(c) for c in row] for row in table.extract()]
+        md = _render_table(rows, footnotes)
         if md:
             tables.append(md)
     return tables
@@ -436,9 +664,13 @@ def parse_pdf_stream(
     doc: SourceDocument,
     settings: Settings,
     splitter: RecursiveCharacterTextSplitter,
+    transcript_sink: Optional[List[PageTranscriptRecord]] = None,
 ) -> Generator[DocumentChunk, None, None]:
     """Yields validated chunks; raises DocumentParseError on structural failure
-    (caller records it and keeps processing other sources)."""
+    (caller records it and keeps processing other sources). When transcript_sink
+    is provided, one PageTranscriptRecord per text-bearing page is appended —
+    in page order, AFTER that page's chunks are yielded (partial ledgers for
+    sources that later fail parsing are the caller's to discard)."""
     if not filepath.exists():
         raise DocumentParseError(f"missing input file: {filepath}")
 
@@ -458,34 +690,94 @@ def parse_pdf_stream(
                     continue  # image-only page
                 pages_with_text += 1
 
+                # PAGE transcript = the CHUNKS THEMSELVES joined by "\n\n".
+                # Phase B fix: multi-chunk tables re-state their structural
+                # head per chunk, so a transcript built from raw sections is
+                # not chunk-contiguous. Building it from the emitted pieces
+                # makes transcript[a:b] == chunk.text hold BY CONSTRUCTION —
+                # the verifier's slice-and-hash chain stays exact.
                 sections = segment_blocks_into_sections(texts)
                 if settings.extract_tables:
                     for tbl in _extract_tables(page):
                         sections.append((carried_title, tbl, True))
 
-                for title, body, has_table in sections:
+                pieces_per_section: List[List[str]] = [
+                    (_group_table_rows(body, settings.chunk_size)
+                     if has_table else splitter.split_text(body))
+                    for _t, body, has_table in sections
+                ]
+                page_transcript = "\n\n".join(
+                    p.strip() for ps in pieces_per_section for p in ps if p.strip())
+
+                # Spans are running offsets into page_transcript — exact by
+                # construction (transcript built from these very pieces), so
+                # no find()-mapping is needed and no span can drift.
+                offsets: List[Tuple[int, int]] = []
+                pos = 0
+                for ps in pieces_per_section:
+                    for p in ps:
+                        s = p.strip()
+                        if not s:
+                            continue
+                        offsets.append((pos, pos + len(s)))
+                        pos += len(s) + 2
+
+                flat_idx = 0
+                for (title, body, has_table), pieces in zip(sections, pieces_per_section):
                     effective_title = title or carried_title or "General Corporate Commentary"
                     if title:
                         carried_title = title  # carry forward across pages/sections
-                    for piece in splitter.split_text(body):
-                        cleaned = piece.strip()
-                        if not cleaned:
+
+                    for piece in pieces:
+                        s = piece.strip()
+                        if not s:
                             continue
+                        s_off, e_off = offsets[flat_idx]
+                        flat_idx += 1
+                        arithmetic_ok: Optional[bool] = None
+                        if has_table:
+                            check = verify_table_arithmetic(s)
+                            if check["checked"]:
+                                arithmetic_ok = check["passed"] == check["checked"]
+                                if check["violations"]:
+                                    logger.warning(
+                                        "%s p%d: arithmetic FLAG total=%s vs sum=%s "
+                                        "(column %s) — chunk retained, flagged.",
+                                        doc.filename, page_num,
+                                        check["violations"][0]["total"],
+                                        check["violations"][0]["member_sum"],
+                                        check["violations"][0]["column"])
                         yield DocumentChunk(
                             chunk_hash=generate_chunk_hash(
-                                doc.company, doc.filename, page_num, cleaned),
-                            text=cleaned,
+                                doc.company, doc.filename, page_num, s),
+                            text=s,
                             metadata=ChunkMetadata(
                                 company=doc.company,
                                 source=doc.filename,
                                 page=page_num,
                                 year=doc.year,
                                 quarter=doc.quarter,
-                                category=categorize_chunk(cleaned),
+                                category=categorize_chunk(s),
                                 section_title=effective_title[:120],
                                 contains_table=has_table,
+                                arithmetic_ok=arithmetic_ok,
+                                char_start=s_off,
+                                char_end=e_off,
+                                transcript_version=TRANSCRIPT_VERSION,
                             ),
                         )
+
+                if transcript_sink is not None:
+                    transcript_sink.append(PageTranscriptRecord(
+                        schema_version=SCHEMA_VERSION,
+                        transcript_version=TRANSCRIPT_VERSION,
+                        company=doc.company,
+                        source=doc.filename,
+                        page=page_num,
+                        transcript=page_transcript,
+                        transcript_sha256=hashlib.sha256(
+                            page_transcript.encode("utf-8")).hexdigest(),
+                    ))
 
             logger.info("%s parsed: %d/%d pages contained text",
                         doc.filename, pages_with_text, pdf.page_count)
@@ -517,9 +809,14 @@ class PipelineReport:
     finished_at: str = ""
     duration_s: float = 0.0
     corpus_sha256: Optional[str] = None
+    transcripts_sha256: Optional[str] = None
     raw_chunks: int = 0
     chunks_written: int = 0
     duplicates_skipped: int = 0
+    table_chunks: int = 0
+    arithmetic_checked: int = 0
+    arithmetic_passed: int = 0
+    arithmetic_violations: int = 0
     sources: List[SourceOutcome] = field(default_factory=list)
     company_distribution: Counter = field(default_factory=Counter)
     category_distribution: Counter = field(default_factory=Counter)
@@ -535,7 +832,9 @@ def _publish_atomically(tmp: Path, final: Path) -> Optional[str]:
     return digest
 
 
-def _write_manifest(report: PipelineReport, settings: Settings) -> None:
+def _write_manifest(report: PipelineReport, settings: Settings,
+                    transcripts_path: Optional[Path] = None,
+                    n_transcripts: int = 0) -> None:
     payload = {
         "run_id": report.run_id,
         "schema_version": SCHEMA_VERSION,
@@ -547,9 +846,21 @@ def _write_manifest(report: PipelineReport, settings: Settings) -> None:
             "sha256": report.corpus_sha256,
             "chunks": report.chunks_written,
         },
+        "transcripts": {
+            "path": str(transcripts_path) if transcripts_path else None,
+            "sha256": report.transcripts_sha256,
+            "pages": n_transcripts,
+            "transcript_version": TRANSCRIPT_VERSION,
+        },
         "totals": {
             "raw_chunks": report.raw_chunks,
             "duplicates_skipped": report.duplicates_skipped,
+        },
+        "table_integrity": {
+            "table_chunks": report.table_chunks,
+            "arithmetic_checked": report.arithmetic_checked,
+            "arithmetic_passed": report.arithmetic_passed,
+            "arithmetic_violations": report.arithmetic_violations,
         },
         "distribution": {
             "company": dict(report.company_distribution),
@@ -589,9 +900,13 @@ def run_ingestion(settings: Settings) -> PipelineReport:
 
     tmp_out = settings.output_file.with_suffix(settings.output_file.suffix + ".part")
     tmp_out.parent.mkdir(parents=True, exist_ok=True)
+    transcripts_path = settings.output_file.with_suffix(".transcripts.jsonl")
+    tmp_tr = Path(str(transcripts_path) + ".part")
+    n_transcripts = 0
 
     try:
-        with tmp_out.open("w", encoding="utf-8") as out:
+        with tmp_out.open("w", encoding="utf-8") as out, \
+                tmp_tr.open("w", encoding="utf-8") as tr_out:
             for doc in PDF_RESOURCES:
                 outcome = outcomes[doc.filename]
                 if outcome.status == "failed":
@@ -599,9 +914,11 @@ def run_ingestion(settings: Settings) -> PipelineReport:
                     continue
 
                 logger.info("parsing %s ...", doc.filename)
+                page_transcripts: List[PageTranscriptRecord] = []
                 try:
                     for chunk in parse_pdf_stream(
-                            settings.data_dir / doc.filename, doc, settings, splitter):
+                            settings.data_dir / doc.filename, doc, settings,
+                            splitter, transcript_sink=page_transcripts):
                         outcome.raw_chunks += 1
                         report.raw_chunks += 1
                         if chunk.chunk_hash in seen_hashes:
@@ -614,16 +931,31 @@ def run_ingestion(settings: Settings) -> PipelineReport:
                         report.chunks_written += 1
                         report.company_distribution[chunk.metadata.company] += 1
                         report.category_distribution[chunk.metadata.category] += 1
+                        if chunk.metadata.contains_table:
+                            report.table_chunks += 1
+                        if chunk.metadata.arithmetic_ok is not None:
+                            report.arithmetic_checked += 1
+                            report.arithmetic_passed += int(chunk.metadata.arithmetic_ok)
+                            report.arithmetic_violations += int(not chunk.metadata.arithmetic_ok)
                 except DocumentParseError as exc:
                     logger.error("PARSE FAILURE %s: %s", doc.filename, exc)
                     outcome.status = "failed"
                     outcome.error = str(exc)
+                    continue      # discard this source's partial transcript ledger
+
+                for pt in page_transcripts:
+                    tr_out.write(pt.model_dump_json() + "\n")
+                    n_transcripts += 1
 
         if report.chunks_written > 0:
             report.corpus_sha256 = _publish_atomically(tmp_out, settings.output_file)
+            report.transcripts_sha256 = _publish_atomically(tmp_tr, transcripts_path)
+            logger.info("page-transcript ledger: %d pages -> %s",
+                        n_transcripts, transcripts_path)
         else:
             # CRITICAL GUARANTEE: a dead run never clobbers the last good corpus
             tmp_out.unlink(missing_ok=True)
+            tmp_tr.unlink(missing_ok=True)
             logger.critical("zero chunks produced — existing corpus left untouched")
     except Exception:
         tmp_out.unlink(missing_ok=True)
@@ -631,7 +963,7 @@ def run_ingestion(settings: Settings) -> PipelineReport:
 
     report.finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     report.duration_s = round(time.perf_counter() - t0, 2)
-    _write_manifest(report, settings)
+    _write_manifest(report, settings, transcripts_path, n_transcripts)
     return report
 
 

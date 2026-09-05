@@ -175,8 +175,20 @@ def init_pool() -> None:
 
 
 def _configure_session(conn) -> None:
-    """Per-session knobs at checkout. Timeout FIRST, then vector registration
-    (doubles as liveness probe), then trgm/hnsw knobs."""
+    """Session knobs — ONCE per physical connection, not per checkout.
+
+    Live load-test finding (2026-09-05, Elite-4): every pooled checkout
+    re-ran 4-5 sequential WAN round trips (statement_timeout,
+    register_vector, trgm, hnsw) — 4.8s of pure setup per checkout, which
+    collapsed 50-way /verify to ~1 rps. set_config(..., is_local=false)
+    persists on the session, so a connection's first configure outlives
+    its returns to the pool. A lightweight liveness probe stays on every
+    checkout; full configuration runs only when the connection has never
+    been configured (or was recycled)."""
+    if getattr(conn, "_rag_session_configured", False):
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1;")          # liveness probe only
+        return
     with conn.cursor() as cur:
         cur.execute("SELECT set_config('statement_timeout', %s, false);",
                     (str(get_settings().statement_timeout_ms),))
@@ -185,6 +197,13 @@ def _configure_session(conn) -> None:
                     (str(get_settings().trgm_similarity_threshold),))
         cur.execute("SELECT set_config('hnsw.ef_search', %s, false);",
                     (str(get_settings().hnsw_ef_search),))
+    try:
+        conn._rag_session_configured = True
+    except (AttributeError, TypeError):
+        # psycopg2 connections accept attribute assignment; if an exotic
+        # adapter refused it, re-configuring on checkout is only a
+        # performance cost, never a correctness one.
+        pass
 
 
 def _checkout_healthy_connection() -> psycopg2.extensions.connection:
@@ -456,6 +475,102 @@ MIGRATIONS: Tuple[Migration, ...] = (
     #     "ALTER TABLE multi_agent_chunks DROP CONSTRAINT multi_agent_chunks_chunk_hash_key;",
     #     "ALTER TABLE multi_agent_chunks ADD CONSTRAINT uq_tenant_chunk UNIQUE (tenant_id, chunk_hash);",
     # )),
+    Migration("002", "receipt layer: chunk spans + page transcripts + run receipts", (
+        # Chunk-span lineage: nullable — pre-2.1 rows and honest "not locatable"
+        # chunks are NULL, never fabricated offsets.
+        "ALTER TABLE multi_agent_chunks ADD COLUMN IF NOT EXISTS char_start INT;",
+        "ALTER TABLE multi_agent_chunks ADD COLUMN IF NOT EXISTS char_end INT;",
+        "ALTER TABLE multi_agent_chunks ADD COLUMN IF NOT EXISTS transcript_version INT;",
+        "CREATE INDEX IF NOT EXISTS idx_chunks_span ON multi_agent_chunks (source, page);",
+
+        # Page transcripts — the verification spine. (source, page) is unique
+        # per corpus epoch: re-ingesting a source replaces its pages wholesale.
+        """CREATE TABLE IF NOT EXISTS page_transcripts (
+            id SERIAL PRIMARY KEY,
+            source VARCHAR(255) NOT NULL,
+            company VARCHAR(100),
+            page INT NOT NULL CHECK (page >= 1),
+            transcript_version INT NOT NULL,
+            transcript TEXT NOT NULL,
+            transcript_sha256 VARCHAR(64) NOT NULL,
+            corpus_epoch BIGINT NOT NULL,
+            tenant_id VARCHAR(50) NOT NULL DEFAULT 'default',
+            created_at TIMESTAMPTZ DEFAULT now()
+        );""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_transcript_page "
+        "ON page_transcripts (tenant_id, source, page, corpus_epoch);",
+
+        # Verification receipts — one per grounded run. claims_json holds
+        # claim -> citation index -> evidence chain; verifiable flag = the
+        # deterministic chain (span slice -> hash) re-verified on demand.
+        """CREATE TABLE IF NOT EXISTS verification_receipts (
+            id SERIAL PRIMARY KEY,
+            run_id VARCHAR(64) UNIQUE NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            claims_json JSONB NOT NULL,
+            evidence_json JSONB NOT NULL,
+            n_claims INT NOT NULL,
+            n_evidence INT NOT NULL,
+            audit_verdict VARCHAR(32) NOT NULL,
+            corpus_epoch BIGINT NOT NULL,
+            tenant_id VARCHAR(50) NOT NULL DEFAULT 'default',
+            created_at TIMESTAMPTZ DEFAULT now()
+        );""",
+        "CREATE INDEX IF NOT EXISTS idx_receipts_created ON verification_receipts (created_at DESC);",
+
+        # RLS for both new tables (mirrors the multi_agent_chunks policy).
+        "ALTER TABLE page_transcripts ENABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE page_transcripts FORCE ROW LEVEL SECURITY;",
+        "DROP POLICY IF EXISTS tenant_isolation ON page_transcripts;",
+        """CREATE POLICY tenant_isolation ON page_transcripts
+               USING      (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = COALESCE(current_setting('app.tenant_id', true), '__unbound__'))
+               WITH CHECK (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = current_setting('app.tenant_id', true));""",
+        "ALTER TABLE verification_receipts ENABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE verification_receipts FORCE ROW LEVEL SECURITY;",
+        "DROP POLICY IF EXISTS tenant_isolation ON verification_receipts;",
+        """CREATE POLICY tenant_isolation ON verification_receipts
+               USING      (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = COALESCE(current_setting('app.tenant_id', true), '__unbound__'))
+               WITH CHECK (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = current_setting('app.tenant_id', true));""",
+    )),
+    Migration("003", "table-integrity flag: arithmetic_ok on chunks", (
+        "ALTER TABLE multi_agent_chunks ADD COLUMN IF NOT EXISTS arithmetic_ok BOOLEAN;",
+        "CREATE INDEX IF NOT EXISTS idx_chunks_arithmetic ON multi_agent_chunks (contains_table, arithmetic_ok);",
+    )),
+    Migration("004", "receipt layer: contradictions_json on receipts", (
+        "ALTER TABLE verification_receipts ADD COLUMN IF NOT EXISTS contradictions_json JSONB NOT NULL DEFAULT '[]'::jsonb;",
+    )),
+    Migration("005", "XBRL ground truth: xbrl_facts (ADR-011)", (
+        """CREATE TABLE IF NOT EXISTS xbrl_facts (
+            id SERIAL PRIMARY KEY,
+            company VARCHAR(100) NOT NULL,
+            metric VARCHAR(64) NOT NULL,
+            period VARCHAR(16) NOT NULL,
+            value NUMERIC(20, 4) NOT NULL,
+            unit VARCHAR(32) NOT NULL DEFAULT 'USD',
+            derivation VARCHAR(32) NOT NULL,
+            derived_from VARCHAR(64),
+            payload_sha256 VARCHAR(64) NOT NULL,
+            source_form VARCHAR(64),
+            corpus_epoch BIGINT NOT NULL,
+            tenant_id VARCHAR(50) NOT NULL DEFAULT 'default',
+            created_at TIMESTAMPTZ DEFAULT now()
+        );""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_xbrl_fact "
+        "ON xbrl_facts (tenant_id, company, metric, period, corpus_epoch);",
+        "ALTER TABLE xbrl_facts ENABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE xbrl_facts FORCE ROW LEVEL SECURITY;",
+        "DROP POLICY IF EXISTS tenant_isolation ON xbrl_facts;",
+        """CREATE POLICY tenant_isolation ON xbrl_facts
+               USING      (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = COALESCE(current_setting('app.tenant_id', true), '__unbound__'))
+               WITH CHECK (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = current_setting('app.tenant_id', true));""",
+    )),
 )
 
 
@@ -692,7 +807,8 @@ def purge_expired_cache() -> int:
 INSERT_CHUNKS_SQL = """
     INSERT INTO multi_agent_chunks (
         chunk_hash, content, company, source, page, year, quarter,
-        category, section_title, contains_table, embedding_model, tenant_id, embedding
+        category, section_title, contains_table, embedding_model, tenant_id,
+        char_start, char_end, transcript_version, arithmetic_ok, embedding
     ) VALUES %s
     ON CONFLICT (chunk_hash) DO NOTHING
     RETURNING id;
@@ -828,7 +944,10 @@ def migrate_from_manifest(
                             c.metadata.page, c.metadata.year, c.metadata.quarter,
                             c.metadata.category, c.metadata.section_title,
                             c.metadata.contains_table, cfg.embed_model_name,
-                            cfg.default_tenant, emb,
+                            cfg.default_tenant,
+                            c.metadata.char_start, c.metadata.char_end,
+                            c.metadata.transcript_version,
+                            c.metadata.arithmetic_ok, emb,
                         )
                         for c, emb in zip(valid, embeddings)
                     ]
@@ -907,7 +1026,8 @@ def pgvector_hybrid_search(
         LIMIT %(pool)s
     )
     SELECT c.id, c.chunk_hash, c.content, c.company, c.source, c.page,
-           c.category, c.section_title, c.contains_table,
+           c.category, c.section_title, c.contains_table, c.arithmetic_ok,
+           c.char_start, c.char_end, c.transcript_version,
            COALESCE(1.0 / (%(rrf_k)s + s.vec_rank), 0.0)
          + COALESCE(1.0 / (%(rrf_k)s + k.kw_rank), 0.0) AS fusion_score
     FROM multi_agent_chunks c
@@ -925,6 +1045,318 @@ def pgvector_hybrid_search(
             return [dict(r) for r in cur.fetchall()]
 
     return _db_retry()(_run)
+
+
+# ===========================================================================
+# 6b. VERIFICATION RECEIPTS (claim -> chunk -> transcript -> hash chain)
+# ===========================================================================
+def sync_page_transcripts(
+    jsonl_path: Optional[Path] = None,
+    manifest_path: Optional[Path] = None,
+) -> int:
+    """Loads the page-transcript ledger (admin identity) into page_transcripts,
+    keyed per corpus epoch. Re-ingesting a source replaces its pages for the
+    current epoch: DELETE+INSERT, mirroring migrate_from_manifest semantics.
+    Returns the number of page rows synced."""
+    cfg = get_settings()
+    jsonl_path = jsonl_path or cfg.jsonl_path
+    tr_path = jsonl_path.with_suffix(".transcripts.jsonl")
+    if not tr_path.exists():
+        logger.warning("No page-transcript ledger found (%s) — sync skipped.", tr_path)
+        return 0
+
+    with admin_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT epoch FROM corpus_state WHERE id = 1;")
+        epoch = cur.fetchone()[0]
+        # Page transcripts are corpus-global (tenant 'default' row per epoch);
+        # RLS-bound runtime reads them through the app-level scope, same as chunks.
+        cur.execute("DELETE FROM page_transcripts WHERE corpus_epoch = %s;", (epoch,))
+        n = 0
+        with tr_path.open("r", encoding="utf-8") as fh:
+            rows = []
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                r = json.loads(line)
+                rows.append((r["source"], r.get("company"), int(r["page"]),
+                             int(r["transcript_version"]), r["transcript"],
+                             r["transcript_sha256"], epoch, cfg.default_tenant))
+            extras.execute_values(
+                cur,
+                """INSERT INTO page_transcripts
+                       (source, company, page, transcript_version, transcript,
+                        transcript_sha256, corpus_epoch, tenant_id)
+                   VALUES %s;""",
+                rows)
+            n = len(rows)
+    logger.info("Page-transcript sync: %d pages at corpus epoch %d.", n, epoch)
+    return n
+
+
+def save_verification_receipt(
+    run_id: str,
+    question: str,
+    answer: str,
+    claims: List[Dict[str, Any]],
+    evidence: List[Dict[str, Any]],
+    audit_verdict: str,
+    contradictions: Optional[List[Dict[str, Any]]] = None,
+    tenant_id: Optional[str] = None,
+) -> bool:
+    """Persists the receipt for one run (runtime identity, tenant-scoped).
+    Idempotent on run_id — a re-run (retry loop) overwrites in place."""
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    sql = """
+        INSERT INTO verification_receipts (
+            run_id, question, answer, claims_json, evidence_json,
+            n_claims, n_evidence, audit_verdict, contradictions_json,
+            corpus_epoch, tenant_id)
+        VALUES (%(run_id)s, %(question)s, %(answer)s, %(claims)s::jsonb,
+                %(evidence)s::jsonb, %(n_claims)s, %(n_evidence)s,
+                %(verdict)s, %(contradictions)s::jsonb,
+                (SELECT epoch FROM corpus_state WHERE id = 1), %(tenant)s)
+        ON CONFLICT (run_id) DO UPDATE SET
+            question = EXCLUDED.question,
+            answer = EXCLUDED.answer,
+            claims_json = EXCLUDED.claims_json,
+            evidence_json = EXCLUDED.evidence_json,
+            n_claims = EXCLUDED.n_claims,
+            n_evidence = EXCLUDED.n_evidence,
+            audit_verdict = EXCLUDED.audit_verdict,
+            contradictions_json = EXCLUDED.contradictions_json,
+            corpus_epoch = EXCLUDED.corpus_epoch,
+            created_at = now();
+    """
+    params = {
+        "run_id": run_id, "question": question, "answer": answer,
+        "claims": json.dumps(claims), "evidence": json.dumps(evidence),
+        "n_claims": len(claims), "n_evidence": len(evidence),
+        "verdict": audit_verdict,
+        "contradictions": json.dumps(contradictions or []),
+        "tenant": tid,
+    }
+    try:
+        with get_db_connection(tenant_id=tid) as conn, conn.cursor() as cur:
+            cur.execute(sql, params)
+        logger.info("🧾 Receipt saved for run %s (%d claims, %d evidence).",
+                    run_id, len(claims), len(evidence))
+        return True
+    except Exception as exc:
+        logger.warning("Receipt save failed (non-fatal): %s", exc)
+        return False
+
+
+def get_verification_receipt(run_id: str,
+                             tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Fetches a stored receipt (runtime identity, tenant-scoped)."""
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    sql = """
+        SELECT run_id, question, answer, claims_json, evidence_json,
+               n_claims, n_evidence, audit_verdict, contradictions_json,
+               corpus_epoch, created_at, tenant_id
+        FROM verification_receipts
+        WHERE run_id = %s AND tenant_id = %s;
+    """
+    try:
+        with get_db_connection(tenant_id=tid) as conn, \
+                conn.cursor(cursor_factory=extras.DictCursor) as cur:
+            cur.execute(sql, (run_id, tid))
+            row = cur.fetchone()
+    except Exception as exc:
+        logger.warning("Receipt fetch failed: %s", exc)
+        return None
+    if not row:
+        return None
+    out = dict(row)
+    out["created_at"] = out["created_at"].isoformat() if out.get("created_at") else None
+    return out
+
+
+def verify_receipt_chain(receipt: Dict[str, Any]) -> Dict[str, Any]:
+    """DETERMINISTIC re-verification, zero LLM tokens: for each evidence item
+    carrying (source, page, char_start, char_end, chunk_hash, content), slice
+    the stored page transcript and require
+        sha256(company ⊣ source ⊣ page ⊣ slice) == chunk_hash
+    AND slice == content verbatim. A receipt is 'verified' only when every
+    chain link holds AND every claim's citations index into evidence. The
+    transcript itself is pinned to the source PDF by the ingestion manifest
+    (pdf_sha256) and to the corpus by the epoch recorded on the receipt."""
+    evidence = receipt.get("evidence_json") or []
+    claims = receipt.get("claims_json") or []
+    tid = receipt.get("tenant_id") or "default"
+
+    needed = {(e.get("source"), e.get("page")) for e in evidence
+              if e.get("char_start") is not None and e.get("char_end") is not None}
+    transcripts: Dict[Tuple[str, int], str] = {}
+    # Company/page truth from the CHUNK TABLE — the receipt claims, the DB
+    # knows. Tamper-suite finding: a relabeled company ('Meta') on Apple's
+    # evidence self-consistently re-hashed otherwise passed, because company
+    # never met an authority. chunk_hash is UNIQUE on multi_agent_chunks,
+    # so hash -> (company, source, page) is a trusted join.
+    chunk_truth: Dict[str, Dict[str, Any]] = {}
+    hashes_needed = {e.get("chunk_hash") for e in evidence if e.get("chunk_hash")}
+    if needed and hashes_needed:
+        sql_t = ("SELECT chunk_hash, company, source, page FROM "
+                 "multi_agent_chunks WHERE chunk_hash = ANY(%s);")
+        try:
+            with get_db_connection(tenant_id=tid) as conn, \
+                    conn.cursor(cursor_factory=extras.DictCursor) as cur:
+                cur.execute(sql_t, (list(hashes_needed),))
+                for r in cur.fetchall():
+                    chunk_truth[r["chunk_hash"]] = {
+                        "company": r["company"], "source": r["source"],
+                        "page": r["page"]}
+        except Exception as exc:
+            logger.warning("Chunk-truth fetch failed during verify: %s", exc)
+            return {"verified": False,
+                    "reason": f"chunk-truth-fetch-failed: {exc}",
+                    "links_checked": 0, "links_ok": 0}
+    if needed:
+        sql = ("SELECT source, page, transcript FROM page_transcripts "
+               "WHERE corpus_epoch = %s AND tenant_id = %s;")
+        try:
+            with get_db_connection(tenant_id=tid) as conn, \
+                    conn.cursor(cursor_factory=extras.DictCursor) as cur:
+                cur.execute(sql, (receipt.get("corpus_epoch"), tid))
+                for r in cur.fetchall():
+                    transcripts[(r["source"], r["page"])] = r["transcript"]
+        except Exception as exc:
+            logger.warning("Transcript fetch failed during verify: %s", exc)
+            return {"verified": False, "reason": f"transcript-fetch-failed: {exc}",
+                    "links_checked": 0, "links_ok": 0}
+
+    links_checked = links_ok = 0
+    link_results: List[Dict[str, Any]] = []
+    for e in evidence:
+        cs, ce = e.get("char_start"), e.get("char_end")
+        if cs is None or ce is None:
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "no_span"})
+            continue
+        links_checked += 1
+        t = transcripts.get((e.get("source"), e.get("page")))
+        if t is None:
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "transcript_missing"})
+            continue
+        # Tamper-suite fix 1: bounds. Python slicing truncates silently
+        # (t[0:600] returns what exists) — a span claiming bytes past the
+        # transcript end must FAIL, never truncate into accidental agreement.
+        if not (isinstance(cs, int) and isinstance(ce, int)
+                and 0 <= cs < ce <= len(t)):
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "span_out_of_bounds"})
+            continue
+        # Tamper-suite fix 2: cross-attribution. The receipt's company/page
+        # must match the chunk table's record for this chunk_hash — the DB
+        # is the authority, the receipt is the claim. Without this, a
+        # relabeled company (hash recomputed over the lie) certified.
+        truth = chunk_truth.get(e.get("chunk_hash"))
+        if truth is None:
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "unknown_chunk"})
+            continue
+        if (truth["company"] != (e.get("company") or "")
+                or truth["page"] != e.get("page")
+                or truth["source"] != (e.get("source") or "")):
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "attribution_mismatch"})
+            continue
+        slice_text = t[cs:ce]
+        expected = e.get("content") or ""
+        key = f'{e.get("company") or ""}\x1f{e.get("source") or ""}\x1f{e.get("page") or 0}\x1f{slice_text}'
+        hash_ok = (hashlib.sha256(key.encode("utf-8")).hexdigest()
+                   == e.get("chunk_hash"))
+        verbatim_ok = slice_text == expected
+        ok = hash_ok and verbatim_ok
+        links_ok += int(ok)
+        link_results.append({"chunk_hash": e.get("chunk_hash"),
+                             "status": "ok" if ok else
+                                       ("hash_mismatch" if not hash_ok
+                                        else "text_mismatch"),
+                             "verbatim": verbatim_ok, "hash_ok": hash_ok})
+
+    n_ev = max(len(evidence), 1)
+    claims_ok = True
+    claim_issues: List[Dict[str, Any]] = []
+    for c in claims:
+        for idx in (c.get("citations") or []):
+            if not (isinstance(idx, int) and 1 <= idx <= len(evidence)):
+                claims_ok = False
+                claim_issues.append({"claim": str(c.get("claim", ""))[:80],
+                                     "bad_citation": idx})
+    verified = (links_checked > 0 and links_ok == links_checked
+                and claims_ok)
+    reason = ("all links verified" if verified else
+              ("no locatable evidence spans" if links_checked == 0
+               else f"{links_checked - links_ok} broken link(s)")
+              if claims_ok else f"{len(claim_issues)} bad citation(s)")
+    # Receipt-Explorer support (read-only, same query results): the page
+    # transcripts and per-link slices let a UI highlight the exact evidence
+    # span; chunk_truth gives the authoritative attribution per chunk.
+    transcripts_out: Dict[str, Dict[str, Any]] = {}
+    for (src, pg), txt in transcripts.items():
+        transcripts_out[f"{src}\x1f{pg}"] = {
+            "source": src, "page": pg,
+            "transcript": txt,
+            "sha256": hashlib.sha256(txt.encode("utf-8")).hexdigest(),
+        }
+    return {
+        "verified": verified,
+        "links_checked": links_checked,
+        "links_ok": links_ok,
+        "evidence_total": len(evidence),
+        "claims_total": len(claims),
+        "links": link_results,
+        "claim_issues": claim_issues,
+        "transcripts": transcripts_out,
+        "attribution": {h: t for h, t in chunk_truth.items()},
+    }
+
+
+def get_source_registry() -> List[Dict[str, Any]]:
+    """Source PDF SHA-256 registry (admin identity) — pins every transcript
+    to its exact source document. Powers /verify's provenance display."""
+    with admin_connection() as conn, \
+            conn.cursor(cursor_factory=extras.DictCursor) as cur:
+        cur.execute("SELECT source, pdf_sha256, chunks, corpus_epoch, "
+                    "ingested_at FROM source_registry ORDER BY source;")
+        rows = [dict(r) for r in cur.fetchall()]
+    for r in rows:
+        if r.get("ingested_at"):
+            r["ingested_at"] = r["ingested_at"].isoformat()
+    return rows
+
+
+def get_xbrl_facts(company: Optional[str] = None,
+                   metric: Optional[str] = None,
+                   tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """SEC-published structured facts (runtime identity, tenant-scoped) —
+    the deterministic ground truth behind ADR-011's figure crosscheck."""
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    sql = ("SELECT company, metric, period, value, unit, derivation, "
+           "derived_from, payload_sha256, source_form, corpus_epoch "
+           "FROM xbrl_facts WHERE tenant_id = %s")
+    params: List[Any] = [tid]
+    if company:
+        sql += " AND company = %s"
+        params.append(company)
+    if metric:
+        sql += " AND metric = %s"
+        params.append(metric)
+    sql += " ORDER BY company, metric;"
+    with get_db_connection(tenant_id=tid) as conn, \
+            conn.cursor(cursor_factory=extras.DictCursor) as cur:
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+    for r in rows:
+        if r.get("value") is not None:
+            r["value"] = float(r["value"])
+    return rows
 
 
 # ===========================================================================
