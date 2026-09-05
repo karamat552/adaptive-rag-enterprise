@@ -32,3 +32,4 @@ data/*.pdf
 *.pdf
 unseen_results.json
 q2_attempt*.json
+coverage_report.json
