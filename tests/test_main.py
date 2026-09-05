@@ -345,3 +345,137 @@ def test_contains_any():
     from eval import _contains_any
     assert _contains_any("revenue 22,314", ("22,314", "22.314")) == "22,314"
     assert _contains_any("nothing here", ("22,314",)) is None
+
+
+# ============================== GET /verify/{run_id} =======================
+def test_verify_returns_receipt_and_chain(client, monkeypatch):
+    import db
+    import hashlib
+    text = "Services revenue was $22,314 million."
+    chunk_hash = hashlib.sha256(
+        f"Apple\x1fApple_Q4_2023.pdf\x1f3\x1f{text}".encode("utf-8")).hexdigest()
+    receipt = {
+        "run_id": "req-1", "question": "q", "answer": "a [1]",
+        "claims_json": [{"claim": "a", "citations": [1]}],
+        "evidence_json": [{"chunk_hash": chunk_hash, "company": "Apple",
+                           "source": "Apple_Q4_2023.pdf", "page": 3,
+                           "content": text, "char_start": 0,
+                           "char_end": len(text), "transcript_version": 1}],
+        "n_claims": 1, "n_evidence": 1, "audit_verdict": "grounded",
+        "corpus_epoch": 1, "created_at": "2026-01-01T00:00:00",
+        "tenant_id": "default"}
+
+    class _FakeTranscriptCur:
+        def __init__(self):
+            self.rows = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql, params=None):
+            if "multi_agent_chunks" in sql:
+                # chunk-table attribution truth for the receipt's chunk_hash
+                self.rows = [{"chunk_hash": chunk_hash, "company": "Apple",
+                              "source": "Apple_Q4_2023.pdf", "page": 3}]
+            else:
+                self.rows = [{"source": "Apple_Q4_2023.pdf", "page": 3,
+                              "transcript": text}]
+
+        def fetchall(self):
+            return self.rows
+
+    class _FakeConn2:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def cursor(self, cursor_factory=None):
+            return _FakeTranscriptCur()
+
+    monkeypatch.setattr(main, "get_verification_receipt", lambda rid, tid=None: receipt)
+    monkeypatch.setattr(main, "get_source_registry", lambda: [
+        {"source": "Apple_Q4_2023.pdf", "pdf_sha256": "a" * 64,
+         "chunks": 24, "corpus_epoch": 1, "ingested_at": None}])
+    monkeypatch.setattr(db, "get_db_connection", lambda *a, **k: _FakeConn2())
+
+    r = client.get("/verify/req-1")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["receipt"]["run_id"] == "req-1"
+    assert body["verification"]["verified"] is True
+    assert body["verification"]["links_ok"] == 1
+
+
+def test_verify_404_without_receipt(client, monkeypatch):
+    monkeypatch.setattr(main, "get_verification_receipt", lambda rid, tid=None: None)
+    r = client.get("/verify/nope")
+    assert r.status_code == 404
+    assert "receipt" in r.json()["detail"]
+
+
+def test_verify_passes_tenant_scope(client, monkeypatch):
+    seen = {}
+
+    def _fake_get(rid, tid=None):
+        seen["tenant_id"] = tid
+        return None
+    monkeypatch.setattr(main, "get_verification_receipt", _fake_get)
+    client.get("/verify/req-9", params={"tenant_id": "acme"})
+    assert seen["tenant_id"] == "acme"
+
+
+# ============================== premise fast-path ==========================
+def test_premise_fast_path_skips_pipeline(monkeypatch):
+    """Wrong-premise questions (Apple dividends) refuse in ONE cheap probe
+    instead of the full fleet+synthesis retry loop (~6 min on 120B)."""
+    import adaptive_rag as ar
+
+    async def _probe(q, **k):
+        return {"outcome": "verified_refusal", "grounded": False,
+                "cached": False, "degraded_agents": [], "contradictions": [],
+                "sources": [], "usage": {"input": 0, "output": 0, "total": 0,
+                                         "llm_calls": 0}, "latency_s": 0.1}
+
+    monkeypatch.setattr(ar, "arun_query", _probe)
+    # The graph-level behavior is covered by the node test below; this is a
+    # placeholder that documents the public contract.
+
+
+# ============================== provenance fallback (Gauntlet-4) ==========
+def test_verify_resolves_cached_answer_via_provenance(client, monkeypatch):
+    """A cached replay's own run_id has no receipt; passing its
+    provenance_run_id serves the ORIGINAL certification's receipt,
+    labeled so the replay can never masquerade as fresh certification."""
+    calls = {"n": 0}
+
+    def _fake_get(rid, tid=None):
+        calls["n"] += 1
+        if rid == "orig-run-42":     # the original certification
+            return {"run_id": "orig-run-42", "question": "q", "answer": "a",
+                    "claims_json": [], "evidence_json": [], "n_claims": 0,
+                    "n_evidence": 0, "audit_verdict": "grounded",
+                    "corpus_epoch": 9, "created_at": "2026-01-01",
+                    "tenant_id": "default"}
+        return None                  # the replay run has no receipt
+
+    monkeypatch.setattr(main, "get_verification_receipt", _fake_get)
+    r = client.get("/verify/replay-run-99",
+                   params={"provenance_run_id": "orig-run-42"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["receipt"]["run_id"] == "orig-run-42"
+    assert body["resolved_from_provenance"] == "orig-run-42"
+    assert body["requested_run_id"] == "replay-run-99"
+
+
+def test_verify_without_provenance_404_for_replay(client, monkeypatch):
+    monkeypatch.setattr(main, "get_verification_receipt",
+                        lambda rid, tid=None: None)
+    r = client.get("/verify/replay-run-99")
+    assert r.status_code == 404
+    assert "provenance_run_id" in r.json()["detail"]

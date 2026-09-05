@@ -18,7 +18,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Unit tests — persistence + gateway + eval + UI + citation guard (no live deps)
+      - name: Unit tests — persistence + gateway + eval + UI + citation guard + receipt TAMPER suite (no live deps)
         run: pytest tests --ignore=tests/test_answer_accuracy.py -m "not integration" -v
 
   integration:

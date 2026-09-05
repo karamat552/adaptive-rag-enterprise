@@ -76,7 +76,10 @@ def _state(draft: str) -> dict:
 def _spy_auditor(monkeypatch):
     """Replaces the LLM seam; counts auditor invocations, always certifies.
     _get_checker is stubbed too: without a provider key in bare CI, merely
-    CONSTRUCTING the engine raises (fail-closed) before _llm_call is entered."""
+    CONSTRUCTING the engine raises (fail-closed) before _llm_call is entered.
+    The receipt-save path is ALSO stubbed: offline tests must never write
+    receipts to the production DB (found live when run_id 't' reappeared in
+    Neon after a suite run)."""
     import adaptive_rag as ar
     calls = {"n": 0}
 
@@ -91,6 +94,8 @@ def _spy_auditor(monkeypatch):
     monkeypatch.setattr(ar, "_llm_call", _spy)
     monkeypatch.setattr(ar, "_get_checker", lambda: object())
     monkeypatch.setattr(ar.get_settings(), "disable_cache_writes", True)
+    monkeypatch.setattr(ar, "save_verification_receipt",
+                        lambda *a, **k: True)
     return calls
 
 

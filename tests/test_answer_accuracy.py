@@ -15,6 +15,7 @@ answers SHOULD populate the cache).
 """
 import asyncio
 import os
+import re
 from pathlib import Path
 
 # Unit-test-style dummy guard: only inject if no real config exists anywhere
@@ -71,6 +72,31 @@ def db_ready():
         pytest.skip("No reachable database — skipping accuracy harness")
 
 
+def _numeric_variants(value: str) -> set[str]:
+    """Renders a gold figure in every format the synthesis models legitimately
+    produce: '$40,111' ~ '$40.111 billion' ~ '40.111B'. A comma-grouped
+    millions figure equals its decimal-billions rendering (40,111M == 40.111B),
+    so both are accepted for every comma-grouped gold value; plain integers
+    ('67,317') also gain their digit-only form. Word forms (decline/decreased)
+    and pre-formatted strings pass through untouched."""
+    v = value.strip()
+    out = {v}
+    if re.fullmatch(r"(-?)\d{1,3}(,\d{3})+", v):
+        digits = v.replace(",", "")
+        out.add(digits)                      # 40,111 -> 40111
+        out.add(f"{v.rsplit(',', 1)[0]}.{v.rsplit(',', 1)[1]}")   # 40,111 -> 40.111
+    return out
+
+
+def _gold_missing(gold: list[str], answer: str) -> list[str]:
+    """All gold values must appear, each in ANY of its rendered variants."""
+    missing = []
+    for g in gold:
+        if not any(variant in answer for variant in _numeric_variants(g)):
+            missing.append(g)
+    return missing
+
+
 @pytest.mark.parametrize("question,gold", GOLD_SET,
                          ids=[q[:40] for q, _ in GOLD_SET])
 def test_answer_accuracy(db_ready, question, gold):
@@ -88,6 +114,6 @@ def test_answer_accuracy(db_ready, question, gold):
         pytest.skip(f"system honestly refused (retrieval gap?) — not a hallucination")
 
     assert outcome == "vectorstore", f"unexpected outcome: {outcome}"
-    missing = [g for g in gold if g not in r["answer"]]
+    missing = _gold_missing(gold, r["answer"])
     assert not missing, \
         f"HALLUCINATION/OMISSION — missing {missing} in answer:\n{r['answer'][:600]}"
