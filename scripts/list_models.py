@@ -11,6 +11,15 @@ url, key_env = {
     "openrouter": ("https://openrouter.ai/api/v1/models", "OPENROUTER_API_KEY"),
 }.get(provider, (None, None))
 
+# Generic seam: any OpenAI-compatible endpoint.
+#   python scripts/list_models.py openai_compatible <base_url> [KEY_ENV]
+#     e.g. python scripts/list_models.py openai_compatible https://api-inference.modelscope.cn/v1 MODELSCOPE_TOKEN
+#          python scripts/list_models.py openai_compatible https://api.deepseek.com/v1 DEEPSEEK_API_KEY
+if provider == "openai_compatible" and len(sys.argv) > 2:
+    url, key_env = sys.argv[2].rstrip("/") + "/models", "RAG_API_KEY"
+    if len(sys.argv) > 3:
+        key_env = sys.argv[3]
+
 if url is None:
     raise SystemExit(f"unknown provider: {provider}")
 key = os.getenv(key_env)
