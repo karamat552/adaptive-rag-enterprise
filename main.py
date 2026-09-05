@@ -61,8 +61,11 @@ from db import (
     close_pool,
     evict_from_semantic_cache,
     get_settings as db_get_settings,
+    get_source_registry,
+    get_verification_receipt,
     health_check,
     purge_expired_cache,
+    verify_receipt_chain,
 )
 
 logger = logging.getLogger("RAGService")
@@ -225,6 +228,8 @@ def _shape_result(final: Dict[str, Any], run_id: str, elapsed: float) -> Dict[st
         "cached": bool(final.get("cached_hit", False)),
         "degraded_agents": final.get("degraded_agents", []),
         "sources": final.get("documents", []),
+        # Cache-replay provenance: run_id whose receipt proves this answer.
+        "provenance_run_id": final.get("provenance_run_id") or final.get("run_id") or run_id,
         "usage": {"input": final.get("usage_in", 0),
                   "output": final.get("usage_out", 0),
                   "total": final.get("usage_total", 0),
@@ -373,6 +378,8 @@ _NODE_LABELS = {
     "cache_check": "Checking semantic cache...",
     "gateway": "Routing question...",
     "exec_db": "Spawning specialist fleet...",
+    "cross_check": "Cross-checking specialists for contradictions...",
+    "sharpen": "Contradiction found — sharpening retrieval...",
     "csuite_synth": "Synthesizing executive brief...",
     "validate": "Running compliance audit...",
     "rewrite": "Optimizing search query...",
@@ -487,6 +494,45 @@ async def search(req: SearchRequest) -> Dict[str, Any]:
         company_filter=req.company_filter, top_k=req.top_k,
         tenant_id=req.tenant_id)
     return {"status": "success", "total_results": len(rows), "results": rows}
+
+
+# ============================== GET /verify/{run_id} =======================
+@app.get("/verify/{run_id}")
+async def verify(run_id: str, tenant_id: Optional[str] = None,
+                 provenance_run_id: Optional[str] = None) -> JSONResponse:
+    """Re-verification receipt for a grounded run: claim list + evidence chain
+    + DETERMINISTIC on-demand recompute (slice stored page transcripts,
+    re-hash company⊣source⊣page⊣slice, compare to chunk_hash). Zero LLM tokens;
+    a tampered receipt, span, or corpus breaks the chain by construction.
+    404 when no receipt exists (refusals/unverified runs store none).
+    Cache-replay provenance: a semantic-cache replay's OWN run_id has no
+    receipt (extraction never ran); the /query response carries the
+    provenance_run_id of the ORIGINAL certification — pass it here and this
+    endpoint serves THAT receipt, labeled with both ids so the replay can
+    never masquerade as fresh certification."""
+    receipt = await asyncio.to_thread(get_verification_receipt, run_id, tenant_id)
+    resolved_from = None
+    if not receipt and provenance_run_id and provenance_run_id != run_id:
+        receipt = await asyncio.to_thread(
+            get_verification_receipt, provenance_run_id, tenant_id)
+        if receipt:
+            resolved_from = provenance_run_id
+    if not receipt:
+        raise HTTPException(status_code=404,
+                            detail="No verification receipt for this run_id "
+                                   "(only grounded runs store receipts; for a "
+                                   "cached answer pass its provenance_run_id)")
+    try:
+        chain = await asyncio.to_thread(verify_receipt_chain, receipt)
+        sources = await asyncio.to_thread(get_source_registry)
+    except Exception as exc:
+        logger.exception("Chain recompute failed [%s]", run_id)
+        raise HTTPException(status_code=500,
+                            detail="chain recompute failed — see server logs") from exc
+    return JSONResponse(content={"receipt": receipt, "verification": chain,
+                                 "sources": sources,
+                                 "requested_run_id": run_id,
+                                 "resolved_from_provenance": resolved_from})
 
 
 # ============================== POST /feedback =============================

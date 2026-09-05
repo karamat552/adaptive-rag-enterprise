@@ -127,6 +127,140 @@ def _post_feedback(question: str, tenant: str) -> Tuple[int, str]:
         return 0, f"{type(exc).__name__}: {exc}"
 
 
+def _fetch_verification(run_id: str, tenant: str,
+                        provenance_run_id: Optional[str] = None
+                        ) -> Optional[Dict[str, Any]]:
+    """GET /verify — receipt + deterministic chain recompute + transcripts.
+    For cached answers, run_id is a REPLAY id whose proof lives under the
+    original certification's provenance_run_id — pass it so /verify can
+    resolve the true receipt."""
+    params = {"tenant_id": tenant}
+    if provenance_run_id and provenance_run_id != run_id:
+        params["provenance_run_id"] = provenance_run_id
+    try:
+        r = _client().get(f"/verify/{run_id}", params=params)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except httpx.RequestError:
+        return None
+
+
+def _highlight_transcript(transcript: str, start: Optional[int],
+                          end: Optional[int]) -> str:
+    """Transcript -> HTML with the claimed span highlighted (mark tag).
+    Bounds-defensive: any invalid span renders unhighlighted."""
+    if not isinstance(start, int) or not isinstance(end, int):
+        return transcript
+    if not (0 <= start < end <= len(transcript)):
+        return transcript
+    pre, span, post = (transcript[:start], transcript[start:end],
+                       transcript[end:])
+    # escape AFTER slicing so offsets stay byte-true to the stored transcript
+    import html as _html
+    return (_html.escape(pre)
+            + f"<mark style='background:#ffe08a;color:#111;"
+              f"padding:1px 3px;border-radius:3px;'>{_html.escape(span)}</mark>"
+            + _html.escape(post))
+
+
+def _render_receipt_explorer(run_id: str, tenant: str,
+                             provenance_run_id: Optional[str] = None) -> None:
+    """🧾 PROVE-IT view: every claim, its citations, and the exact evidence
+    span in the page transcript — with the recomputed hash chain and source
+    PDF SHA-256s. Zero LLM tokens; the gateway recomputes everything."""
+    data = _fetch_verification(run_id, tenant, provenance_run_id)
+    if not data:
+        st.error(f"No verification receipt for `{run_id}` — only grounded "
+                 "runs store receipts (refusals are honest, not receipted).")
+        return
+    receipt = data.get("receipt", {})
+    ver = data.get("verification", {})
+    if data.get("resolved_from_provenance"):
+        st.info(f"⚡ Cached answer — its proof lives under the original "
+                f"certification run `{data['resolved_from_provenance']}`, "
+                f"resolved automatically from this replay's provenance.")
+    sources = {s.get("source"): s for s in (data.get("sources") or [])}
+    claims = receipt.get("claims_json") or []
+    evidence = receipt.get("evidence_json") or []
+    transcripts = (ver.get("transcripts") or {})
+    attribution = ver.get("attribution") or {}
+    contradictions = receipt.get("contradictions_json") or []
+
+    st.markdown(f"**Question:** {receipt.get('question', '—')}")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Chain verdict", "✅ verified" if ver.get("verified")
+              else "❌ BROKEN")
+    c2.metric("Links", f"{ver.get('links_ok', 0)}/{ver.get('links_checked', 0)}")
+    c3.metric("Claims", len(claims))
+    c4.metric("Evidence", len(evidence))
+    if not ver.get("verified"):
+        st.error("⚠️ The deterministic chain REJECTED this receipt — at least "
+                 "one claim cannot be traced to source bytes. Do not trust it.")
+    else:
+        st.success("Every claim traces to an exact transcript span whose "
+                    "sha256(company⊣source⊣page⊣slice) recomputes identically. "
+                    "This proof cost zero LLM tokens.")
+
+    st.subheader("🔗 Provenance spine")
+    prov_cols = st.columns(len(sources) or 1)
+    for col, (src, meta) in zip(prov_cols, sources.items()):
+        sha = (meta.get("pdf_sha256") or "")[:16]
+        col.caption(f"**{src}**\n\npdf sha256 `{sha}…` · {meta.get('chunks', '?')} chunks")
+
+    if contradictions:
+        with st.expander(f"⚠️ Contradictions surfaced ({len(contradictions)}) — "
+                         "both figures shown, never averaged", expanded=True):
+            for c in contradictions:
+                st.markdown(f"- **{c.get('company')} · {c.get('family')}** "
+                            f"({c.get('period') or 'period n/a'}): "
+                            f"conflicting values {c.get('values')} — "
+                            f"gap {round(float(c.get('rel_gap', 0)) * 100, 1)}%")
+
+    st.subheader("🧾 Claims → Evidence → Source bytes")
+    for i, claim in enumerate(claims, 1):
+        cites = claim.get("citations") or []
+        chips = " ".join(f"`[{n}]`" for n in cites) if cites else "`uncited`"
+        with st.expander(f"Claim {i} {chips} — {str(claim.get('claim', ''))[:90]}",
+                         expanded=(i <= 1)):
+            if not cites:
+                st.warning("This claim rests on no cited evidence.")
+            for n in cites:
+                if not (1 <= n <= len(evidence)):
+                    st.error(f"Citation [{n}] points outside the evidence set "
+                             "— forged by construction.")
+                    continue
+                e = evidence[n - 1]
+                tkey = f"{e.get('source')}\x1f{e.get('page')}"
+                tr = (transcripts.get(tkey) or {}).get("transcript", "")
+                truth = attribution.get(e.get("chunk_hash")) or {}
+                badges = []
+                if e.get("contains_table"):
+                    ao = e.get("arithmetic_ok")
+                    badges.append("📊 table" + (" · ✅ sums verified" if ao
+                                 else (" · ⚠️ arithmetic FLAG" if ao is False
+                                       else "")))
+                badge_str = f" · {' · '.join(badges)}" if badges else ""
+                st.markdown(f"**Evidence [{n}]** — `{e.get('company')}` · "
+                            f"`{e.get('source')}` · p.{e.get('page')}"
+                            f"{badge_str}")
+                st.caption(f"chunk sha256 `{str(e.get('chunk_hash'))[:20]}…` · "
+                           f"span {e.get('char_start')}–{e.get('char_end')} · "
+                           f"DB-truth company `{truth.get('company', '—')}`")
+                if tr:
+                    st.markdown("**Page transcript (claimed span highlighted):**")
+                    st.markdown(
+                        f"<div style='max-height:220px;overflow:auto;"
+                        f"border:1px solid #8884;border-radius:8px;"
+                        f"padding:8px 12px;font-size:0.86rem;"
+                        f"white-space:pre-wrap;font-family:inherit;'>"
+                        f"{_highlight_transcript(tr, e.get('char_start'), e.get('char_end'))}"
+                        f"</div>", unsafe_allow_html=True)
+                else:
+                    st.info("No stored transcript for this page "
+                            "(pre-2.1 evidence — chunk-level tracing only).")
+
+
 # ============================== RESULT RENDERING ===========================
 def _render_result(result: Dict[str, Any], question: str, tenant: str) -> None:
     c1, c2, c3, c4 = st.columns(4)
@@ -151,7 +285,7 @@ def _render_result(result: Dict[str, Any], question: str, tenant: str) -> None:
                 st.markdown(body.strip() or header)
 
     st.divider()
-    ac1, ac2, ac3 = st.columns([1, 1, 2])
+    ac1, ac2, ac3, ac4 = st.columns([1, 1, 1, 2])
     flagged = bool(result.get("_flagged"))
     if ac1.button("👎 Flag Inaccurate" + (" (flagged)" if flagged else ""),
                   disabled=not ADMIN_API_KEY or flagged,
@@ -183,8 +317,21 @@ def _render_result(result: Dict[str, Any], question: str, tenant: str) -> None:
                   f"---\n\n{result.get('answer', '')}\n"),
             file_name=f"report_{result.get('run_id', 'run')}.md",
             mime="text/markdown", key=f"save_{result.get('run_id', 'x')}")
-    ac3.caption(f"run_id `{result.get('run_id', '—')}` · "
+    if ac3.button("🔏 Prove it", key=f"prove_{result.get('run_id', 'x')}",
+                  help="Open the verification receipt: every claim traced to "
+                       "its exact source span, recomputed deterministically "
+                       "(zero LLM tokens)."):
+        st.session_state.prove_run_id = result.get("run_id")
+        st.session_state.prove_prov_id = result.get("provenance_run_id")
+        st.rerun()
+    ac4.caption(f"run_id `{result.get('run_id', '—')}` · "
                 f"degraded agents: {result.get('degraded_agents') or 'none'}")
+
+    # The Prove-It receipt explorer (opened via the 🔏 button above).
+    if st.session_state.get("prove_run_id") == result.get("run_id"):
+        st.divider()
+        _render_receipt_explorer(st.session_state.prove_run_id, tenant,
+                                 st.session_state.get("prove_prov_id"))
 
 
 # ============================== SIDEBAR ====================================
@@ -233,6 +380,8 @@ if "history" not in st.session_state:
     st.session_state.history = []         # recent-runs rows for the dataframe
 if "busy" not in st.session_state:
     st.session_state.busy = False
+if "prove_run_id" not in st.session_state:
+    st.session_state.prove_run_id = None
 
 
 def _run_pipeline(question: str, tenant: str) -> None:
@@ -330,6 +479,18 @@ if st.session_state.history:
     with st.expander("🕘 Recent runs (this session)", expanded=False):
         st.dataframe(pd.DataFrame(st.session_state.history), hide_index=True,
                      use_container_width=True)
+
+# ============================== RECEIPT LOOKUP =============================
+with st.expander("🔏 Receipt Explorer — verify any run (zero LLM tokens)",
+                 expanded=False):
+    rid = st.text_input("run_id", placeholder="e.g. 44c14e8374dc",
+                        help="Every grounded run stores a tamper-evident "
+                             "receipt: claims → citations → evidence spans → "
+                             "transcript slices → recomputed hashes.")
+    if st.button("Verify receipt", disabled=len(rid.strip()) < 3):
+        pass
+    elif len(rid.strip()) >= 3:
+        _render_receipt_explorer(rid.strip(), tenant.strip() or DEFAULT_TENANT)
 
 # ============================== SEARCH CONSOLE =============================
 with st.expander("🔍 Vector Search Console (bypasses the LLM entirely)", expanded=False):
