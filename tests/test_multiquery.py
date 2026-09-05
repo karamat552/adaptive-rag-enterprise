@@ -23,8 +23,8 @@ if not (os.getenv("DB_DATABASE_URL") or os.getenv("NEON_DATABASE_URL")
 import pytest  # noqa: E402
 
 
-def _rec(h, page=1, content="x"):
-    return {"chunk_hash": h, "company": "Apple", "source": "a.pdf",
+def _rec(h, page=1, content="x", company="Apple"):
+    return {"chunk_hash": h, "company": company, "source": "a.pdf",
             "page": page, "content": content, "fusion_score": 0.1}
 
 
@@ -170,3 +170,100 @@ def test_multiquery_disabled_short_circuits(_patch_env, monkeypatch):
         "A perfectly long enough query about revenue",
         category=None, company=None))
     assert len(searches) == 1
+
+
+# ============================== per-entity sub-retrieval ===================
+def test_multi_company_question_fans_out_per_entity(_patch_env, monkeypatch):
+    """ADR-014: on multi-company questions, each company gets its OWN
+    search (its own multi-query fan-out) and results are RRF-fused —
+    one company's dominance can no longer starve the other's pool."""
+    import adaptive_rag as ar
+
+    searches = []
+
+    async def _fake_mq(search_q, *, category, company, top_k, tenant_id=None):
+        searches.append((search_q[:30], company, top_k))
+        if company == "apple":
+            return [_rec("apple-a1", company="Apple"),
+                    _rec("apple-a2", company="Apple"),
+                    _rec("apple-a3", company="Apple")]
+        if company == "meta":
+            return [_rec("meta-m1", company="Meta"),
+                    _rec("meta-m2", company="Meta")]
+        return []
+
+    class _Variants:
+        variants = []
+
+    class _Extraction:
+        content = "Apple revenue was $89,498 million. Meta revenue was $40,111 million."
+
+    async def _fake_llm(runnable, messages, stage, allow_failover=False):
+        # router/expand stages get the Variants schema; extraction gets content
+        if stage.startswith("extract"):
+            return _Extraction(), ar.UsageCollector()
+        return _Variants(), ar.UsageCollector()
+
+    class _BindableEngine:
+        def bind(self, **kw):
+            return self
+
+    monkeypatch.setattr(ar, "_multi_query_search", _fake_mq)
+    monkeypatch.setattr(ar, "_llm_call", _fake_llm)
+    monkeypatch.setattr(ar, "_get_engine", lambda m: _BindableEngine())
+    monkeypatch.setattr(ar.get_settings(), "multi_query", 0)  # expansion off: isolate fan-out
+
+    class _PassThroughReranker:
+        def rerank(self, req):
+            # flashrank-shaped passthrough: keep ALL passages in order
+            return [{"id": str(p["id"])} for p in req.passages]
+
+    monkeypatch.setattr(ar, "_get_reranker", lambda: _PassThroughReranker())
+
+    async def _fake_db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(ar, "_db_call", _fake_db)
+
+    out = asyncio.run(ar._specialist(
+        "financial", "Role: analyst.", "financial",
+        "compare Apple and Meta revenue",
+        "Compare Apple and Meta revenue growth in Q4 2023."))
+    companies_searched = [c for _, c, _ in searches]
+    assert "apple" in companies_searched and "meta" in companies_searched, \
+        "each scoped company must get its own search"
+    assert all(c in ("apple", "meta") for c in companies_searched), \
+        "no unscoped search while per-entity fan-out runs"
+    assert len(out["records"]) >= 2, "fused pool must include BOTH companies"
+    pool_companies = {r.get("company") for r in out["records"]}
+    assert {"Apple", "Meta"} <= pool_companies, \
+        f"evidence pool must be balanced, got {pool_companies}"
+
+
+def test_single_company_question_unchanged(_patch_env, monkeypatch):
+    import adaptive_rag as ar
+    searches = []
+
+    async def _fake_mq(search_q, *, category, company, top_k, tenant_id=None):
+        searches.append(company)
+        return [_rec("apple-only", company="Apple")]
+
+    class _BindableEngine:
+        def bind(self, **kw):
+            return self
+
+    class _Extraction:
+        content = "Services revenue was \$22,314 million."
+
+    async def _fake_llm(runnable, messages, stage, allow_failover=False):
+        return _Extraction(), ar.UsageCollector()
+
+    monkeypatch.setattr(ar, "_multi_query_search", _fake_mq)
+    monkeypatch.setattr(ar, "_llm_call", _fake_llm)
+    monkeypatch.setattr(ar, "_get_engine", lambda m: _BindableEngine())
+    out = asyncio.run(ar._specialist(
+        "financial", "Role: analyst.", "financial",
+        "Apple services revenue",
+        "What was Apple services revenue in Q4 2023?"))
+    assert searches == ["apple"], "single-company: exactly one scoped search"
+    assert out["records"]

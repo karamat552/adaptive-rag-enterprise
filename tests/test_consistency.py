@@ -404,3 +404,40 @@ def test_premise_node_db_error_continues(monkeypatch):
              "tenant_id": "default"}
     upd = asyncio.run(ar.premise_fast_path(state))
     assert upd == {}, "DB errors fall through to the normal pipeline"
+
+
+# ============== year-binding: real YoY prose shapes (white-whale live) =====
+def test_respectively_construction_binds_positionally():
+    """'...$32,165M and $40,111M in Q4 2022 and Q4 2023, respectively' —
+    nearest-token binding gave BOTH figures 2022 (the first year)."""
+    from adaptive_rag import _figure_year
+    s = ("Meta revenue was $32,165 million and $40,111 million in "
+         "Q4 2022 and Q4 2023, respectively.")
+    import re as _re
+    figs = [m.start() for m in _re.finditer(r"\$\d", s)]
+    assert _figure_year(s, figs[0]) == "2022"
+    assert _figure_year(s, figs[1]) == "2023"
+
+
+def test_up_from_clause_binds_its_own_year():
+    """'$40,111M in Q4 2023, up from $32,165M in Q4 2022' — the current
+    figure must not steal the prior year (nearest-token bug)."""
+    from adaptive_rag import _figure_year
+    import re as _re
+    s = ("Meta revenue was $40,111 million in Q4 2023, up from "
+         "$32,165 million in Q4 2022.")
+    figs = [m.start() for m in _re.finditer(r"\$\d", s)]
+    assert _figure_year(s, figs[0]) == "2023"
+    assert _figure_year(s, figs[1]) == "2022"
+
+
+def test_cross_clause_year_never_leaks():
+    """'Meta $40,111M in Q4 2023, while Apple $89,498M' — Apple's figure
+    has no year in ITS clause: un-anchored (declined), never borrows 2023."""
+    from adaptive_rag import _figure_year
+    import re as _re
+    s = ("Meta revenue was $40,111 million in Q4 2023, while Apple "
+         "revenue was $89,498 million.")
+    figs = [m.start() for m in _re.finditer(r"\$\d", s)]
+    assert _figure_year(s, figs[0]) == "2023"
+    assert _figure_year(s, figs[1]) is None

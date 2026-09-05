@@ -905,17 +905,44 @@ async def _specialist(name: str, system_prompt: str, category: str,
     try:
         scope = detect_company_scope(original_q)
         company_filter = None
+        multi_companies: List[str] = []
         if scope:
-            comps = scope["companies"].split(",")
+            comps = [c.strip() for c in scope["companies"].split(",") if c.strip()]
             if len(comps) == 1:
                 company_filter = comps[0]
+            elif len(comps) > 1:
+                multi_companies = comps
 
-        try:
-            raw = await _multi_query_search(search_q, category=category,
-                                            company=company_filter, top_k=20)
-        except Exception as e:
-            logger.warning("[%s] scoped search failed: %s", name, e)
-            raw = []
+        if multi_companies:
+            # PER-ENTITY SUB-RETRIEVAL (ADR-014, live-found 2026-09-05): on
+            # multi-company questions, one shared search lets the dominant
+            # company's chunks crowd out the other's — the comparison-
+            # question variance. Search PER COMPANY (each with its own
+            # multi-query fan-out), then RRF-fuse so every company's
+            # evidence pool is filled independently. Balanced by design:
+            # RRF rank-fusion is count-of-queries aware, not score aware.
+            per_company_sets: List[List[Dict[str, Any]]] = []
+            for comp in multi_companies:
+                try:
+                    rows = await _multi_query_search(
+                        search_q, category=category, company=comp, top_k=15)
+                except Exception as e:
+                    logger.warning("[%s] per-company search failed (%s): %s",
+                                    name, comp, e)
+                    rows = []
+                if rows:
+                    per_company_sets.append(rows)
+            raw = _rrf_fuse(per_company_sets, top_k=20) if len(per_company_sets) > 1 \
+                else (per_company_sets[0] if per_company_sets else [])
+            logger.info("[%s] per-entity retrieval: %d companies -> %d fused rows",
+                        name, len(per_company_sets), len(raw))
+        else:
+            try:
+                raw = await _multi_query_search(search_q, category=category,
+                                                company=company_filter, top_k=20)
+            except Exception as e:
+                logger.warning("[%s] scoped search failed: %s", name, e)
+                raw = []
         if not raw:
             try:
                 raw = await _multi_query_search(search_q, category=None,
@@ -1168,7 +1195,17 @@ Synthesize a polished executive intelligence brief answering the user's query us
 STRICT INLINE CITATION MANDATE:
 1. Every numerical metric and factual claim MUST include an inline bracket footnote like [1], [2], corresponding EXACTLY to the Evidence [X] index.
 2. Structure the brief with Markdown headers (Executive Summary, Financial & Strategy Highlights, Key Headwinds).
-3. End with a '### Verified Sources Ledger' mapping each footnote to its Company and Page Number."""
+3. End with a '### Verified Sources Ledger' mapping each footnote to its Company and Page Number.
+ATTRIBUTION-CLEAN PROSE (audit-enabling style rules — violations fail verification):
+4. ONE COMPANY PER SENTENCE. Never mix two companies' figures in a single
+   sentence; start a new sentence for the other company.
+5. NEVER show arithmetic. State results only ('rose 25% year-over-year'),
+   never the computation ('(14,017-4,652)/4,652 = 201%').
+6. Year-over-year pairs must carry EXPLICIT year tokens: 'revenue grew to
+   $40.1 billion in Q4 2023 from $32.2 billion in Q4 2022' — every figure
+   labeled with its period.
+7. Figures quoted in MILLIONS when the source table declares millions —
+   do not re-scale without saying so."""
     user_prompt = f"""Primary Order Objective: {state['original_question']}
 
 [NUMBERED SOURCE EVIDENCE]
@@ -1477,16 +1514,59 @@ _XBRL_DOLLAR_RE = re.compile(
 _YEAR_RE = re.compile(r"\b(20\d{2})\b")
 
 
+_RESPECTIVELY_RE = re.compile(r"\brespectively\b", re.IGNORECASE)
+# Clause boundaries: comma+conjunction or a transition phrase — NOT a bare
+# comma ('in Q4 2023, up from $X' keeps the figure's year adjacent; a bare
+# comma after a year token is punctuation, not attribution change).
+_CLAUSE_SPLIT_RE = re.compile(
+    r",\s*(?:up|down)\s+from\b|,\s*(?:and|while|whereas|but)\b|"
+    r"\b(?:while|whereas|versus|compared (?:to|with))\b|"
+    # bare 'and' starting a new clause: 'and rose/fell/grew/declined to'
+    r"\band\s+(?:rose|fell|grew|declined|decreased|increased|dropped|"
+    r"expanded|contracted)\b", re.IGNORECASE)
+
+
 def _figure_year(sentence: str, pos: int) -> Optional[str]:
-    """Year binding for a figure at char position `pos`: nearest year token
-    on either side (before preferred — '$32.2B (2022)' has the year after;
-    'in 2023, revenue was $40B' has it before). None = un-anchored."""
-    best: Optional[Tuple[int, str]] = None   # (distance, year)
-    for m in _YEAR_RE.finditer(sentence):
-        d = min(abs(m.start() - pos), abs(m.end() - pos))
-        if best is None or d < best[0]:
-            best = (d, m.group(1))
-    return best[1] if best else None
+    """Year binding for a figure at char position `pos`. Nearest-token
+    binding breaks on real YoY prose (live-found, white-whale 2026-09-05):
+    'was $32,165M and $40,111M in Q4 2022 and Q4 2023, respectively' —
+    the second figure inherits the FIRST year, and 'was $40,111M in Q4
+    2023, up from $32,165M in Q4 2022' binds the current figure to 2022.
+    Three ordered rules, all deterministic:
+    1. RESPECTIVELY-LISTS: figures and year tokens map POSITIONALLY
+       (1st figure->1st year, 2nd->2nd, ...).
+    2. NEAREST-YEAR-ON-ITS-CLAUSE: clause boundaries are comma+conjunction
+       or transition phrases (', up from', 'while', 'versus') — never a
+       bare comma, which is punctuation inside one attribution unit.
+    3. Un-anchored otherwise (None): the gate declines rather than guesses.
+    """
+    year_matches = list(_YEAR_RE.finditer(sentence))
+    if not year_matches:
+        return None
+    # Rule 1: respectively-lists — positional pairing.
+    if _RESPECTIVELY_RE.search(sentence):
+        fig_positions = [m.start() for m in _XBRL_DOLLAR_RE.finditer(sentence)]
+        if pos in fig_positions:
+            idx = fig_positions.index(pos)
+            if idx < len(year_matches):
+                return year_matches[idx].group(1)
+            return year_matches[-1].group(1)
+    # Rule 2: nearest year within the figure's own clause segment.
+    seg_start = 0
+    for m in _CLAUSE_SPLIT_RE.finditer(sentence):
+        if m.start() < pos:
+            seg_start = m.end()
+    seg_end = len(sentence)
+    for m in _CLAUSE_SPLIT_RE.finditer(sentence):
+        if m.start() >= pos:
+            seg_end = m.start()
+            break
+    for m in year_matches:
+        if seg_start <= m.start() < seg_end:
+            return m.group(1)
+    # No year token in this figure's clause: an adjacent clause's year does
+    # NOT own it (that was the false-binding bug). Un-anchored.
+    return None
 
 
 def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
@@ -1643,6 +1723,65 @@ _MULTI_COMPANY_CONTEXT_RE = re.compile(
     r"\b(versus|vs\.?|compared to|comparison|respectively)\b", re.IGNORECASE)
 
 
+def _nearest_family(sentence: str, pos: int) -> Optional[str]:
+    """Nearest-anchor metric binding with SEGMENT OWNERSHIP (live-found
+    2026-09-05): multi-metric sentences ('net income grew from $4.652B
+    while revenue grew to $40.1B') need each figure bound to its OWN
+    metric. Three rules, learned from three failed simpler versions:
+    1. SEGMENT OWNERSHIP: figures partition the sentence; a term only
+       owns a figure if no OTHER figure lies between them.
+    2. FAMILY PRIORITY: metric nouns (revenue/net_income/...) beat the
+       growth family — direction verbs live INSIDE metric phrases
+       ('net income GREW') and would otherwise steal every figure.
+    3. PROSE ASYMMETRY: preceding terms own short ('revenue was $X');
+       following terms carry a small penalty.
+    """
+    figure_spans = [m.span() for m in _MONEY_RE.finditer(sentence)]
+    own_idx = next((i for i, (s, e) in enumerate(figure_spans)
+                    if s <= pos <= e), None)
+    # CLAUSE ownership (final rule, live-found 2026-09-05): conjunctions
+    # ('while', 'whereas', 'and', 'but') start a NEW clause whose metric
+    # subject owns ITS figures — 'net income grew from $4.652B while
+    # revenue grew to $40.111B' must never let 'revenue' reach back across
+    # the 'while' boundary. Positional distance alone cannot solve this
+    # (three simpler rules failed before this one); the clause IS the
+    # semantic segment financial prose uses.
+    _CLAUSE_BREAK_RE = re.compile(
+        r"\b(while|whereas|where|but|and yet|compared (?:to|with)|"
+        r"versus|vs\.?)\b", re.IGNORECASE)
+    clause_start = 0
+    for m in _CLAUSE_BREAK_RE.finditer(sentence):
+        if m.start() < pos:
+            clause_start = m.end()
+    clause_end = len(sentence)
+    for m in _CLAUSE_BREAK_RE.finditer(sentence):
+        if m.start() >= pos:
+            clause_end = m.start()
+            break
+    best_noun: Optional[Tuple[int, str]] = None
+    best_growth: Optional[int] = None
+    for fam, pat in _FAMILY_RE.items():
+        for m in pat.finditer(sentence):
+            if not (clause_start <= m.start() < clause_end):
+                continue          # belongs to a sibling clause — owns its figures
+            if m.start() < pos:
+                d = pos - m.end()
+            else:
+                d = (m.start() - pos) + 15
+            if fam == "growth":
+                if best_growth is None or d < best_growth:
+                    best_growth = d
+            elif best_noun is None or d < best_noun[0]:
+                best_noun = (d, fam)
+    if best_noun is not None:
+        return best_noun[1]
+    # No metric noun in THIS clause: the growth verb ('grew 201%') owns the
+    # figure; if not even that, the sibling clauses can still lend theirs.
+    if best_growth is not None:
+        return "growth"
+    return None
+
+
 def extract_metric_mentions(text: str, company: str) -> List[Dict[str, Any]]:
     """Pulls (family, value, unit, precision, period, company, direction)
     tuples from free specialist text. Pure; no LLM. Only figures anchored to
@@ -1655,11 +1794,30 @@ def extract_metric_mentions(text: str, company: str) -> List[Dict[str, Any]]:
     mentions: List[Dict[str, Any]] = []
     sentences = re.split(r"(?<=[.!?])\s+", text)
     for sent in sentences:
-        fam = next((f for f, pat in _FAMILY_RE.items() if pat.search(sent)), None)
-        if fam is None:
+        # Consult-converged declines (3-model review, 2026-09-05), applied to
+        # the raw sentence BEFORE extraction — each rule guards a live-caught
+        # false-accusation class:
+        low = sent.lower()
+        # (a) ARITHMETIC TRANSCRIPTS: '(14,017-4,652)/4,652 = 2.012 = 201.2%'
+        # is a visible DERIVATION, not three figures — parsing it creates a
+        # 3-way conflict out of one correct calculation. Decline the whole
+        # sentence (gemini/nemotron/flash-lite all ranked this #1).
+        if re.search(r"\d[\d,.]*\s*[-+/]\s*[\d(].*?=", sent):
+            continue
+        sentence_fam = next((f for f, pat in _FAMILY_RE.items()
+                             if pat.search(sent)), None)
+        if sentence_fam is None:
             continue
         named = [c for c, pat in _COMPANY_NAME_RE.items() if pat.search(sent)]
-        if named:
+        if len(named) > 1:
+            # (c) MULTI-NAMED-COMPANY DECLINE (consult rule #3, live-caught:
+            # 'Apple revenue reached $22,314M while Meta hit $40,111M' —
+            # per-sentence attribution leaked Meta's total into Apple's
+            # group). Attribution in shared comparison sentences is
+            # unsalvageable; company=None NEVER votes in a conflict group.
+            named = []
+            companies = [None]
+        elif named:
             companies = named
         elif _MULTI_COMPANY_CONTEXT_RE.search(sent):
             # Sentence names NO known company but mentions 'versus'/'compared
@@ -1672,6 +1830,16 @@ def extract_metric_mentions(text: str, company: str) -> List[Dict[str, Any]]:
             companies = [company]
         period = next((p for p, pat in _PERIODS.items() if pat.search(sent)), None)
         direction = _direction_of(sent)
+        # (b) TRANSITION-PAIR PERIOD BINDING (consult rule #2, live-caught:
+        # 'Net income increased from $20,721 to $22,956' — prior/current in
+        # one sentence, period=None for both -> self-conflict). A 'from A to
+        # B' construction asserts a TEMPORAL VECTOR: bind the figures to
+        # distinct relative periods so they can never share a group.
+        transition = re.search(
+            r"from\s+\$?([\d,]+(?:\.\d+)?)\s*[^,.]{0,30}?\s*to\s+\$?([\d,]+(?:\.\d+)?)",
+            sent, re.IGNORECASE)
+        transition_prior = transition and float(transition.group(1).replace(",", ""))
+        transition_current = transition and float(transition.group(2).replace(",", ""))
 
         def _bind_period(span_text: str, after_pos: int) -> Optional[str]:
             """A figure's period is the nearest period mention AT or AFTER it
@@ -1684,10 +1852,23 @@ def extract_metric_mentions(text: str, company: str) -> List[Dict[str, Any]]:
             return period
 
         def _add(value: float, unit: str, precision: int, pos: int) -> None:
+            # Nearest-anchor family binding: each figure owns the family term
+            # CLOSEST to it, falling back to the sentence's overall family.
+            fig_fam = _nearest_family(sent, pos) or sentence_fam
+            # TRANSITION OVERRIDE: in a 'from A to B' sentence, equality with
+            # the A endpoint binds RELATIVE_PRIOR, equality with B binds
+            # RELATIVE_CURRENT — a prior/current pair must never share a
+            # group (its two halves are ONE fact, not a conflict).
+            fig_period = _bind_period(sent, pos)
+            if transition and fig_period is None:
+                if value == transition_prior:
+                    fig_period = "RELATIVE_PRIOR"
+                elif value == transition_current:
+                    fig_period = "RELATIVE_CURRENT"
             for comp in companies:
-                mentions.append({"family": fam, "value": value, "unit": unit,
+                mentions.append({"family": fig_fam, "value": value, "unit": unit,
                                  "precision": precision,
-                                 "period": _bind_period(sent, pos),
+                                 "period": fig_period,
                                  "company": comp, "direction": direction,
                                  "context": sent.strip()[:120]})
 
