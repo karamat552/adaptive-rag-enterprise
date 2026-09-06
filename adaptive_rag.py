@@ -633,6 +633,41 @@ def canonicalize_documents(records: List[Dict[str, Any]]) -> List[Dict[str, Any]
         str(r.get("company") or ""), str(r.get("source") or ""), int(r.get("page") or 0)))
 
 
+# Positional year-column headers (live lesson 2026-09-06, coverage Q3):
+# income-statement pages that fell through to PROSE extraction render
+# columns positionally — 'Revenue $ 40,111 $ 32,165 $ 134,902 $ 116,609'
+# under a distant '2023 2022 2023 2022' header. Models quote the 2022
+# column for a 2023 question because counting columns is not a language
+# skill. Detected here deterministically and narrated in plain words.
+# The pattern is a BARE consecutive year run (4-digit years, whitespace
+# between, no other tokens) — the exact shape of these headers; Q-prefixed
+# variants ('Q4 2023 Q4 2022') are NOT matched (prefix pairing belongs to
+# a richer parser, not a heuristic that can mislabel).
+_YEAR_COL_RE = re.compile(r"\b(20(?:2[0-9]))(\s+20(?:2[0-9]))+\b")
+
+
+def _year_column_map(content: str) -> Optional[str]:
+    """Plain-language column order for positionally-rendered year tables.
+    Basis labels (quarterly/full-year) appear ONLY when the chunk carries
+    the SEC period-group labels ('Three Months Ended' AND 'Twelve Months
+    Ended') that make the pairing knowable; otherwise the map is the bare
+    left-to-right year order — still exactly what fixes column-counting."""
+    m = _YEAR_COL_RE.search(content)
+    if not m:
+        return None
+    years = re.findall(r"20(?:2[0-9])", m.group(0))
+    if len(years) < 2 or len(years) % 2 != 0:
+        return None       # odd runs are not the paired-column header shape
+    if ("three months" in content.lower()
+            and "twelve months" in content.lower()):
+        n_half = len(years) // 2
+        basis = ["quarterly"] * n_half + ["full-year"] * (len(years) - n_half)
+        order = ", ".join(f"{y} ({b})" for y, b in zip(years, basis))
+    else:
+        order = ", ".join(years)
+    return f"Year columns, left to right: {order}"
+
+
 def _format_record(r: Dict[str, Any]) -> str:
     """Evidence line for prompts and receipts. Table chunks carry their
     deterministic integrity flag so the fleet/auditor see the same
@@ -640,6 +675,9 @@ def _format_record(r: Dict[str, Any]) -> str:
     base = f"{r['company']} | {r['source']} | Page {r['page']}"
     if r.get("contains_table") and r.get("arithmetic_ok") is False:
         base += " | TABLE-INTEGRITY-FLAG: additive rows in this table window did not sum to the total row (incomplete window or restated figures — cite with care)"
+    col_map = _year_column_map(r.get("content") or "")
+    if col_map:
+        base += f" | COLUMN-KEY: {col_map}"
     return f"{base}\n{r['content']}"
 
 

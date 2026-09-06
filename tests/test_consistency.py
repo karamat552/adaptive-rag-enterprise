@@ -512,3 +512,33 @@ def test_real_absolute_conflict_still_detected():
     m = extract_metric_mentions(text, "tesla")
     contras = detect_contradictions(m)
     assert len(contras) == 1 and contras[0]["family"] == "net_income"
+
+
+def test_year_column_map_positional_header():
+    """Live lesson 2026-09-06 (coverage Q3): prose-fallback income
+    statements render columns positionally ('2023 2022 2023 2022' header,
+    values far below). The evidence line must narrate the column order so
+    models stop quoting the 2022 column for 2023 questions."""
+    from adaptive_rag import _year_column_map, _format_record
+    c = ("Three Months Ended December 31, Twelve Months Ended December 31, "
+         "In millions 2023 2022 2023 2022 Revenue $ 40,111 $ 32,165 "
+         "$ 134,902 $ 116,609")
+    m = _year_column_map(c)
+    assert m is not None and "2023 (quarterly), 2022 (quarterly)" in m \
+        and "2023 (full-year), 2022 (full-year)" in m
+    rec = {"company": "Meta", "source": "Meta_Q4_2023.pdf", "page": 1,
+           "content": c}
+    assert "COLUMN-KEY" in _format_record(rec)
+
+
+def test_year_column_map_declines_ambiguous_shapes():
+    """Odd year runs, Q-prefixed pairs, and yearless prose produce NO map —
+    a wrong map is worse than none (the mislabel bug this test guards was
+    introduced and caught during the 2026-09-06 fix itself)."""
+    from adaptive_rag import _year_column_map
+    assert _year_column_map("ended 2023 2022 2021 Revenue") is None
+    assert _year_column_map("Q4 2023 Q4 2022 FY 2023 FY 2022 Revenue") is None
+    assert _year_column_map("revenues increased 19 percent") is None
+    # Bare pair without period labels: order only, no basis guessing.
+    m = _year_column_map("Three Months Ended 2023 2022 Revenue")
+    assert m == "Year columns, left to right: 2023, 2022"
