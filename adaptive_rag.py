@@ -1712,6 +1712,13 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
         if _is_derived_context(sent):
             continue          # ratios/percentages derived from operands —
                               # no XBRL fact can match a computed margin
+        if _NON_GAAP_RE.search(sent):
+            continue          # non-GAAP basis (live lesson 2026-09-06, NIM
+                              # Q8 trace): the fact set is GAAP ground
+                              # truth; a \$2.5B non-GAAP net income rejected
+                              # against the \$7,928M GAAP gold was a
+                              # basis-class false reject. Decline — the
+                              # audit owns basis distinctions.
         cited = {int(g) for g in
                  (m.group(1) or m.group(2)
                   for m in _CITE_RE.finditer(sent)) if g and str(g).isdigit()}
@@ -1795,6 +1802,9 @@ _METRIC_FAMILIES: Dict[str, Tuple[str, ...]] = {
                "decreased", "yoy", "year-over-year", "year over year"),
     "cash": ("cash flow", "free cash flow", "operating cash flow",
              "capex", "capital expenditure"),
+    "cash_position": ("cash and cash equivalents", "cash and marketable",
+                      "cash position", "cash, cash equivalents",
+                      "total cash"),
     "headcount": ("headcount", "employees", "staff"),
     "debt": ("debt", "long-term debt", "borrowings"),
 }
@@ -1815,6 +1825,19 @@ _PERIODS: Dict[str, re.Pattern[str]] = {
                           r"2023.*fourth quarter", re.IGNORECASE),
     "Q4-2022": re.compile(r"\bq4[\s\-–—]*(?:fy\s*)?2022|fourth quarter.*2022|"
                           r"2022.*fourth quarter", re.IGNORECASE),
+    # FY periods (live lesson 2026-09-06, Q8 NIM trace): '$4.30 FY diluted
+    # EPS' grouped with '$2.27 Q4 EPS' as one false conflict — full-year
+    # figures are a distinct period family. 'twelve months/full year/
+    # fiscal year ended X' binds FY; bare '(in) 2023' does NOT (ambiguous —
+    # too broad would swallow quarterly sentences' figures into FY groups).
+    "FY-2023": re.compile(r"\b(?:fy|fiscal year|full[- ]year|full year)"
+                          r"[\s\-–—]*(?:ended[\s\-–—]*)?2023|"
+                          r"twelve months ended.*2023|2023.*twelve months",
+                          re.IGNORECASE),
+    "FY-2022": re.compile(r"\b(?:fy|fiscal year|full[- ]year|full year)"
+                          r"[\s\-–—]*(?:ended[\s\-–—]*)?2022|"
+                          r"twelve months ended.*2022|2022.*twelve months",
+                          re.IGNORECASE),
 }
 _PERIOD_RE = re.compile(r"\b(q[1-4])[\s\-–—]*(?:fy\s*)?(\d{4})\b|"
                         r"\b(fourth|first|second|third) quarter (\d{4})\b",
@@ -2174,7 +2197,17 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
         logger.warning("Zero documents retrieved. Fail-closed -> re-retrieval.")
         return {"grounded": False, "outcome": "unverified_system"}
     if degraded or not draft or draft == _QUARANTINE:
-        logger.warning("Degraded run %s — audit AUTO-FAILS (fail-closed).", degraded)
+        # Say WHY (live lesson 2026-09-06, NIM trace): 'Degraded run []'
+        # with an empty quarantine list means SYNTHESIS failed — not a
+        # specialist — and 'empty draft' means the model returned nothing.
+        # A silent [] sent us hunting phantom specialist bugs.
+        if degraded:
+            reason = f"specialists quarantined: {sorted(degraded)}"
+        elif draft == _QUARANTINE:
+            reason = "synthesis quarantined (sentinel draft)"
+        else:
+            reason = "synthesis returned an empty draft"
+        logger.warning("Audit AUTO-FAILS (fail-closed) — %s.", reason)
         return {"grounded": False, "outcome": "unverified_system"}
 
     bad_cite = citation_pre_audit(draft, len(docs))

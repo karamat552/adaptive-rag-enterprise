@@ -542,3 +542,98 @@ def test_year_column_map_declines_ambiguous_shapes():
     # Bare pair without period labels: order only, no basis guessing.
     m = _year_column_map("Three Months Ended 2023 2022 Revenue")
     assert m == "Year columns, left to right: 2023, 2022"
+
+
+# ============ follow-up live lessons 2026-09-06 (NIM-lane trace) ==========
+def test_fy_period_never_collides_with_q4():
+    """NIM Q8 trace: '$4.30 FY diluted EPS' vs '$2.27 Q4 EPS' was one false
+    conflict — full-year figures are a distinct period family."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Tesla diluted EPS was $4.30 for the full year 2023. "
+            "Tesla diluted EPS was $2.27 in Q4 2023.")
+    m = extract_metric_mentions(text, "tesla")
+    periods = {mn["period"] for mn in m if mn["unit"] == "$/share"}
+    assert periods == {"FY-2023", "Q4-2023"}
+    assert detect_contradictions(m) == []
+
+
+def test_fy_requires_explicit_token_not_bare_year():
+    """Bare '(in) 2023' must NOT bind FY — that would swallow quarterly
+    sentences into FY groups. Only fy/fiscal-year/full-year/twelve-months
+    tokens carry the FY period."""
+    from adaptive_rag import extract_metric_mentions
+    m = extract_metric_mentions(
+        "Revenue was $40,111 million in 2023.", "meta")
+    assert all(mn["period"] != "FY-2023" for mn in m)
+    m2 = extract_metric_mentions(
+        "Revenue was $134,902 million for the twelve months ended "
+        "December 31, 2023.", "meta")
+    assert any(mn["period"] == "FY-2023" for mn in m2)
+
+
+def test_cash_position_family_split_from_flow():
+    """Q3 noise group: cash-and-equivalents ($11.5B), free cash flow
+    ($11.5B), and debt ($18.4B) collided inside one 'cash' family.
+    Cash POSITION (balance) and cash FLOW are different metrics."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Meta cash and cash equivalents were $11.5 billion in Q4 2023. "
+            "Meta free cash flow was $11.5 billion in Q4 2023. "
+            "Meta long-term debt was $18.4 billion in Q4 2023.")
+    m = extract_metric_mentions(text, "meta")
+    fams = {mn["family"] for mn in m}
+    assert "cash_position" in fams and "cash" in fams and "debt" in fams
+    assert detect_contradictions(m) == []
+
+
+def test_xbrl_gate_declines_non_gaap_basis():
+    """NIM Q8 trace: '$2.5B non-GAAP net income' was rejected against the
+    GAAP $7,928M gold — a basis-class false reject. The fact set is GAAP
+    ground truth; non-GAAP sentences are declined (audit owns basis)."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "tesla", "metric": "net_income",
+              "value": 7928000000.0, "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Tesla"}]
+    draft = ("Tesla non-GAAP net income was $2.5 billion in Q4 2023【1】, "
+             "while GAAP net income was $7.9 billion【1】.")
+    issues = check_xbrl_figures(draft, ev, facts)
+    # The GAAP figure must be judged (it reconstructs), non-GAAP declined.
+    assert all("non-gaap" not in i["claim_sentence"].lower() for i in issues)
+    assert issues == []
+
+
+def test_count_vs_dollar_rendering_never_conflicts():
+    """Day-2 trace group [40111.0, 40111000000.0]: the raw table count
+    40,111 and the dollar $40,111M are two renderings of ONE figure. Unit
+    spaces keep them in separate groups (per-share split side effect,
+    2026-09-06) — a real count conflict (headcount 40,111 vs 38,706)
+    must still fire."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    m = extract_metric_mentions(
+        "Revenue was 40,111 in Q4 2023. Revenue was $40,111 million "
+        "in Q4 2023.", "meta")
+    assert detect_contradictions(m) == []
+    m2 = extract_metric_mentions(
+        "Meta headcount was 40,111 in Q4 2023. Meta headcount was 38,706 "
+        "in Q4 2023.", "meta")
+    assert len(detect_contradictions(m2)) == 1
+
+
+def test_audit_autofail_logs_reason(caplog):
+    """The 'Degraded run []' log with an EMPTY quarantine list means
+    synthesis failed — a silent [] sent us hunting phantom specialist bugs
+    (NIM trace, 2026-09-06). The reason must be named."""
+    import asyncio
+    import logging
+    import adaptive_rag as ar
+    state = {"final_executive_report": "", "documents": [{"x": 1}],
+             "degraded_agents": [], "original_question": "q?", "run_id": "t"}
+    with caplog.at_level(logging.WARNING, logger="EnterpriseRAG"):
+        upd = asyncio.run(ar.fact_checker_guard(state))
+    assert upd["grounded"] is False
+    assert any("synthesis returned an empty draft" in r.message
+               for r in caplog.records)
+    state2 = {**state, "final_executive_report": "draft text",
+              "degraded_agents": ["financial"]}
+    with caplog.at_level(logging.WARNING, logger="EnterpriseRAG"):
+        asyncio.run(ar.fact_checker_guard(state2))
+    assert any("specialists quarantined" in r.message for r in caplog.records)
