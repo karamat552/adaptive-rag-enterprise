@@ -358,3 +358,40 @@ def test_quota_failures_do_not_trip_circuit(_failover_env, monkeypatch):
     assert breaker.failures == 1, \
         "3 quota walls must collapse to a single systemic failure record, not 3"
     assert breaker.state == "closed", "1 < 5 threshold — circuit stays closed"
+
+
+# ================== timeout-class failover (live lesson 2026-09-06) =======
+def test_is_timeout_error_type_based():
+    """Only REAL timeout types (asyncio.TimeoutError, *TimeoutError class
+    names) count — a string 'timed out' in a plain Exception stays with the
+    circuit breaker (ADR-008 ownership: timeouts don't switch endpoints;
+    the live white-whale starvation was a bare asyncio.TimeoutError from
+    429-storm backoff burning the whole budget)."""
+    from adaptive_rag import _is_timeout_error
+    assert _is_timeout_error(asyncio.TimeoutError())
+    assert _is_timeout_error(TimeoutError())
+    assert not _is_timeout_error(Exception("ReadTimeout: timed out"))
+    assert not _is_timeout_error(Exception("429 rate limit"))
+
+
+def test_real_timeout_arms_cooldown_and_fails_over(_failover_env):
+    """The white-whale contract: a bare asyncio.TimeoutError at the primary
+    must (a) mark a SHORT cooldown so sibling specialists stop burning the
+    stalled primary, and (b) proceed to backups — not raise. The openai
+    client's 429 backoff retries can burn the entire timeout budget so the
+    quota wall NEVER surfaces as a 429; it surfaces as this exact type."""
+    import adaptive_rag as ar
+    primary = _FakeEngine(behavior=[asyncio.TimeoutError()])
+    _failover_env["engines"]["https://backup-a.test/v1::m1"].behavior = \
+        [_Resp("rescued")]
+    result, _ = asyncio.run(
+        ar._failover_stage_call(primary, [("human", "q")], "route"))
+    assert result.content == "rescued"
+    # Cooldown must be armed for the PRIMARY (sibling calls skip straight
+    # to backups while the window lasts).
+    model_id = ar._runnable_model_id(primary)
+    assert _endpoint_is_cooling(ar, f"primary::{ar.get_settings().provider}::{model_id}")
+
+
+def _endpoint_is_cooling(ar, endpoint_id: str) -> bool:
+    return ar._endpoint_cooldown.blocked(endpoint_id)

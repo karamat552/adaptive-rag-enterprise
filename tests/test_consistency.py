@@ -441,3 +441,74 @@ def test_cross_clause_year_never_leaks():
     figs = [m.start() for m in _re.finditer(r"\$\d", s)]
     assert _figure_year(s, figs[0]) == "2023"
     assert _figure_year(s, figs[1]) is None
+
+
+# ================= live lessons 2026-09-06 (coverage battery day-2) =======
+def test_xbrl_per_share_eps_never_judged_against_absolute():
+    """Q8 'Tesla diluted EPS': $2.27 per-share must NOT be rejected against
+    the $7,928M absolute net-income fact — the fact carries no per-share
+    dimension. The eps anchor owns the figure; the gate declines it."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "tesla", "metric": "net_income",
+              "value": 7928000000.0, "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Tesla"}]
+    draft = ("Tesla diluted EPS was $2.27 in Q4 2023, while non-GAAP EPS "
+             "was $0.71 per share【1】.")
+    assert check_xbrl_figures(draft, ev, facts) == []
+
+
+def test_xbrl_figure_anchored_to_decoy_metric_declined():
+    """Q3 iter-1 'Meta total revenue': 'revenue grew to $40.1B while total
+    assets reached $229.6B' — the ASSETS figure must never be judged against
+    the revenue fact. Figure-level ownership, not sentence-level."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "meta", "metric": "revenue",
+              "value": 40111000000.0, "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Meta"}]
+    draft = ("Meta revenue grew to $40.1 billion while total assets reached "
+             "$229.6 billion in Q4 2023【1】.")
+    assert check_xbrl_figures(draft, ev, facts) == []
+
+
+def test_xbrl_wrong_total_still_caught():
+    """The figure-level anchoring must not open a hole: a genuinely wrong
+    TOTAL revenue figure anchored to the revenue term is still rejected."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "meta", "metric": "revenue",
+              "value": 40111000000.0, "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Meta"}]
+    draft = "Meta total revenue was $38.7 billion in Q4 2023【1】."
+    issues = check_xbrl_figures(draft, ev, facts)
+    assert len(issues) == 1 and issues[0]["metric"] == "revenue"
+
+
+def test_gaap_non_gaap_basis_never_contradicts():
+    """Q8's second false conflict: '$2.27 GAAP EPS' vs '$0.71 non-GAAP EPS'
+    are two accounting bases of one metric — never a contradiction."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Tesla diluted EPS was $2.27 in Q4 2023. Tesla non-GAAP diluted "
+            "EPS was $0.71 per share in Q4 2023.")
+    m = extract_metric_mentions(text, "tesla")
+    assert detect_contradictions(m) == []
+
+
+def test_per_share_never_groups_with_absolute():
+    """Q8's first false conflict: '$2.27 diluted EPS' and '$7.9B net
+    income' share family+period+unit '$' but not scale — per-share figures
+    live in their own unit space."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Tesla diluted EPS was $2.27 in Q4 2023. Tesla net income was "
+            "$7.9 billion in Q4 2023.")
+    m = extract_metric_mentions(text, "tesla")
+    assert detect_contradictions(m) == []
+
+
+def test_real_absolute_conflict_still_detected():
+    """Guardrail: the basis/unit splits must not mute a REAL conflict — two
+    absolute GAAP net-income figures that disagree are still flagged."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Tesla net income was $2.5 billion in Q4 2023. Tesla net income "
+            "was $7.9 billion in Q4 2023.")
+    m = extract_metric_mentions(text, "tesla")
+    contras = detect_contradictions(m)
+    assert len(contras) == 1 and contras[0]["family"] == "net_income"

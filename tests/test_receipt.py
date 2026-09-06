@@ -429,3 +429,35 @@ def test_cache_miss_has_no_provenance_override():
         upd = asyncio.run(ar.check_cache_node(state))
         assert upd.get("cached_hit") is False
         assert not upd.get("provenance_run_id")
+
+
+def test_cache_read_bypass_measure_pipeline_not_cache():
+    """ADR-014 measurement integrity: with RAG_DISABLE_CACHE_READ=1 the
+    node must NOT consult the cache even when a near-identical certified
+    answer exists — coverage runs measure the live pipeline, and recall
+    must not drift toward 100% as the cache fills. check_semantic_cache is
+    SYNC (async mocks return never-awaited coroutines)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    def _cached(*a, **k):
+        return {"answer": "certified answer [1]", "provenance_run_id": "orig-run-1"}
+
+    calls = {"n": 0}
+
+    def _tracking(*a, **k):
+        calls["n"] += 1
+        return _cached(*a, **k)
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.dict(os.environ, {"RAG_DISABLE_CACHE_READ": "1"}), \
+         mock.patch.object(ar, "check_semantic_cache", _tracking), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "fresh-run-2", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+        assert upd.get("cached_hit") is False, "eval mode must bypass cache reads"
+        assert calls["n"] == 0, "cache must never be consulted in eval mode"

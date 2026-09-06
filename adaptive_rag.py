@@ -399,6 +399,19 @@ def _is_quota_error(exc: Exception) -> bool:
             or "tpd" in text or "too many requests" in text)
 
 
+def _is_timeout_error(exc: Exception) -> bool:
+    """Timeout-class failure WITHOUT importing openai's exception tree:
+    asyncio.TimeoutError/TimeoutError instances, or any exception whose
+    class name says timeout (openai.APITimeoutError). Live lesson
+    2026-09-06: during a 429-storm the openai client honors server
+    Retry-After headers (8s+15s+32s+34s...) INSIDE max_retries=3, so the
+    quota wall never surfaces as a 429 — it surfaces as a bare timeout
+    with an EMPTY str() — and the failover layer never sees it."""
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return True
+    return "timeout" in type(exc).__name__.lower()
+
+
 _failover_endpoints: Optional[List[FailoverEndpoint]] = None
 _failover_lock = threading.Lock()
 
@@ -508,12 +521,25 @@ def _failover_stage_call(runnable: Any, messages: list, stage: str):
             try:
                 return await _call(runnable)
             except Exception as exc:
-                if not _is_quota_error(exc):
+                if _is_quota_error(exc):
+                    hint = parse_retry_hint(exc)
+                    _endpoint_cooldown.mark(primary_id, hint)
+                    logger.warning("[%s] primary quota-blocked (%s hint) — failing over.",
+                                   stage, f"{hint:.0f}s" if hint else "no")
+                elif _is_timeout_error(exc):
+                    # TIMEOUT COOLDOWN (live lesson 2026-09-06, white-whale
+                    # Q4): a stalled primary (429-storm backoff burning the
+                    # whole timeout budget) must not also starve every
+                    # SIBLING specialist that retries it. A short fixed
+                    # window — timeouts are transient congestion, not a
+                    # day-capped quota; the circuit breaker's default is
+                    # the right scale. Ownership stays quota-vs-circuit as
+                    # ADR-008 drew it; this only stops the bleed.
+                    _endpoint_cooldown.mark(primary_id, _endpoint_cooldown._default_s)
+                    logger.warning("[%s] primary timed out — brief cooldown, "
+                                   "failing over.", stage)
+                else:
                     raise
-                hint = parse_retry_hint(exc)
-                _endpoint_cooldown.mark(primary_id, hint)
-                logger.warning("[%s] primary quota-blocked (%s hint) — failing over.",
-                               stage, f"{hint:.0f}s" if hint else "no")
         for ep in get_failover_endpoints():
             ep_id = f"{ep['base_url']}::{ep['model']}"
             if _endpoint_cooldown.blocked(ep_id):
@@ -992,7 +1018,10 @@ async def _specialist(name: str, system_prompt: str, category: str,
         logger.error("[%s] circuit open — quarantined.", name)
         out["degraded"], out["report"] = True, _QUARANTINE
     except Exception as e:
-        logger.error("[%s] failed (quarantined): %s", name, e)
+        # repr, not str: asyncio.TimeoutError has an EMPTY str() — the
+        # white-whale Q4 log (2026-09-06) showed three quarantines with no
+        # visible cause. repr always names the class.
+        logger.error("[%s] failed (quarantined): %r", name, e)
         out["degraded"], out["report"] = True, _QUARANTINE
     return out
 
@@ -1003,10 +1032,19 @@ async def _specialist(name: str, system_prompt: str, category: str,
 async def check_cache_node(state: MultiAgentState) -> MultiAgentState:
     query = state["original_question"]
     try:
-        cached = await _db_call(check_semantic_cache, query,
-                                filters=detect_company_scope(query),
-                                tenant_id=state.get("tenant_id") or None,
-                                similarity_threshold=get_settings().cache_similarity)
+        # RAG_DISABLE_CACHE_READ (eval-only): coverage runs must measure the
+        # LIVE pipeline, not replay past certifications from the cache —
+        # otherwise recall drifts toward 100% as the cache fills and the
+        # ADR-014 metric stops being reproducible. Refusals are never cached
+        # (only certified answers enter), so wrong_premise/adversarial rows
+        # are unaffected either way.
+        if os.getenv("RAG_DISABLE_CACHE_READ") != "1":
+            cached = await _db_call(check_semantic_cache, query,
+                                    filters=detect_company_scope(query),
+                                    tenant_id=state.get("tenant_id") or None,
+                                    similarity_threshold=get_settings().cache_similarity)
+        else:
+            cached = None
     except Exception as e:
         logger.warning("Cache lookup failed — treating as miss: %s", e)
         cached = None
@@ -1502,6 +1540,53 @@ _XBRL_METRIC_HINTS = {
     "net_income": ("net income", "profit", "earnings"),
     "eps_diluted": ("eps", "earnings per share", "diluted"),
 }
+# Figure-level OWNERSHIP anchors (live lessons 2026-09-06, Q3+Q8): the gate
+# judged every $-figure in a metric-hinted SENTENCE against that one fact —
+# 'revenue grew to $40.1B while total assets reached $229.6B' rejected the
+# ASSETS figure against the revenue fact (false rejection), and '$2.27
+# diluted EPS' was rejected against the ABSOLUTE net-income fact. Ownership
+# must follow the FIGURE: nearest anchor term wins (decoys are metrics we
+# hold NO facts for — judging them is guaranteed false-rejection territory;
+# eps anchors own per-share figures because the facts carry no per-share
+# dimension).
+_XBRL_ANCHORS: Dict[str, re.Pattern[str]] = {
+    "revenue": re.compile(
+        r"\b(revenues?|net sales|total sales)\b", re.IGNORECASE),
+    "net_income": re.compile(
+        r"\b(net income|net earnings|profit|earnings(?!\s+per\s+share))\b",
+        re.IGNORECASE),
+    "eps_diluted": re.compile(
+        r"\b(earnings per share|per share|per diluted share|eps)\b",
+        re.IGNORECASE),
+    "__decoy__": re.compile(
+        r"\b(total assets|assets|cash(?: flow| and cash equivalents)?|"
+        r"free cash flow|operating cash flow|debt|borrowings|"
+        r"operating income|income from operations|operating expenses|"
+        r"research and development|headcount|employees|"
+        r"repurchases?|buybacks?|capital expenditures?|capex|"
+        r"total liabilities|stockholders. equity|shareholders. equity)\b",
+        re.IGNORECASE),
+}
+# Segment vocabulary (word-boundary regex, not substring: 'ads' as a substring
+# would also hit 'downloads'; as a word it is Meta's ad business — the Q3
+# iter-2 false reject (2026-09-06) was 'ad revenue' phrasing).
+_SEGMENT_RE = re.compile(
+    r"\b(products?|services?|advertising|ads?|apps?|labs?|automotive|energy|"
+    r"segments?|iphone|family of apps|reality labs)\b", re.IGNORECASE)
+
+
+def _figure_metric_owner(sent: str, pos: int) -> Optional[str]:
+    """The metric whose anchor term is NEAREST the figure at `pos`
+    ("__decoy__" for metrics the fact set cannot judge). Preceding anchors
+    own short; following anchors carry the +15 prose penalty — the proven
+    _nearest_family asymmetry."""
+    best: Optional[Tuple[int, str]] = None
+    for metric, pat in _XBRL_ANCHORS.items():
+        for m in pat.finditer(sent):
+            d = (pos - m.end()) if m.start() < pos else (m.start() - pos) + 15
+            if best is None or d < best[0]:
+                best = (d, metric)
+    return best[1] if best else None
 _XBRL_DOLLAR_RE = re.compile(
     r"\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(billion|million|bn|mm|b\b|m\b)?",
     re.IGNORECASE)
@@ -1582,9 +1667,6 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
     # Index facts by (company, metric).
     fact_ix: Dict[Tuple[str, str], Dict[str, Any]] = {
         (f["company"].lower(), f["metric"]): f for f in facts}
-    SEGMENT_WORDS = ("products", "services", "advertising", "apps",
-                     "labs", "automotive", "energy", "segment", "iphone",
-                     "family of apps", "reality labs")
     issues: List[Dict[str, Any]] = []
     sentences = re.split(r"(?<=[.!?])\s+", draft)
     for sent in sentences:
@@ -1598,7 +1680,7 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
         cited = {n for n in cited if 1 <= n <= len(evidence)}
         if not cited:
             continue
-        if any(w in low for w in SEGMENT_WORDS):
+        if _SEGMENT_RE.search(sent):
             continue          # segment-level claim — no XBRL ground truth
         # Company attribution: from cited evidence records.
         companies = {(evidence[n - 1].get("company") or "").lower()
@@ -1613,6 +1695,16 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
                 official = fact["value"]
                 fact_year = (fact.get("period") or "").replace("Q4-", "")
                 for m in _XBRL_DOLLAR_RE.finditer(sent):
+                    # FIGURE-LEVEL METRIC ANCHORING (live lessons 2026-09-06,
+                    # Q3 'Meta total revenue' + Q8 'Tesla diluted EPS'): a
+                    # figure is judged ONLY against the metric whose anchor
+                    # term is nearest to IT — never the sentence's overall
+                    # hint. Fixes: assets figures judged against the revenue
+                    # fact (false rejection); per-share EPS judged against
+                    # the absolute net-income fact (units-class false
+                    # rejection).
+                    if _figure_metric_owner(sent, m.start()) != metric:
+                        continue   # figure owned by another metric (or decoy)
                     # Year binding (live lesson above): a figure anchored to a
                     # year the facts don't cover is declined, never flagged.
                     fig_year = _figure_year(sent, m.start())
@@ -1638,7 +1730,10 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
                         "derivation": fact.get("derivation"),
                         "citations": sorted(cited),
                     })
-                break            # one metric hint per sentence is enough
+                # no 'break' — figure-level ownership (2026-09-06) makes
+                # per-metric judgment safe in multi-metric sentences; the
+                # sentence-level one-metric limit once forced assets
+                # figures into revenue judgments (the Q3 false reject).
     return issues
 
 
@@ -1721,6 +1816,14 @@ _COMPANY_NAME_RE = {c: re.compile(rf"\b{c}\b", re.IGNORECASE)
 # structurally ambiguous ('revenue grew to $14B versus $40B in the quarter').
 _MULTI_COMPANY_CONTEXT_RE = re.compile(
     r"\b(versus|vs\.?|compared to|comparison|respectively)\b", re.IGNORECASE)
+# Accounting-basis marker (live lesson 2026-09-06): a non-GAAP figure and its
+# GAAP twin are two bases of one metric, never one conflict.
+_NON_GAAP_RE = re.compile(
+    r"\bnon[- ]gaap\b|(?<!gaap )(?<!gaap)(?<!non[- ])\badjusted\b", re.IGNORECASE)
+# Per-share marker (same lesson): EPS-style figures live in their own unit
+# space so they can never group with absolute dollar figures.
+_PER_SHARE_RE = re.compile(
+    r"\b(per share|per diluted share|earnings per share|eps)\b", re.IGNORECASE)
 
 
 def _nearest_family(sentence: str, pos: int) -> Optional[str]:
@@ -1876,7 +1979,13 @@ def extract_metric_mentions(text: str, company: str) -> List[Dict[str, Any]]:
             raw = m.group(1)
             scale = _SCALE.get((m.group(2) or "").lower(), 1.0)
             value = float(raw.replace(",", "")) * scale
-            _add(value, "$", _sig_digits(value, raw), m.end())
+            # PER-SHARE UNIT SPACE (live lesson 2026-09-06, Q8): '$2.27
+            # diluted EPS' and '$7.9B net income' share family+period+unit
+            # but not SCALE — grouping them manufactured a false conflict.
+            # A per-share marker in the sentence puts $-figures in their own
+            # unit space, mirroring the scale engine's per_share_exception.
+            pshare = "$/share" if _PER_SHARE_RE.search(sent) else "$"
+            _add(value, pshare, _sig_digits(value, raw), m.end())
         for m in _PCT_RE.finditer(sent):
             _add(float(m.group(1)), "%", _sig_digits(0, m.group(0)), m.end())
         if not _MONEY_RE.search(sent):
@@ -1899,15 +2008,20 @@ def detect_contradictions(
       — relative gaps on small margins (1.0% vs 1.03%) are noise, not conflict.
     Sign/direction conflicts ('grew 25%' vs 'declined 3%') are flagged via the
     polarity field even when magnitudes agree. Deterministic, zero LLM."""
-    groups: Dict[Tuple[str, str, Optional[str], str], List[Dict[str, Any]]] = {}
+    groups: Dict[Tuple[str, str, Optional[str], str, str], List[Dict[str, Any]]] = {}
     for mn in mentions:
         if mn.get("company") is None:
             continue      # ambiguous attribution never votes in a conflict group
-        key = (mn["family"], mn["company"], mn.get("period"), mn["unit"])
+        # GAAP / non-GAAP BASIS SPLIT (live lesson 2026-09-06, Q8 'Tesla
+        # diluted EPS'): '$2.27 GAAP EPS' and '$0.71 non-GAAP EPS' are two
+        # ACCOUNTING BASES of one metric, not a contradiction — mixing them
+        # in one group manufactured the false conflict that refused the run.
+        basis = "non_gaap" if _NON_GAAP_RE.search(mn.get("context", "")) else "gaap"
+        key = (mn["family"], mn["company"], mn.get("period"), mn["unit"], basis)
         groups.setdefault(key, []).append(mn)
 
     contradictions: List[Dict[str, Any]] = []
-    for (fam, comp, period, unit), members in sorted(groups.items(), key=str):
+    for (fam, comp, period, unit, basis), members in sorted(groups.items(), key=str):
         if len(members) < 2:
             continue
         values = [m["value"] for m in members]
