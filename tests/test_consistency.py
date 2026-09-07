@@ -637,3 +637,71 @@ def test_audit_autofail_logs_reason(caplog):
     with caplog.at_level(logging.WARNING, logger="EnterpriseRAG"):
         asyncio.run(ar.fact_checker_guard(state2))
     assert any("specialists quarantined" in r.message for r in caplog.records)
+
+
+# ============ live lessons 2026-09-07 (day-3 battery traces) ==============
+def test_xbrl_gate_sentence_named_company_attribution():
+    """Day-3 white-whale trace: citing multi-company evidence made the gate
+    judge Meta's $40,111M revenue against APPLE's $22,956M net-income
+    gold (40111/32165 vs 22956 rejects). A sentence naming exactly ONE
+    company owns its figures — judged only against that company's facts."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [
+        {"company": "apple", "metric": "net_income", "value": 22956000000.0,
+         "period": "Q4-2023", "unit": "USD"},
+        {"company": "meta", "metric": "revenue", "value": 40111000000.0,
+         "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Apple"}, {"company": "Meta"}]   # both cited
+    d = ("Meta revenue was $40,111 million in Q4 2023【1】【2】.")
+    assert check_xbrl_figures(d, ev, facts) == []       # Meta judged vs Meta only
+    d2 = "Apple net income was $25.1 billion in Q4 2023【1】【2】."
+    issues = check_xbrl_figures(d2, ev, facts)
+    assert len(issues) == 1 and issues[0]["company"] == "apple"
+    d3 = "Meta revenue was $38.7 billion in Q4 2023【1】【2】."
+    issues3 = check_xbrl_figures(d3, ev, facts)
+    assert len(issues3) == 1 and issues3[0]["company"] == "meta"
+
+
+def test_xbrl_gate_multi_named_sentence_declined():
+    """A sentence naming SEVERAL companies attributes ambiguously — it
+    falls back to cited-evidence companies only when no single name
+    dominates; the mixed-name comparison sentence must never cross-judge
+    (same principle as the detector's multi-named decline)."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [
+        {"company": "apple", "metric": "net_income", "value": 22956000000.0,
+         "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Apple"}, {"company": "Meta"}]
+    d = ("Compared to Meta revenue of $40.1 billion, Apple net income was "
+         "$22.9 billion in Q4 2023【1】【2】.")
+    assert check_xbrl_figures(d, ev, facts) == []
+
+
+def test_decoy_noun_decline_no_family_lending():
+    """Day-3 trace group ('cash_position', [76455.0, 229623.0]): 'cash and
+    marketable securities were $65.4B while total assets reached $229.6B'
+    lent the cash_position family to the ASSETS figure. A clause whose
+    noun is a non-family financial term claims its figure — decline, not
+    loan."""
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Meta cash and marketable securities were $65.4 billion while "
+            "total assets reached $229.6 billion in Q4 2023.")
+    m = extract_metric_mentions(text, "meta")
+    assert all(mn["value"] != 229600000000.0 for mn in m), \
+        "the assets figure must be declined, never grouped"
+    assert any(mn["family"] == "cash_position"
+               and abs(mn["value"] - 65400000000.0) < 1e3 for mn in m), \
+        "the cash figure must still bind (65.4e9 carries float tail 0.00001)"
+    assert detect_contradictions(m) == []
+
+
+def test_decoy_noun_does_not_block_real_figures():
+    """Guardrail: a decoy noun in a sibling clause must never decline a
+    figure whose OWN clause carries a real family term — revenue beside a
+    total-assets clause still binds revenue."""
+    from adaptive_rag import extract_metric_mentions
+    text = ("Meta revenue was $40.1 billion in Q4 2023 while total assets "
+            "reached $229.6 billion.")
+    m = extract_metric_mentions(text, "meta")
+    fams = {mn["family"] for mn in m}
+    assert "revenue" in fams and "cash_position" not in fams

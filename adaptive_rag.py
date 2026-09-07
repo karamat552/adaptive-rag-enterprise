@@ -554,7 +554,10 @@ def _failover_stage_call(runnable: Any, messages: list, stage: str):
                 if _is_quota_error(exc):
                     _endpoint_cooldown.mark(ep_id, parse_retry_hint(exc))
                     continue
-                logger.warning("[%s] backup %s failed (non-quota): %s",
+                # %r, not %s (2026-09-07): NIM 503s and timeout wrappers can
+                # carry empty str() — the day-3 trace showed three
+                # '(non-quota): ' lines with nothing after the colon.
+                logger.warning("[%s] backup %s failed (non-quota): %r",
                                 stage, ep["base_url"], exc)
                 continue
         raise RuntimeError(f"[{stage}] all endpoints exhausted — fail-closed "
@@ -1727,9 +1730,22 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
             continue
         if _SEGMENT_RE.search(sent):
             continue          # segment-level claim — no XBRL ground truth
-        # Company attribution: from cited evidence records.
-        companies = {(evidence[n - 1].get("company") or "").lower()
-                    for n in cited}
+        # Company attribution: from the SENTENCE'S OWN NAMED COMPANIES first
+        # (live lesson 2026-09-07, white-whale trace): citing multi-company
+        # evidence (the comparison question cites Apple AND Meta chunks)
+        # made the gate judge EVERY company's facts against the sentence —
+        # Meta's $40,111M revenue was rejected against APPLE's $22,956M
+        # net-income gold (and the reverse). A sentence that names exactly
+        # one company owns its figures; sentences naming none or several
+        # fall back to the cited-evidence companies (the old behavior —
+        # better than declining single-company questions with unnamed
+        # subjects).
+        named = [c for c, pat in _COMPANY_NAME_RE.items() if pat.search(sent)]
+        if len(named) == 1:
+            companies = {named[0]}
+        else:
+            companies = {(evidence[n - 1].get("company") or "").lower()
+                         for n in cited}
         for comp in companies:
             for metric, hints in _XBRL_METRIC_HINTS.items():
                 if not any(h in low for h in hints):
@@ -1885,6 +1901,15 @@ _NON_GAAP_RE = re.compile(
 # space so they can never group with absolute dollar figures.
 _PER_SHARE_RE = re.compile(
     r"\b(per share|per diluted share|earnings per share|eps)\b", re.IGNORECASE)
+# Non-family financial nouns (live lesson 2026-09-07): figures anchored to
+# these belong to metric spaces the detector does not track — they are
+# claimed decoys, declined at binding time rather than lent a sibling
+# clause's family.
+_DECOY_NOUN_RE = re.compile(
+    r"\b(total assets|assets|total liabilities|liabilities|"
+    r"stockholders.? equity|shareholders.? equity|total debt|"
+    r"market capitalization|goodwill|inventory|deferred revenue)\b",
+    re.IGNORECASE)
 
 
 def _nearest_family(sentence: str, pos: int) -> Optional[str]:
@@ -1943,6 +1968,14 @@ def _nearest_family(sentence: str, pos: int) -> Optional[str]:
     # figure; if not even that, the sibling clauses can still lend theirs.
     if best_growth is not None:
         return "growth"
+    # DECOY-NOUN DECLINE (live lesson 2026-09-07, day-3 trace): a clause
+    # whose nearest noun is a NON-family financial term ('total assets
+    # reached $229.6B' beside a cash_position clause) claims the figure
+    # for a metric space we do not track — lending the sibling clause's
+    # family manufactured ('cash_position', [76455000000.0, 229623000000.0]).
+    # A claimed decoy is a decline, never a loan.
+    if _DECOY_NOUN_RE.search(sentence[clause_start:clause_end]):
+        return ""
     return None
 
 
@@ -2018,7 +2051,13 @@ def extract_metric_mentions(text: str, company: str) -> List[Dict[str, Any]]:
         def _add(value: float, unit: str, precision: int, pos: int) -> None:
             # Nearest-anchor family binding: each figure owns the family term
             # CLOSEST to it, falling back to the sentence's overall family.
-            fig_fam = _nearest_family(sent, pos) or sentence_fam
+            # "" is the DECOY-NOUN DECLINE (2026-09-07): the figure's clause
+            # is anchored to a metric space we do not track — it must never
+            # be lent a sibling clause's family.
+            near = _nearest_family(sent, pos)
+            if near == "":
+                return
+            fig_fam = near or sentence_fam
             # TRANSITION OVERRIDE: in a 'from A to B' sentence, equality with
             # the A endpoint binds RELATIVE_PRIOR, equality with B binds
             # RELATIVE_CURRENT — a prior/current pair must never share a
