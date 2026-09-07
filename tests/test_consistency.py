@@ -705,3 +705,46 @@ def test_decoy_noun_does_not_block_real_figures():
     m = extract_metric_mentions(text, "meta")
     fams = {mn["family"] for mn in m}
     assert "revenue" in fams and "cash_position" not in fams
+
+
+def test_xbrl_prior_clause_comparative_declined():
+    """NIM Q3 trace (2026-09-07): 'revenue rose to $40,111M in Q4 2023, up
+    from $32,165M' — the from-clause figure is the PRIOR year's value;
+    rejecting it against the current-year fact was a false reject."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "meta", "metric": "revenue", "value": 40111000000.0,
+              "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Meta"}]
+    d = ("Meta revenue rose to $40,111 million in Q4 2023, up from "
+         "$32,165 million【1】.")
+    assert check_xbrl_figures(d, ev, facts) == []
+    # The current figure stated WRONG as prior-year's number is still caught:
+    d2 = "Meta total revenue was $32,165 million in Q4 2023【1】."
+    assert len(check_xbrl_figures(d2, ev, facts)) == 1
+
+
+def test_xbrl_full_year_claim_declined_vs_quarterly_fact():
+    """NIM Q3 trace: 'full-year revenue reached $134,902M, up from
+    $116,609M' judged against the Q4-2023 fact — the fact set holds
+    quarterly truth only; FY claims are declined, not rejected."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "meta", "metric": "revenue", "value": 40111000000.0,
+              "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Meta"}]
+    d = ("Meta full-year revenue reached $134,902 million, up from "
+         "$116,609 million【1】.")
+    assert check_xbrl_figures(d, ev, facts) == []
+    d2 = "Meta total revenue was $134,902 million in Q4 2023【1】."
+    assert len(check_xbrl_figures(d2, ev, facts)) == 1
+
+
+def test_xbrl_other_revenue_component_declined():
+    """NIM Q5 trace: '$816M other revenue' judged against the $40,111M
+    TOTAL revenue fact — a component is not the total. 'other revenue'
+    joins the segment vocabulary."""
+    from adaptive_rag import check_xbrl_figures
+    facts = [{"company": "meta", "metric": "revenue", "value": 40111000000.0,
+              "period": "Q4-2023", "unit": "USD"}]
+    ev = [{"company": "Meta"}]
+    d = "Meta other revenue was $816 million in Q4 2023【1】."
+    assert check_xbrl_figures(d, ev, facts) == []

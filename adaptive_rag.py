@@ -1613,7 +1613,17 @@ _XBRL_ANCHORS: Dict[str, re.Pattern[str]] = {
 # iter-2 false reject (2026-09-06) was 'ad revenue' phrasing).
 _SEGMENT_RE = re.compile(
     r"\b(products?|services?|advertising|ads?|apps?|labs?|automotive|energy|"
-    r"segments?|iphone|family of apps|reality labs)\b", re.IGNORECASE)
+    r"segments?|iphone|family of apps|reality labs|other revenue|"
+    r"other revenues)\b", re.IGNORECASE)
+# Prior-period comparative clause (live lesson 2026-09-07): a figure that
+# FOLLOWS 'up from'/'down from'/'from' is the prior period's value.
+_PRIOR_CLAUSE_RE = re.compile(
+    r"\b(?:up|down|grew|rose|fell|declined|increased|decreased|totaling)\s+"
+    r"from\s+\$?[\d,.]+[^.]*$", re.IGNORECASE)
+# Full-year scoping (live lesson 2026-09-07): FY claims vs quarterly facts.
+_FULLYEAR_RE = re.compile(
+    r"\b(full[- ]year|full year|fiscal year|twelve months|annual)\b",
+    re.IGNORECASE)
 
 
 def _figure_metric_owner(sent: str, pos: int) -> Optional[str]:
@@ -1770,6 +1780,20 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
                     # year the facts don't cover is declined, never flagged.
                     fig_year = _figure_year(sent, m.start())
                     if fig_year is not None and fig_year != fact_year:
+                        continue
+                    # PRIOR-PERIOD COMPARATIVE DECLINE (live lesson
+                    # 2026-09-07, NIM Q3 trace): '$40,111 million, up from
+                    # $32,165 million' — the from-clause figure is the PRIOR
+                    # year's value, not a Q4-2023 claim; rejecting it against
+                    # the current-year fact was a false reject. Mirrors the
+                    # detector's transition-pair rule.
+                    if _PRIOR_CLAUSE_RE.search(sent[:m.start()]):
+                        continue
+                    # FULL-YEAR DECLINE (live lesson 2026-09-07, NIM Q3
+                    # trace): 'full-year revenue reached $134,902' judged
+                    # against the Q4-2023 fact was a false reject — the fact
+                    # set holds quarterly truth only; FY claims are declined.
+                    if _FULLYEAR_RE.search(sent):
                         continue
                     raw = m.group(1)
                     suffix = (m.group(2) or "").strip().lower()
