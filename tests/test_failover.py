@@ -474,3 +474,28 @@ def test_synthesis_429_threads_quota_hint():
     assert upd.get("quota_hint_s") == 1500.0, \
         "the 429's retry hint must reach the optimizer via state"
     assert "synthesis" in (upd.get("degraded_agents") or [])
+
+
+def test_audit_429_threads_quota_hint():
+    """A/B run-2 finding (2026-09-07): the abort machinery only heard
+    SYNTHESIS 429s — audit-stage 429s ('try again in 16m43.104s') died in
+    the auditor except-path and the optimizer burned a full doomed re-run.
+    The audit failure must thread parse_retry_hint into state like
+    csuite_synth does."""
+    import asyncio
+    import adaptive_rag as ar
+
+    async def _boom_audit(*a, **k):
+        raise Exception("429 Rate limit ... Please try again in 16m43.104s")
+
+    import unittest.mock as mock
+    state = {"original_question": "q?", "run_id": "t", "tenant_id": "default",
+             "retry_count": 0, "documents": [{"c": 1}],
+             "final_executive_report": "draft text",
+             "degraded_agents": [], "evidence_records": []}
+    with mock.patch.object(ar, "_llm_call", _boom_audit):
+        upd = asyncio.run(ar.fact_checker_guard(state))
+    assert upd.get("grounded") is False
+    assert upd.get("outcome") == "unverified_system"
+    assert upd.get("quota_hint_s") == pytest.approx(1003.104), \
+        "audit-stage 429 hint must reach the optimizer's abort check"

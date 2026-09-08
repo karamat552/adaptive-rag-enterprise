@@ -2416,6 +2416,7 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
 
     docs_str = "\n---\n".join(f"<evidence>\n{d}\n</evidence>" for d in docs)
     audit = None   # may remain unbound if the auditor call fails
+    audit_quota_hint: Optional[float] = None   # audit-stage 429 threading (2026-09-07)
     sys_prompt = f"""You are a strict SEC Compliance Auditor.
 Cross-examine the DRAFT REPORT against the SOURCE DOCUMENTS.
 {_UNTRUSTED_NOTE}
@@ -2433,6 +2434,13 @@ Return grounded=True only if 100% verified."""
         logger.warning("Auditor failure (%s) — defaulting UNGROUNDED (fail-closed).", e)
         is_safe, usage = False, UsageCollector()
         audit_reason = "auditor-failed: %s" % e
+        # QUOTA-HINT THREADING (A/B run 2 finding, 2026-09-07): the abort
+        # machinery only heard synthesis 429s — audit-stage 429s ('try again
+        # in 16m43.104s') died silently here and the optimizer burned a
+        # full doomed re-run. Same threading as csuite_synth.
+        _hint = parse_retry_hint(e)
+        if _hint and _hint > 0:
+            audit_quota_hint = _hint
 
     if is_safe:
         logger.info("Compliance Status: CERTIFIED GROUNDED")
@@ -2477,8 +2485,10 @@ Return grounded=True only if 100% verified."""
                            {"grounded": True, "outcome": "vectorstore"})
     audit_reason = getattr(audit, "explanation", None) or "no-explanation-provided"
     logger.warning("AUDIT REJECT: %s", audit_reason)
-    return _with_usage(state, usage.totals(),
-                       {"grounded": False, "outcome": "unverified_system"})
+    extra = {"grounded": False, "outcome": "unverified_system"}
+    if audit_quota_hint:
+        extra["quota_hint_s"] = audit_quota_hint
+    return _with_usage(state, usage.totals(), extra)
 
 
 async def cross_check_specialists(state: MultiAgentState) -> MultiAgentState:
