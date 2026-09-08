@@ -203,6 +203,11 @@ async def run_battery(limit: Optional[int]) -> Dict[str, Any]:
             "latency_s": r.get("latency_s", 0.0),
             "latency_wall": round(time.perf_counter() - t0, 1),
         }
+        # Per-question token telemetry (token plan, 2026-09-07): every
+        # optimization's savings must be visible per-battery-question.
+        usage = r.get("usage") or {}
+        rec["tokens_in"] = usage.get("input", 0)
+        rec["tokens_out"] = usage.get("output", 0)
         if kind == "answerable":
             certified = r.get("outcome") == "vectorstore" and r.get("grounded")
             rec["certified"] = certified
@@ -234,8 +239,24 @@ async def run_battery(limit: Optional[int]) -> Dict[str, Any]:
         results.append(rec)
         logger.info("[%d/%d] %-58s -> %s", i, len(battery),
                     question[:58], rec.get("outcome"))
-        if r.get("outcome") != "EXCEPTION":
-            await asyncio.sleep(1.5)      # free-tier pacing
+        if r.get("outcome") == "EXCEPTION":
+            continue
+        # QUOTA-AWARE SELF-PACING (token plan, 2026-09-07): both day-2/day-3
+        # batteries self-destructed by marching questions into a wall the
+        # 429's own hint had announced ('try again in 31m39.504s'). The
+        # result now carries quota_hint_s (Day-1 abort threading) — the
+        # battery WAITS out the window (capped) instead of burning doomed
+        # questions against it.
+        hint = r.get("quota_hint_s") or 0
+        wait_cap = float(os.getenv("COVERAGE_HINT_WAIT_CAP_S", "1200"))
+        if hint > 30:
+            wait = min(hint + 15, wait_cap)
+            logger.warning("quota window %.0fs announced — battery pausing "
+                           "%.0fs (cap %.0fs) before the next question.",
+                           hint, wait, wait_cap)
+            await asyncio.sleep(wait)
+            continue
+        await asyncio.sleep(1.5)      # free-tier pacing
     return results
 
 
@@ -259,6 +280,9 @@ def score(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     blocked_rate = blocked / len(adversarial) if adversarial else 1.0
 
     total_contras = sum(r.get("contradictions", 0) for r in results)
+    tokens_in = sum(r.get("tokens_in", 0) for r in results)
+    tokens_out = sum(r.get("tokens_out", 0) for r in results)
+    wall = sum(r.get("latency_wall", 0) for r in results)
     misses = [(r["question"], r.get("miss_reason", ""))
               for r in answerable if not r.get("certified")]
     return {
@@ -268,6 +292,9 @@ def score(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "adversarial_blocked": round(blocked_rate, 3),
         "fabrications": len(fabrications),
         "contradictions_surfaced_total": total_contras,
+        "tokens_in_total": tokens_in,
+        "tokens_out_total": tokens_out,
+        "wall_time_total_s": round(wall, 1),
         "answerable_total": n_ans,
         "certified_total": len(certified),
         "misses": misses,
@@ -312,6 +339,10 @@ def main() -> int:
     print(f"  adversarial blocked : {m['adversarial_blocked']:.1%}")
     print(f"  FABRICATIONS        : {m['fabrications']}  (must be 0)")
     print(f"  contradictions surfaced: {m['contradictions_surfaced_total']}")
+    print(f"  tokens (in/out)     : {m['tokens_in_total']:,} / "
+          f"{m['tokens_out_total']:,}  (total {m['tokens_in_total'] + m['tokens_out_total']:,})")
+    print(f"  wall time           : {m['wall_time_total_s']:.0f}s over "
+          f"{len(results)} questions")
     if m["misses"]:
         print(f"  misses (documented):")
         for q, why in m["misses"]:
