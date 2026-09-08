@@ -2853,6 +2853,10 @@ async def arun_query(question: str, *, tenant_id: Optional[str] = None,
                   "output": final.get("usage_out", 0),
                   "total": final.get("usage_total", 0),
                   "llm_calls": final.get("llm_calls", 0)},
+        # Quota-hint surfacing (self-pacing finding, 2026-09-08): the state
+        # carried it but the result dict dropped it — coverage_eval's
+        # self-pacing could never see the announced window. Thread it out.
+        "quota_hint_s": final.get("quota_hint_s"),
         "latency_s": round(time.perf_counter() - t0, 2),
     }
 
