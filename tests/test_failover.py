@@ -462,7 +462,7 @@ def test_synthesis_429_threads_quota_hint():
 
     import unittest.mock as mock
     state = {"original_question": "q?", "search_query": "q",
-             "documents": [{"company": "Meta"}],
+             "documents": ["Meta | Meta_Q4_2023.pdf | Page 1 revenue text"],
              "evidence_records": [{"company": "Meta", "content": "x",
                                     "chunk_hash": "h", "page": 1,
                                     "source": "s.pdf"}],
@@ -490,7 +490,7 @@ def test_audit_429_threads_quota_hint():
 
     import unittest.mock as mock
     state = {"original_question": "q?", "run_id": "t", "tenant_id": "default",
-             "retry_count": 0, "documents": [{"c": 1}],
+             "retry_count": 0, "documents": ["Meta | Meta_Q4_2023.pdf | Page 1 revenue text"],
              "final_executive_report": "draft text",
              "degraded_agents": [], "evidence_records": []}
     with mock.patch.object(ar, "_llm_call", _boom_audit):

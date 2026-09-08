@@ -748,3 +748,131 @@ def test_xbrl_other_revenue_component_declined():
     ev = [{"company": "Meta"}]
     d = "Meta other revenue was $816 million in Q4 2023【1】."
     assert check_xbrl_figures(d, ev, facts) == []
+
+
+# ============ Day-2 token-plan items (2026-09-07 evening) ================
+def test_premise_fast_path_company_scoped_probe():
+    """The unscoped probe matched META's dividend-initiation headlines, so
+    Tesla's wrong-premise (pays no dividend) never fast-pathed — the full
+    120s pipeline ran to reach the same refusal. The probe must filter to
+    the question's own company. Multi-company questions stay ineligible."""
+    import asyncio
+    import adaptive_rag as ar
+
+    probes = {}
+
+    async def _fake_db(fn, *args, **kwargs):
+        assert fn is ar.pgvector_hybrid_search
+        probes["company"] = kwargs.get("company_filter")
+        return []          # zero hits -> fast-path refusal
+        # (Meta dividend chunks exist in the real corpus; the mock makes
+        # the assertion about SCOPING, not retrieval)
+
+    import unittest.mock as mock
+    state = {"original_question":
+             "What was Tesla's quarterly dividend payout in Q4 2023?",
+             "route": "vectorstore", "run_id": "t", "tenant_id": "default"}
+    with mock.patch.object(ar, "_db_call", _fake_db):
+        upd = asyncio.run(ar.premise_fast_path(state))
+    assert probes["company"] == "tesla", \
+        "the probe must be scoped to the question's company"
+    assert upd.get("_premise_fast_path") is True
+    assert upd.get("outcome") == "verified_refusal"
+
+
+def test_premise_fast_path_multi_company_ineligible():
+    """Comparison questions cite multiple companies — the other company's
+    corpus may support them, so they never fast-path."""
+    import asyncio
+    import adaptive_rag as ar
+
+    called = {"n": 0}
+
+    async def _fake_db(fn, *args, **kwargs):
+        called["n"] += 1
+        return []
+
+    import unittest.mock as mock
+    state = {"original_question":
+             "Compare Apple and Meta dividend payouts in Q4 2023?",
+             "route": "vectorstore", "run_id": "t", "tenant_id": "default"}
+    with mock.patch.object(ar, "_db_call", _fake_db):
+        upd = asyncio.run(ar.premise_fast_path(state))
+    assert upd == {}, "multi-company questions must fall through"
+    assert called["n"] == 0
+
+
+def test_synthesis_evidence_dedup_stubs_quoted_chunks():
+    """Specialist reports quote chunks; the evidence list repeated them in
+    full — synthesis paid for the same content twice. A chunk whose longest
+    sentences appear verbatim in a specialist report collapses to a stub
+    WHILE PRESERVING ITS SLOT (citation indices must not move)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    chunk_quoted = ("Revenue was $40,111 million in Q4 2023. This grew 25 "
+                    "percent year-over-year from $32,165 million. | Meta | "
+                    "Meta_Q4_2023.pdf | Page 1")
+    chunk_fresh = ("Cash and cash equivalents were $65.4 billion at "
+                   "quarter end. | Meta | Meta_Q4_2023.pdf | Page 3")
+
+    class _Resp:
+        content = "draft"
+
+    async def _fake_llm(*a, **k):
+        return _Resp(), ar.UsageCollector()
+
+    import unittest.mock as mock
+    state = {
+        "original_question": "Meta revenue?", "search_query": "q",
+        "documents": [chunk_quoted, chunk_fresh],
+        "evidence_records": [{"chunk_hash": "h1", "content": chunk_quoted},
+                             {"chunk_hash": "h2", "content": chunk_fresh}],
+        "financial_report": f"Meta revenue: {chunk_quoted}",
+        "risk_report": "", "product_report": "",
+        "contradictions": [], "retry_count": 0, "run_id": "t",
+        "tenant_id": "default", "degraded_agents": []}
+    captured = {}
+
+    async def _spy_llm(runnable, messages, stage, allow_failover=False):
+        captured["prompt"] = messages[1][1] if len(messages) > 1 else ""
+        return _Resp(), ar.UsageCollector()
+
+    with mock.patch.object(ar, "_llm_call", _spy_llm):
+        asyncio.run(ar.synthesize_csuite_report(state))
+    prompt = captured.get("prompt", "")
+    assert "QUOTED VERBATIM IN SPECIALIST REPORTS" in prompt, \
+        "the quoted chunk must collapse to a stub"
+    assert "Evidence [2]" in prompt, "slot count preserved"
+    assert "Cash and cash equivalents were $65.4 billion" in prompt, \
+        "the unquoted chunk must remain in full"
+
+
+def test_audit_context_stubs_draft_quoted_chunks():
+    """The auditor received full chunks the DRAFT already quotes verbatim —
+    same double-pay. Quoted chunks stub out; citation targets remain."""
+    import asyncio
+    import adaptive_rag as ar
+
+    chunk = ("Total automotive revenues were $21,563 million in Q4 2023. "
+             "This was a 19 percent increase year-over-year.")
+    draft = (f"Tesla revenue grew year-over-year. {chunk} [1]")
+
+    class _Audit:
+        grounded = True
+        explanation = "ok"
+
+    async def _fake_llm(*a, **k):
+        return _Audit(), ar.UsageCollector()
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "_llm_call", _fake_llm), \
+         mock.patch.object(ar, "save_to_semantic_cache"), \
+         mock.patch.object(ar, "save_verification_receipt"):
+        state = {"original_question": "q?", "run_id": "t",
+                 "tenant_id": "default", "retry_count": 0,
+                 "documents": [chunk],
+                 "evidence_records": [{"chunk_hash": "h", "content": chunk}],
+                 "final_executive_report": draft, "degraded_agents": []}
+        upd = asyncio.run(ar.fact_checker_guard(state))
+    assert upd.get("grounded") is True

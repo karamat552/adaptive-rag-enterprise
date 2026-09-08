@@ -1217,13 +1217,24 @@ async def premise_fast_path(state: MultiAgentState) -> MultiAgentState:
     scope = detect_company_scope(question)
     if state.get("route") != "vectorstore" or not scope:
         return {}
+    # COMPANY-SCOPED PROBE (A/B + battery finding, 2026-09-07): the original
+    # probe was UNscoped — 'quarterly dividend payout' matched META's
+    # dividend-initiation headlines, so Tesla's wrong-premise (Tesla pays
+    # no dividend) never fast-pathed and burned the full 120s pipeline to
+    # reach the same refusal. The probe now filters to the question's own
+    # company. Single-company questions only: multi-company comparisons
+    # stay ineligible (either company's corpus may support them).
+    scoped_companies = [c for c in (scope.get("companies") or "").split(",") if c]
+    if len(scoped_companies) != 1:
+        return {}
     terms = [w for w in re.findall(r"[a-z]{3,}", question.lower())
              if w not in _PREMISE_STOPWORDS]
     if not terms:
         return {}
     probe = " ".join(terms[:8])
     try:
-        hits = await _db_call(pgvector_hybrid_search, probe, top_k=3)
+        hits = await _db_call(pgvector_hybrid_search, probe, top_k=3,
+                              company_filter=scoped_companies[0])
     except Exception as exc:
         logger.warning("Premise probe failed (%s) — continuing to full "
                        "pipeline.", exc)
@@ -1294,6 +1305,42 @@ async def execute_specialist_fleet(state: MultiAgentState) -> MultiAgentState:
 
 async def synthesize_csuite_report(state: MultiAgentState) -> MultiAgentState:
     doc_list = state.get("documents", [])
+
+    # EVIDENCE DEDUP (token plan, 2026-09-07): specialist reports QUOTE
+    # chunks; the numbered evidence list then repeats the same chunks in
+    # full — synthesis paid for the same content twice (~30-40% of its
+    # input, the largest 120b block after the audit). Slots are PRESERVED
+    # (citation indices must keep addressing identical chunks in the audit,
+    # receipts and /verify) — a quoted chunk's slot collapses to a one-line
+    # stub; the full text stays in the specialist report right above it.
+    # A chunk is 'quoted' when one of its longest sentences appears
+    # verbatim (case-insensitive) in any specialist report.
+    specialist_text = "\n".join(filter(None, [
+        state.get("financial_report", ""), state.get("risk_report", ""),
+        state.get("product_report", "")])).lower()
+    quoted_stubs = 0
+    if specialist_text:
+        deduped_docs = []
+        for doc in doc_list:
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", doc)
+                        if len(s.strip()) >= 40]
+            is_quoted = any(
+                s.lower() in specialist_text
+                for s in sorted(sentences, key=len, reverse=True)[:3])
+            if is_quoted:
+                first_line = doc.strip().splitlines()[0][:120]
+                deduped_docs.append(
+                    f"[QUOTED VERBATIM IN SPECIALIST REPORTS ABOVE — "
+                    f"cite this index for its figures]\n{first_line}")
+                quoted_stubs += 1
+            else:
+                deduped_docs.append(doc)
+        doc_list = deduped_docs
+        if quoted_stubs:
+            logger.info("[synthesize] evidence dedup: %d/%d chunks "
+                        "collapsed to stubs (already quoted in specialist "
+                        "reports).", quoted_stubs, len(doc_list))
+
     numbered_evidence = "\n\n".join(
         f"Evidence [{i+1}]:\n<evidence>\n{doc}\n</evidence>"
         for i, doc in enumerate(doc_list)) if doc_list else \
@@ -1342,10 +1389,15 @@ ATTRIBUTION-CLEAN PROSE (audit-enabling style rules — violations fail verifica
 5. NEVER show arithmetic. State results only ('rose 25% year-over-year'),
    never the computation ('(14,017-4,652)/4,652 = 201%').
 6. Year-over-year pairs must carry EXPLICIT year tokens: 'revenue grew to
-   $40.1 billion in Q4 2023 from $32.2 billion in Q4 2022' — every figure
-   labeled with its period.
+$40.1 billion in Q4 2023 from $32.2 billion in Q4 2022' — every figure
+labeled with its period.
 7. Figures quoted in MILLIONS when the source table declares millions —
-   do not re-scale without saying so."""
+do not re-scale without saying so.
+8. Quote year-over-year growth percentages VERBATIM from the source
+table's '% Change' column and cite THAT table's index — never state a
+percentage YOU computed ('a 25% increase' derived by you is a claim the
+auditor cannot ground; '$40,111M revenue, up 25% [2]' with the table's
+own 25% column is source-backed)."""
     user_prompt = f"""Primary Order Objective: {state['original_question']}
 
 [NUMBERED SOURCE EVIDENCE]
@@ -2414,7 +2466,30 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
             return {"grounded": False, "outcome": "unverified_system",
                     "xbrl_issues": xbrl_issues}
 
-    docs_str = "\n---\n".join(f"<evidence>\n{d}\n</evidence>" for d in docs)
+    # AUDIT-CONTEXT DEDUP (token plan, 2026-09-07): the draft's prose
+    # already QUOTES the evidence it relies on — sending full chunks the
+    # auditor has effectively seen (in the draft) is the same double-pay
+    # synthesis had. A chunk whose content the DRAFT quotes verbatim
+    # collapses to a stub; every chunk stays present as a citation target.
+    draft_low = draft.lower()
+    audit_docs = []
+    stubbed = 0
+    for d in docs:
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", d)
+                     if len(s.strip()) >= 40]
+        quoted = any(s.lower() in draft_low
+                     for s in sorted(sentences, key=len, reverse=True)[:3])
+        if quoted:
+            audit_docs.append(
+                "[CHUNK QUOTED IN DRAFT — its text appears verbatim in the "
+                "report above]\n" + d.strip().splitlines()[0][:120])
+            stubbed += 1
+        else:
+            audit_docs.append(d)
+    if stubbed:
+        logger.info("[audit] context dedup: %d/%d chunks stubbed "
+                    "(quoted in draft).", stubbed, len(docs))
+    docs_str = "\n---\n".join(f"<evidence>\n{d}\n</evidence>" for d in audit_docs)
     audit = None   # may remain unbound if the auditor call fails
     audit_quota_hint: Optional[float] = None   # audit-stage 429 threading (2026-09-07)
     sys_prompt = f"""You are a strict SEC Compliance Auditor.
