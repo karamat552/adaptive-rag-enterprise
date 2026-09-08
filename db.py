@@ -1029,7 +1029,9 @@ def pgvector_hybrid_search(
            c.category, c.section_title, c.contains_table, c.arithmetic_ok,
            c.char_start, c.char_end, c.transcript_version,
            COALESCE(1.0 / (%(rrf_k)s + s.vec_rank), 0.0)
-         + COALESCE(1.0 / (%(rrf_k)s + k.kw_rank), 0.0) AS fusion_score
+         + COALESCE(1.0 / (%(rrf_k)s + k.kw_rank), 0.0) AS fusion_score,
+           COALESCE(1.0 - (c.embedding <=> %(qvec)s::vector), 0.0)
+               AS vec_similarity
     FROM multi_agent_chunks c
     LEFT JOIN semantic_matches s ON c.id = s.id
     LEFT JOIN keyword_matches  k ON c.id = k.id

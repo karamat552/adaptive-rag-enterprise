@@ -254,6 +254,19 @@ async def _execute_run(question: str, tenant_id: Optional[str],
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logger.info("Service starting — provider=%s", get_settings().provider)
+    # MODEL-BOOT SMOKE TEST (2026-09-07): free-tier catalogs rotate without
+    # notice (live lesson: two mid-project model 404s broke every run until
+    # defaults were updated). A 1-token probe per configured stage model at
+    # startup turns 'silently broken provider' into a loud, immediate,
+    # named-model error. RAG_SKIP_BOOT_SMOKE=1 disables (offline/CI runs).
+    if os.getenv("RAG_SKIP_BOOT_SMOKE") != "1" and get_settings().provider != "openai_compatible":
+        try:
+            import adaptive_rag as _ar
+            await asyncio.wait_for(
+                asyncio.to_thread(_ar.boot_smoke_test), timeout=90)
+        except Exception as exc:
+            logger.warning("BOOT SMOKE FAILED — a configured model is not "
+                           "serving; fix RAG_*_MODEL before trusting answers: %s", exc)
     try:
         n = await asyncio.to_thread(purge_expired_cache)
         logger.info("Startup TTL purge: %d entries removed.", n)

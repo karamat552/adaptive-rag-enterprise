@@ -395,3 +395,82 @@ def test_real_timeout_arms_cooldown_and_fails_over(_failover_env):
 
 def _endpoint_is_cooling(ar, endpoint_id: str) -> bool:
     return ar._endpoint_cooldown.blocked(endpoint_id)
+
+
+# ============ abort-on-hint (token plan, 2026-09-07) ======================
+def test_transform_query_aborts_on_long_quota_hint():
+    """The day-3 14:59 trace: synthesis 429'd with 'try again in 31m39.504s'
+    -> optimizer ran iteration 2 anyway -> another 429 -> refusal. A hint
+    at/above the abort bar must exhaust the loop immediately (no rewriter
+    call, no fleet re-run — route_after_rewrite sends it to refusal)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    llm_calls = {"n": 0}
+
+    async def _no_llm(*a, **k):
+        llm_calls["n"] += 1
+        raise AssertionError("abort must spend zero LLM calls")
+
+    import unittest.mock as mock
+    state = {"original_question": "q?", "search_query": "q",
+             "retry_count": 0, "quota_hint_s": 1899.5}
+    with mock.patch.dict("os.environ", {"RAG_QUOTA_ABORT_S": "900"}), \
+         mock.patch.object(ar, "_llm_call", _no_llm):
+        upd = asyncio.run(ar.transform_query(state))
+    assert upd.get("retry_count") == ar.get_settings().max_retries
+    assert upd.get("quota_aborted") is True
+    assert llm_calls["n"] == 0
+    assert ar.route_after_rewrite(upd) == "verified_refusal"
+
+
+def test_transform_query_retries_on_short_quota_hint():
+    """An RPM-scale hint (30s) is below the abort bar — the loop retries
+    normally (the window opens in time)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Mutation:
+        new_query = "rewritten q"
+
+    async def _fake_llm(*a, **k):
+        return _Mutation(), ar.UsageCollector()
+
+    import unittest.mock as mock
+
+    async def _fast_sleep(_s):
+        return None
+
+    state = {"original_question": "q?", "search_query": "q",
+             "retry_count": 0, "quota_hint_s": 30.0}
+    with mock.patch.dict("os.environ", {"RAG_QUOTA_ABORT_S": "900"}), \
+         mock.patch.object(ar, "_llm_call", _fake_llm), \
+         mock.patch.object(ar.asyncio, "sleep", _fast_sleep):
+        upd = asyncio.run(ar.transform_query(state))
+    assert upd.get("quota_aborted") is None
+    assert upd.get("search_query") == "rewritten q"
+
+
+def test_synthesis_429_threads_quota_hint():
+    """csuite_synth's except path must thread parse_retry_hint(exc) into
+    state as quota_hint_s — the abort depends on it being there."""
+    import asyncio
+    import adaptive_rag as ar
+
+    async def _boom(*a, **k):
+        raise Exception("429 Rate limit ... Please try again in 25m00s")
+
+    import unittest.mock as mock
+    state = {"original_question": "q?", "search_query": "q",
+             "documents": [{"company": "Meta"}],
+             "evidence_records": [{"company": "Meta", "content": "x",
+                                    "chunk_hash": "h", "page": 1,
+                                    "source": "s.pdf"}],
+             "financial_report": "fr", "risk_report": "rr",
+             "product_report": "pr", "retry_count": 0,
+             "contradictions": [], "run_id": "t", "tenant_id": "default"}
+    with mock.patch.object(ar, "_llm_call", _boom):
+        upd = asyncio.run(ar.synthesize_csuite_report(state))
+    assert upd.get("quota_hint_s") == 1500.0, \
+        "the 429's retry hint must reach the optimizer via state"
+    assert "synthesis" in (upd.get("degraded_agents") or [])

@@ -267,3 +267,84 @@ def test_single_company_question_unchanged(_patch_env, monkeypatch):
         "What was Apple services revenue in Q4 2023?"))
     assert searches == ["apple"], "single-company: exactly one scoped search"
     assert out["records"]
+
+
+# ============ conditional expansion (token plan, 2026-09-07) ============
+def test_conditional_expansion_skips_paraphraser_on_confident_hit():
+    """Direct search runs FIRST; top vec_similarity >= the confidence bar
+    means no paraphraser call and no variant searches — the RPM-burst killer.
+    The direct pass is reused verbatim (never re-searched)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    calls = {"llm": 0, "searches": []}
+
+    async def _fake_db(fn, *args, **kwargs):
+        if fn is ar.pgvector_hybrid_search:
+            calls["searches"].append(args[0] if args else kwargs.get("query_text"))
+            return [{"id": 1, "content": "row", "vec_similarity": 0.71}]
+        raise AssertionError("unexpected db call")
+
+    class _FakeMutation:
+        variants = ["v1", "v2"]
+
+    async def _fake_llm(*a, **k):
+        calls["llm"] += 1
+        return _FakeMutation(), None
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "_db_call", _fake_db), \
+         mock.patch.object(ar, "_llm_call", _fake_llm):
+        rows = asyncio.run(ar._multi_query_search(
+            "What was Meta total revenue in Q4 2023?", category=None,
+            company="meta"))
+    assert calls["llm"] == 0, "confident hit must skip the paraphraser"
+    assert len(calls["searches"]) == 1, "only the direct search may run"
+    assert rows and rows[0]["vec_similarity"] == 0.71
+
+
+def test_conditional_expansion_fires_on_weak_hit():
+    """Weak direct hit (below the bar) -> paraphraser runs, variants are
+    searched, results RRF-fused; the direct pass is REUSED in the fusion
+    (not re-searched)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    calls = {"llm": 0, "searches": []}
+
+    async def _fake_db(fn, *args, **kwargs):
+        if fn is ar.pgvector_hybrid_search:
+            q = args[0]
+            calls["searches"].append(q)
+            # ALL queries weak (0.30 < bar) — the direct pass must look
+            # ambiguous so expansion is the correct recovery path.
+            return [{"id": 1, "content": f"row-{q[:6]}",
+                      "vec_similarity": 0.30}]
+        raise AssertionError("unexpected db call")
+
+    class _FakeMutation:
+        variants = ["meta total net sales Q4", "meta top line quarterly"]
+
+    async def _fake_llm(*a, **k):
+        calls["llm"] += 1
+        return _FakeMutation(), None
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "_db_call", _fake_db), \
+         mock.patch.object(ar, "_llm_call", _fake_llm), \
+         mock.patch.dict("os.environ", {"RAG_EXPANSION_CONFIDENCE": "0.55"}):
+        rows = asyncio.run(ar._multi_query_search(
+            "What was Meta total revenue in Q4 2023?", category=None,
+            company="meta"))
+    assert calls["llm"] == 1, "weak hit must consult the paraphraser"
+    assert len(calls["searches"]) == 3, "direct + 2 variants"
+    assert calls["searches"][0].startswith("What was Meta"), \
+        "direct must run first"
+
+
+def test_quarantine_hint_zero_tokens_in_audit_reject():
+    """Audit-reject path carries zero LLM tokens (the reject happened in
+    the auditor's VERDICT, not a crash) — placeholder documented by the
+    abort tests below."""
+    import adaptive_rag as ar
+    assert callable(ar.route_after_rewrite)

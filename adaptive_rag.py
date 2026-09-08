@@ -566,6 +566,37 @@ def _failover_stage_call(runnable: Any, messages: list, stage: str):
     return _runner()
 
 
+def boot_smoke_test() -> Dict[str, str]:
+    """Startup probe: one 1-token completion per DISTINCT configured stage
+    model (router/fleet/executive often share a provider). A rotated-out or
+    mistyped model name fails LOUDLY here instead of as silent quarantine
+    cascades on every query (live lesson: Groq retired two models
+    mid-project — every specialist 404'd for a whole test session).
+
+    Sync (called via to_thread from the FastAPI lifespan) and CHEAP:
+    probe prompts are 1 token out, well under any free-tier budget. A
+    model that answers at boot is a model that can serve the first
+    query; a model that 404s at boot is a config error, not a runtime
+    surprise. Returns {model: 'ok'}; raises RuntimeError naming the
+    failed model(s) — the caller logs it as a boot warning."""
+    results: Dict[str, str] = {}
+    failures: List[str] = []
+    for stage in ("router", "fleet", "executive"):
+        model = get_stage_model(stage)
+        if model in results:
+            continue          # same model, one probe
+        try:
+            eng = _get_engine(model)
+            eng.invoke([("human", "Say OK")])
+            results[model] = "ok"
+        except Exception as e:
+            results[model] = f"FAIL: {str(e)[:120]}"
+            failures.append(f"{stage}={model}: {str(e)[:120]}")
+    if failures:
+        raise RuntimeError("boot smoke failed — " + "; ".join(failures))
+    return results
+
+
 def _get_engine(model_name: str):
     """Per-model lazy singleton. Thread-safe; one engine per distinct model."""
     if model_name not in _engines:
@@ -910,7 +941,15 @@ async def _multi_query_search(search_q: str, *, category: Optional[str],
     variants (cheap ROUTER model, failover-eligible), search each, RRF-fuse.
     Failure semantics are degrade-to-single: ANY paraphraser problem (quota
     wall, parse failure, empty variants) means the ORIGINAL query's results —
-    expansion must never be the reason a question becomes unanswerable."""
+    expansion must never be the reason a question becomes unanswerable.
+
+    CONDITIONAL EXPANSION (token-efficiency plan, 2026-09-07): the direct
+    search runs FIRST; expansion fires only when its top result is weak
+    (vec_similarity below the confidence bar). A confident direct hit needs
+    no paraphrases — this removes 2 LLM calls + 2 DB searches per specialist
+    (6+ per question) on exactly the queries that didn't need them. The bar
+    is deliberately permissive: expansion gates a RETRY, not a
+    certification, so ambiguity should err toward expanding."""
     s = get_settings()
     if not s.multi_query or len(search_q.strip()) < 8:
         try:
@@ -921,6 +960,25 @@ async def _multi_query_search(search_q: str, *, category: Optional[str],
         except Exception as e:
             logger.warning("[multi-query] single search failed: %s", e)
             return []
+
+    # Direct search first — always. Expansion is a RECOVERY mechanism for
+    # weak retrieval, never a default tax on confident queries.
+    try:
+        direct = await _db_call(pgvector_hybrid_search, search_q,
+                                category_filter=category,
+                                company_filter=company, top_k=top_k,
+                                tenant_id=tenant_id)
+    except Exception as e:
+        logger.warning("[multi-query] single search failed: %s", e)
+        direct = []
+    top_sim = float(direct[0].get("vec_similarity") or 0.0) if direct else 0.0
+    conf_bar = float(os.getenv("RAG_EXPANSION_CONFIDENCE", "0.55"))
+    if direct and top_sim >= conf_bar:
+        logger.info("[multi-query] direct hit (sim %.3f >= %.2f) — "
+                    "skipping expansion.", top_sim, conf_bar)
+        return direct
+    logger.info("[multi-query] weak direct hit (sim %.3f < %.2f) — "
+                "expanding.", top_sim, conf_bar)
 
     variants: List[str] = []
     try:
@@ -944,6 +1002,9 @@ async def _multi_query_search(search_q: str, *, category: Optional[str],
     queries = [search_q] + variants
     result_sets: List[List[Dict[str, Any]]] = []
     for q in queries:
+        if q == search_q and direct:
+            result_sets.append(direct)   # reuse the direct pass — never re-search it
+            continue
         try:
             rows = await _db_call(pgvector_hybrid_search, q,
                                   category_filter=category,
@@ -1303,9 +1364,17 @@ ATTRIBUTION-CLEAN PROSE (audit-enabling style rules — violations fail verifica
     except Exception as e:
         # Fail-closed: quarantine draft + degraded flag -> audit auto-fails -> retry/refusal
         logger.error("Synthesis failed — quarantining run: %s", e)
-        return _with_usage(state, (0, 0, 0, 0), {
-            "final_executive_report": _QUARANTINE,
-            "degraded_agents": state.get("degraded_agents", []) + ["synthesis"]})
+        # QUOTA-HINT THREADING (token plan, 2026-09-07): a day-capped 429
+        # ('Please try again in 31m39.504s') means the retry iteration is
+        # deterministically doomed — the hint travels in state so the
+        # optimizer can abort instead of burning a fleet re-run + synthesis
+        # on a window that cannot open in time.
+        hint = parse_retry_hint(e)
+        extra = {"final_executive_report": _QUARANTINE,
+                 "degraded_agents": state.get("degraded_agents", []) + ["synthesis"]}
+        if hint and hint > 0:
+            extra["quota_hint_s"] = hint
+        return _with_usage(state, (0, 0, 0, 0), extra)
     return _with_usage(state, usage.totals(),
                        {"final_executive_report": extract_text_content(response.content)})
 
@@ -2477,6 +2546,25 @@ async def sharpen_retrieval(state: MultiAgentState) -> MultiAgentState:
 async def transform_query(state: MultiAgentState) -> MultiAgentState:
     s = get_settings()
     retries = state.get("retry_count", 0) + 1
+    # ABORT-ON-HINT (token-efficiency plan, 2026-09-07): when the executive
+    # 429'd with a server-stated retry window ('Please try again in
+    # 31m39.504s'), this iteration cannot succeed — the quota clock, not
+    # the query, is the blocker. Re-running the fleet + a doomed synthesis
+    # burns ~15K tokens and 11 RPM calls for a deterministic 429. Budget:
+    # a hint longer than this abort bar fails the run closed immediately.
+    # (Router/fleet 429s never reach here with a hint — they failover.)
+    hint = state.get("quota_hint_s")
+    if hint and hint > 0:
+        bar = float(os.getenv("RAG_QUOTA_ABORT_S", "900"))
+        if hint >= bar:
+            logger.warning(
+                "ABORT retry loop: executive quota window %.0fs >= %.0fs "
+                "budget — iteration %d skipped, failing closed (refusal "
+                "now beats a doomed re-run).", hint, bar, retries)
+            return _with_usage(state, (0, 0, 0, 0), {
+                "retry_count": s.max_retries,   # exhausts the loop -> refusal
+                "quota_aborted": True})
+        logger.info("Quota hint %.0fs below abort bar — retrying.", hint)
     logger.warning("Query Optimizer -> iteration %d/%d", retries, s.max_retries)
     old_query = state.get("search_query", state["original_question"])
     await asyncio.sleep(3.0)   # free-tier pacing (per-process only, not a rate guarantee)
@@ -2557,6 +2645,16 @@ def evaluate_retry_thresholds(state: MultiAgentState) -> str:
     return "rewrite"
 
 
+def route_after_rewrite(state: MultiAgentState) -> str:
+    """ABORT-ON-HINT gate (token plan, 2026-09-07): a quota-aborted run
+    (quota_hint_s exceeded the abort bar) skips the doomed fleet re-run —
+    straight to verified refusal. The fleet cannot open the window the 429
+    already measured shut."""
+    if state.get("quota_aborted"):
+        return "verified_refusal"
+    return "exec_db"
+
+
 def route_after_cross_check(state: MultiAgentState) -> str:
     """Phase C gate: a first-time contradiction triggers ONE bounded
     re-retrieval; a survived conflict (or none) proceeds to synthesis."""
@@ -2605,7 +2703,13 @@ def build_graph():
     wf.add_conditional_edges("validate", evaluate_retry_thresholds,
                              {END: END, "rewrite": "rewrite",
                               "refuse": "verified_refusal"})
-    wf.add_edge("rewrite", "exec_db")
+    # ABORT-ON-HINT routing (token plan, 2026-09-07): a quota-aborted run
+    # must skip the doomed fleet re-run — 'rewrite -> exec_db' is otherwise
+    # unconditional and would burn ~11 RPM calls + ~15K tokens on an
+    # iteration the 429's own hint already pronounced dead.
+    wf.add_conditional_edges("rewrite", route_after_rewrite,
+                             {"exec_db": "exec_db",
+                              "verified_refusal": "verified_refusal"})
     wf.add_edge("verified_refusal", END)
     wf.add_edge("abandon", END)
     return wf.compile()
