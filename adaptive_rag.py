@@ -1575,7 +1575,12 @@ do not re-scale without saying so.
 table's '% Change' column and cite THAT table's index — never state a
 percentage YOU computed ('a 25% increase' derived by you is a claim the
 auditor cannot ground; '$40,111M revenue, up 25% [2]' with the table's
-own 25% column is source-backed)."""
+own 25% column is source-backed).
+9. NEVER approximate or round a figure: quoting '$433 million' as
+'approximately $500 million' is a FABRICATION the scale audit rejects
+(live-caught on a reasoning-model lane, 2026-09-09). Quote the source's
+exact number or cite nothing — every figure must be character-identical
+to its source table."""
     user_prompt = f"""Primary Order Objective: {state['original_question']}
 
 [NUMBERED SOURCE EVIDENCE]
