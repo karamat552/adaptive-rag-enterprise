@@ -847,3 +847,124 @@ interleaving so quota weather hits both arms equally):
   rule-check deliberation certified as grounded) and closed with
   regression-locked markers — efficiency work must never outrun the guard
   suite, and this one nearly did.
+
+---
+
+## ADR-016: Redis as the Coordination Plane — Opinions, not Answers
+
+**Date:** 2026-09-09
+**Status:** Accepted (staged, trigger-gated)
+**Consults:** Gemini 3.8 Flash (4 proposals, 2026-09-09) — vetted below; all
+four accepted in amended form.
+
+### Context
+
+The system runs single-worker (`uvicorn --workers 1`, documented): rate
+buckets, metrics, endpoint cooldowns, and the run semaphore are in-process
+state. That is the known scale tax (KNOWN_ISSUES.md #3). Meanwhile the
+binding operational constraints are provider quota (200K TPD/day at the
+executive stage; 30 RPM at the fleet) and WAN latency to Neon
+(250–530ms RTT, measured). Two batteries died to RPM storms; two more to
+TPD walls — each time, the failure mode was *unshared knowledge*: every
+process (and every iteration) re-learned what another already knew.
+
+### The Evaporation Test (the boundary rule)
+
+> Every datum considered for Redis must answer: "if this evaporated right
+> now, what breaks?" — and the only acceptable answers are "a cache miss,
+> a recompute, a re-counted bucket." Nothing that cannot evaporate may
+> live in Redis.
+
+**Never in Redis:** receipts, the SHA-256 chain, XBRL ground truth, corpus
++ embeddings, tenant identity (Postgres/RLS owns it; Redis mirrors at most).
+**In Redis:** live beliefs — which providers are open, which runs are in
+flight, which endpoints are healthy, what quota remains.
+
+### The plays (in adoption order)
+
+1. **Provider Weather Station** *(Redis TTL = cooldown state)* — the
+   unification of EndpointCooldown, abort-on-hint, and battery
+   self-pacing as one shared substrate: `SET wx:groq:exec:until <ts> NX
+   EX <hint_s>`. One worker's 429 teaches every worker, the API, and any
+   running battery. Existing in-process interfaces get a Redis backend
+   behind a flag; call sites unchanged.
+2. **Single-Flight Query Ledger** — idempotency keys + request coalescing
+   (Stripe pattern): `SET lock:{qhash} NX EX`. Duplicate/double-click/
+   paraphrase-within-window callers attach to the in-flight run instead of
+   burning duplicate ~15K-token pipelines.
+3. **Predictive Token Reservation** *(consult #1, amended)* — a shadow
+   quota ledger in Redis (`INCRBY` actuals; calibrated from verbatim 429
+   `Used` figures — Groq exposes no quota API, so every wall is a free
+   ground-truth sync). Before firing the fleet: if `remaining <
+   executive_estimate` (~12–15K: synthesis + audit + retry headroom),
+   fail-closed EARLY. **Executive-pin amendment (ADR-008, overriding the
+   consult's 'divert to NIM'):** the reservation protects the PINNED
+   executive by refusing before the specialist burn; it never diverts the
+   executive. Fleet stages remain failover-eligible per stage-aware rules.
+4. **Ephemeral Read-Through Cache** *(consult #2, reduced)* — page
+   transcripts (safe BY CONSTRUCTION: content-addressed, the hash chain
+   verifies any copy), XBRL facts (epoch-static), sharpen-retry search
+   results (deterministic re-queries). Epoch-keyed prefixes
+   (`rt:v{epoch}:...`), 15-minute TTL, read-through on miss. Vector search
+   itself stays on pgvector (the query is an embedding, not a hash).
+5. **Corpus-Term Fast Refusal** *(consult #3, infrastructure rejected)* —
+   the consult proposed RedisBloom; at 223 chunks an in-process EXACT set
+   of company:metric pairs (loaded at boot, epoch-keyed) gives the same
+   <2ms "definitely not in corpus" refusal with ZERO false positives and
+   zero infrastructure. Bloom earns its Redis only at millions of keys.
+6. **Global RPM Governor** — a Redis token-bucket per provider-model:
+   the fleet fan-out stops being N processes' independent bursts against
+   one 30 RPM budget and becomes one smoothed stream.
+7. **Adaptive Endpoint Scorecard** — sliding-window success/latency per
+   endpoint (`ZADD`/`ZRANGE`); failover order becomes "best recent" over
+   "first configured." Boot-smoke probes write into it.
+8. **Run Semaphore, system-wide** — the concurrency cap becomes a system
+   property, not a per-process one.
+9. **Streams + Single-Flight SSE** *(consult #4, tension documented)* —
+   Redis Streams decouple live agent telemetry from the HTTP connection
+   (XADD per stage; consumers re-attach after refresh). TENSION: the
+   ghost-request mitigation deliberately cancels runs on disconnect to
+   halt token spend; Streams un-does that save. RESOLUTION: ships WITH
+   single-flight — a detached run completes into the semantic cache, so
+   the re-asker gets a cache hit (cheaper than cancel + full re-run), and
+   a grace timer cancels truly abandoned runs. The cancel-vs-complete
+   economics flip only because single-flight makes completion durable.
+
+### Staging (trigger-gated, never speculative)
+
+- **Stage 0 (now):** documented decision. Single-worker is correct for
+  current load.
+- **Stage 1 — Weather Station + RPM Governor + Run Semaphore + metrics**
+  *(trigger: first need for a second worker/instance)*. One day; zero
+  compliance semantics; unlocks horizontal scale.
+- **Stage 2 — Reservation Engine + Read-Through Cache + Single-Flight**
+  *(trigger: concurrent-traffic pain or the load test that precedes it)*.
+  2–3 days; reservation needs the 429-calibration path proven live.
+- **Stage 3 — Streams/SSE + adaptive scorecard** *(trigger: multi-worker
+  UI deployments or endpoint-personality pain exceeding config order)*.
+- **Corpus-term refusal (5)** is Stage-independent (in-process, free).
+
+### Rejected
+
+- **Caching /verify verdicts** — the endpoint's entire value is fresh
+  recomputation against the hash chain; caching makes tamper-evidence
+  performative.
+- **Receipts/corpus/XBRL in Redis** — fails the Evaporation Test
+  catastrophically.
+- **Corpus vectors in Redis vector sets** — retrieval is not the
+  bottleneck (once per question, local ONNX embedding) and the move would
+  lose hybrid RRF + RLS.
+- **LangGraph checkpointer** — deferred with trigger (multi-turn mode);
+  single-pass bounded graphs have nothing to checkpoint, and Redis does
+  not reduce prompt tokens — history a model needs still enters the
+  context window at generation.
+
+### Consequences
+
+- Every play degrades to exactly today's behavior if Redis vanishes (the
+  flag flips back; the in-process impls remain). Evaporation-safe by
+  construction, rollback by config.
+- The quota ledger is a shadow, not truth: it drifts between 429s and is
+  corrected by them. Never treated as billing data.
+- Single-worker remains the deployment until a trigger fires — Redis is
+  the prepared path, not the default tax.
