@@ -338,6 +338,10 @@ class FailoverEndpoint(TypedDict):
     api_key_env: str
     model: str
     timeout_s: float  # advisory; 0 -> global llm_timeout_s
+    # optional per-endpoint output cap (reasoning-model headroom):
+    # GLM-5.3-free/nemotron burn reasoning tokens BEFORE content; a small
+    # cap returns content=None. 0/absent -> the stage's caps apply.
+    max_tokens: int
 
 class EndpointCooldown:
     """Per-endpoint unavailability window. Groq-style day-capped providers say
@@ -452,13 +456,25 @@ def _build_backup_engine(ep: FailoverEndpoint):
     """ChatOpenAI bound to one failover endpoint. The env var named by
     api_key_env must exist — fail loudly (config error, not runtime).
     Per-endpoint timeout_s (advisory, adversarial-review fix): an ultra-fast
-    Cerebras hang must not eat the global 45s before failover proceeds."""
+    Cerebras hang must not eat the global 45s before failover proceeds.
+    Per-endpoint max_tokens (live lesson 2026-09-09, Token Router lane):
+    reasoning models (GLM-5.3-free, nemotron) burn reasoning tokens BEFORE
+    content — a 800-token cap returns content=None (finish=length) and the
+    call looks like a failure. The lane declares its own headroom; the
+    ADR-008 war-story-4 lesson (consult.py's 6000 for nemotron) finally
+    lives in the engine path. 0/unset -> stage caps apply as before."""
     key = os.getenv(ep["api_key_env"])
     if not key:
         raise ValueError(f"Failover endpoint {ep['base_url']}: env var "
                          f"{ep['api_key_env']} is not set.")
     from langchain_openai import ChatOpenAI
     timeout = ep.get("timeout_s") or get_settings().llm_timeout_s
+    mt = int(ep.get("max_tokens") or 0)
+    if mt > 0:
+        return ChatOpenAI(model=ep["model"], temperature=0.0,
+                          timeout=timeout, max_retries=1,
+                          max_tokens=mt,
+                          base_url=ep["base_url"], api_key=key)
     return ChatOpenAI(model=ep["model"], temperature=0.0,
                       timeout=timeout, max_retries=1,
                       base_url=ep["base_url"], api_key=key)
@@ -626,23 +642,131 @@ _structured: Dict[str, Any] = {}
 
 def _get_router():
     if "router" not in _structured:
-        _structured["router"] = _get_engine(
-            get_stage_model("router")).with_structured_output(RouteDecision)
+        _structured["router"] = _repairing_structured(
+            _get_engine(get_stage_model("router")), RouteDecision)
     return _structured["router"]
 
 
 def _get_rewriter():
     if "rewriter" not in _structured:
-        _structured["rewriter"] = _get_engine(
-            get_stage_model("router")).with_structured_output(QueryOptimizer)
+        _structured["rewriter"] = _repairing_structured(
+            _get_engine(get_stage_model("router")), QueryOptimizer)
     return _structured["rewriter"]
 
 
 def _get_checker():
     if "checker" not in _structured:
-        _structured["checker"] = _get_engine(
-            get_stage_model("executive")).with_structured_output(GroundingCheck)
+        _structured["checker"] = _repairing_structured(
+            _get_engine(get_stage_model("executive")), GroundingCheck)
     return _structured["checker"]
+
+
+def _repairing_structured(engine: Any, schema: Any) -> Any:
+    """Structured output with a deterministic JSON-REPAIR backstop.
+
+    Live lesson 2026-09-09 (Token Router GLM-5.3-free): reasoning-model
+    outputs through non-native schema channels arrive as markdown-decorated
+    text ('**vectorstore**', '\`\`\`json {...} \`\`\`', prose around JSON)
+    — Pydantic rejects them before our code runs, and the stage fail-closes
+    as if the model were broken. This wrapper uses include_raw=True so a
+    parse failure never surfaces raw: the model's text is repaired
+    deterministically (fences stripped, JSON extracted, bare enum words
+    wrapped) and re-parsed locally. Repair failure re-raises the original
+    error — the fail-closed paths above stay untouched.
+
+    Cost: zero on healthy lanes (langchain parses natively; the wrapper
+    returns its result). The repair runs ONLY on the failure path."""
+    bound = engine.with_structured_output(schema, include_raw=True)
+
+    def _invoke(messages: list, config: Optional[dict] = None, **kw):
+        result = bound.invoke(messages, config=config, **kw)
+        if isinstance(result, dict) and result.get("parsing_error") is None:
+            return result["parsed"]           # native path — untouched
+        raw = result.get("raw") if isinstance(result, dict) else None
+        text = getattr(raw, "content", None)
+        if isinstance(text, list):            # content blocks
+            text = "".join(b.get("text", "") for b in text
+                           if isinstance(b, dict))
+        if not text:
+            # The raw dict may carry the text under other shapes.
+            if isinstance(result, dict):
+                for v in result.values():
+                    if isinstance(v, str) and v.strip():
+                        text = v
+                        break
+        if text:
+            repaired = _repair_json_like(text)
+            if repaired is not None:
+                return schema.model_validate(repaired)
+        err = result.get("parsing_error") if isinstance(result, dict) else None
+        raise err or ValueError("structured-output repair failed")
+
+    class _Runnable:
+        async def ainvoke(self, messages, config=None, **kw):
+            result = await bound.ainvoke(messages, config=config, **kw)
+            if isinstance(result, dict) and result.get("parsing_error") is None:
+                return result["parsed"]
+            raw = result.get("raw") if isinstance(result, dict) else None
+            text = getattr(raw, "content", None)
+            if isinstance(text, list):
+                text = "".join(b.get("text", "") for b in text
+                               if isinstance(b, dict))
+            if not text and isinstance(result, dict):
+                for v in result.values():
+                    if isinstance(v, str) and v.strip():
+                        text = v
+                        break
+            if text:
+                repaired = _repair_json_like(text)
+                if repaired is not None:
+                    return schema.model_validate(repaired)
+            err = result.get("parsing_error") if isinstance(result, dict) else None
+            raise err or ValueError("structured-output repair failed")
+
+        def invoke(self, messages, config=None, **kw):
+            return _invoke(messages, config=config, **kw)
+
+    return _Runnable()
+
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+
+
+def _repair_json_like(text: str) -> Optional[Dict[str, Any]]:
+    """Extract parseable JSON from model text, tolerating the observed
+    failure shapes: fenced blocks, surrounding prose, and bare enum words
+    ('**vectorstore**' -> {'destination': 'vectorstore'}). Deterministic,
+    zero LLM. None when nothing parseable is found."""
+    candidates: List[str] = []
+    m = _JSON_FENCE_RE.search(text)
+    if m:
+        candidates.append(m.group(1))
+    # First {...} object anywhere in the text.
+    start = text.find("{")
+    if start >= 0:
+        depth, end = 0, -1
+        for i, ch in enumerate(text[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if end > start:
+            candidates.append(text[start:end + 1])
+    for cand in candidates:
+        cand = cand.strip()
+        try:
+            return json.loads(cand)
+        except Exception:
+            continue
+    # Bare enum word (strip markdown): '**vectorstore**' etc.
+    bare = text.strip().strip("*`_ \n")
+    for known in ("vectorstore", "general_knowledge", "out_of_domain"):
+        if bare.lower() == known:
+            return {"destination": known}
+    return None
 
 
 # ===========================================================================

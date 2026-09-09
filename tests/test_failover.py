@@ -499,3 +499,122 @@ def test_audit_429_threads_quota_hint():
     assert upd.get("outcome") == "unverified_system"
     assert upd.get("quota_hint_s") == pytest.approx(1003.104), \
         "audit-stage 429 hint must reach the optimizer's abort check"
+
+
+def test_backup_engine_per_endpoint_max_tokens(monkeypatch):
+    """Live lesson 2026-09-09 (Token Router lane): GLM-5.3-free is a
+    reasoning model — reasoning_content burns tokens BEFORE content, so a
+    stage cap of 800 returns content=None (finish=length) and the call
+    looks like a failure. A lane may declare its own max_tokens headroom
+    (the consult.py ADR-008 war-story-4 lesson, now in the engine path)."""
+    import adaptive_rag as ar
+    captured = {}
+
+    class _FakeChat:
+        def __init__(self, **kw):
+            captured.update(kw)
+
+        def with_structured_output(self, *a, **k):
+            return self
+
+    import langchain_openai as lo
+    monkeypatch.setattr(lo, "ChatOpenAI", _FakeChat)
+    ar._backup_engines.clear()
+    ep = {"base_url": "https://lane.test/v1", "api_key_env": "NIM_API_KEY",
+          "model": "z-ai/glm-5.3-free", "timeout_s": 150, "max_tokens": 6000}
+    ar._get_backup_engine(ep)
+    assert captured.get("max_tokens") == 6000, \
+        "reasoning-lane headroom must reach the engine"
+    assert captured.get("timeout") == 150
+    # Lane WITHOUT max_tokens: stage caps apply — engine gets no override.
+    captured.clear()
+    ar._backup_engines.clear()
+    ep2 = {"base_url": "https://lane2.test/v1", "api_key_env": "NIM_API_KEY",
+           "model": "m2", "timeout_s": 0, "max_tokens": 0}
+    ar._get_backup_engine(ep2)
+    assert "max_tokens" not in captured or captured.get("max_tokens") is None
+
+
+def test_repairing_structured_passes_native(monkeypatch):
+    """_repairing_structured: healthy lanes never pay the repair cost —
+    a native parse result is returned untouched."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Raw:
+        content = "irrelevant"
+
+    class _Parsed:
+        destination = "vectorstore"
+
+    class _Bound:
+        async def ainvoke(self, messages, config=None, **kw):
+            return {"raw": _Raw(), "parsed": _Parsed(),
+                    "parsing_error": None}
+
+        def invoke(self, messages, config=None, **kw):
+            return {"raw": _Raw(), "parsed": _Parsed(),
+                    "parsing_error": None}
+
+    class _Engine:
+        def with_structured_output(self, schema, include_raw=False, **kw):
+            assert include_raw is True
+            return _Bound()
+
+    wrapped = ar._repairing_structured(_Engine(), ar.RouteDecision)
+    r = asyncio.run(wrapped.ainvoke([("human", "q")]))
+    assert r.destination == "vectorstore"
+    assert wrapped.invoke([("human", "q")]).destination == "vectorstore"
+
+
+def test_repairing_structured_repairs_markdown_enum(monkeypatch):
+    """Live lesson 2026-09-09 (Token Router GLM-5.3-free): the router
+    returned '**vectorstore**' — markdown bold, no JSON envelope — and
+    Pydantic rejected it before our code ran, fail-closing the whole
+    question. The wrapper repairs deterministically and re-parses."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Raw:
+        content = "**vectorstore**"
+
+    class _Bound:
+        async def ainvoke(self, messages, config=None, **kw):
+            return {"raw": _Raw(), "parsed": None,
+                    "parsing_error": ValueError("json_invalid")}
+
+        def invoke(self, messages, config=None, **kw):
+            return {"raw": _Raw(), "parsed": None,
+                    "parsing_error": ValueError("json_invalid")}
+
+    class _Engine:
+        def with_structured_output(self, schema, include_raw=False, **kw):
+            return _Bound()
+
+    wrapped = ar._repairing_structured(_Engine(), ar.RouteDecision)
+    r = asyncio.run(wrapped.ainvoke([("human", "q")]))
+    assert r.destination == "vectorstore"
+
+
+def test_repairing_structured_reraises_when_unrepairable(monkeypatch):
+    """Fail-closed intact: garbage that cannot be repaired re-raises —
+    the stage's existing failure semantics own the outcome."""
+    import asyncio
+    import pytest
+    import adaptive_rag as ar
+
+    class _Raw:
+        content = "I cannot classify this request."
+
+    class _Bound:
+        async def ainvoke(self, messages, config=None, **kw):
+            return {"raw": _Raw(), "parsed": None,
+                    "parsing_error": ValueError("json_invalid")}
+
+    class _Engine:
+        def with_structured_output(self, schema, include_raw=False, **kw):
+            return _Bound()
+
+    wrapped = ar._repairing_structured(_Engine(), ar.RouteDecision)
+    with pytest.raises(ValueError):
+        asyncio.run(wrapped.ainvoke([("human", "q")]))
