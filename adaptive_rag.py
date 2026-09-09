@@ -1593,7 +1593,7 @@ own 25% column is source-backed)."""
             [("system", sys_prompt), ("human", user_prompt)], "synthesize")
     except Exception as e:
         # Fail-closed: quarantine draft + degraded flag -> audit auto-fails -> retry/refusal
-        logger.error("Synthesis failed — quarantining run: %s", e)
+        logger.error("Synthesis failed — quarantining run: %r", e)   # %r: empty-str exceptions (timeout class) must be named
         # QUOTA-HINT THREADING (token plan, 2026-09-07): a day-capped 429
         # ('Please try again in 31m39.504s') means the retry iteration is
         # deterministically doomed — the hint travels in state so the
