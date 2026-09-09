@@ -739,6 +739,15 @@ _ECHO_MARKERS = [
     "we have evidence:",
     "the question asks",
     "let me",
+    # NIM-lane echo class (live-caught 2026-09-08, receipt e8650748687f
+    # CERTIFIED with pure deliberation): nemotron's synthesis self-checks
+    # its own compliance and echoes the mandates back as the answer.
+    "check for any rule violations",
+    "now produce answer",
+    "one company per sentence:",
+    "never show arithmetic:",
+    "quote year-over-year growth percentages verbatim",
+    "figures quoted in millions when source table declares",
 ]
 
 

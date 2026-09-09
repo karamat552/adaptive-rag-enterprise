@@ -461,3 +461,39 @@ def test_cache_read_bypass_measure_pipeline_not_cache():
         upd = asyncio.run(ar.check_cache_node(state))
         assert upd.get("cached_hit") is False, "eval mode must bypass cache reads"
         assert calls["n"] == 0, "cache must never be consulted in eval mode"
+
+
+def test_echo_guard_catches_rule_check_deliberation():
+    """Live-caught 2026-09-08 (receipt e8650748687f): nemotron's synthesis
+    self-checked its own compliance and the DELIBERATION certified as
+    grounded — 'Check for any rule violations: ... Good.' / 'Now produce
+    answer.' / mandate echoes as the entire answer. Both the stripper and
+    the pre-audit echo-guard must kill this class."""
+    import asyncio
+    import adaptive_rag as ar
+
+    leaked = ("### Verified Sources Ledger\n- [1] – Meta – Page 1\n"
+              "But we only used [1] and [1].\n\nNow produce answer.\n\n"
+              "Check for any rule violations:\n\n"
+              "- ONE COMPANY PER SENTENCE: All sentences only mention Meta. "
+              "Good.\n- NEVER show arithmetic: We are not showing "
+              "calculations.\n- Quote year-over-year growth percentages "
+              "VERBATIM from source table's '% Change' column: We have "
+              "\"25 %\" with space as in source. Cite [1].")
+    # 1. The stripper must reduce it to nothing (pure deliberation) — the
+    #    PIPELINE'S real defense: synthesis output is stripped at extraction
+    #    (adaptive_rag.py L1440) BEFORE entering state.
+    stripped = ar._strip_reasoning(leaked)
+    assert stripped == "", \
+        "pure deliberation must strip to empty (quarantine), got: %r" % stripped[:80]
+    # 2. The pre-audit echo-guard is defense-in-depth: it must ALSO reject
+    #    the raw text (any path that delivers unstripped content to the
+    #    guard — e.g. a future code path that skips extraction stripping).
+    state = {"original_question": "q?", "run_id": "t", "tenant_id": "default",
+             "retry_count": 0, "documents": ["Meta | Meta_Q4_2023.pdf | Page 1\nrevenue text"],
+             "evidence_records": [], "final_executive_report": leaked,
+             "degraded_agents": []}
+    upd = asyncio.run(ar.fact_checker_guard(state))
+    assert upd.get("grounded") is False
+    assert upd.get("echo_reject") is True, \
+        "the rule-check deliberation class must die at the pre-audit guard"
