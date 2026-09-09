@@ -273,10 +273,28 @@ def _bind_output_cap(engine: Any, max_tokens: int) -> Any:
     to the native SDK config schema: 'max_tokens' raises
     GenerateContentConfig extra_forbidden at INVOKE time (found live
     2026-09: every google-provider specialist quarantined with 'Zero
-    documents' downstream); the accepted field is maxOutputTokens."""
+    documents' downstream); the accepted field is maxOutputTokens.
+
+    REASONING-HEADROOM FLOOR (live lesson 2026-09-09, Token Router lane):
+    reasoning models burn reasoning_content BEFORE content — a 1800-token
+    synthesis cap returned out=1800 with an EMPTY draft (all reasoning, no
+    deliverable). A lane/provider that declared headroom (engine-level
+    max_tokens, or RAG_REASONING_HEADROOM for the primary) must never be
+    capped BELOW it — the stage cap becomes a floor, not a ceiling, on
+    headroom-declaring engines. Engines without headroom keep the exact
+    stage cap as before."""
+    # Engine-level headroom: lanes built with max_tokens (failover entries)
+    declared = getattr(engine, "max_tokens", None)
+    # Primary-provider headroom: env knob for reasoning-model primaries.
+    primary_headroom = int(os.getenv("RAG_REASONING_HEADROOM", "0") or 0)
+    effective = max_tokens
+    if isinstance(declared, int) and declared > 0:
+        effective = max(effective, declared)
+    if primary_headroom > 0:
+        effective = max(effective, primary_headroom)
     if get_settings().provider == "google":
-        return engine.bind(maxOutputTokens=max_tokens)
-    return engine.bind(max_tokens=max_tokens)
+        return engine.bind(maxOutputTokens=effective)
+    return engine.bind(max_tokens=effective)
 
 
 def _provider_key() -> str:

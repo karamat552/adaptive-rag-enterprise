@@ -651,3 +651,47 @@ def test_repairing_structured_reraises_when_unrepairable(monkeypatch):
         asyncio.run(wrapped.ainvoke([("human", "q")]))
     with pytest.raises(ValueError):
         wrapped.invoke([("human", "q")])
+
+
+def test_bind_output_cap_headroom_floor():
+    """Live lesson 2026-09-09 (Token Router run 5): synthesis 'succeeded'
+    with out=1800 and an EMPTY draft — reasoning_content consumed the
+    stage cap before any content was emitted. A headroom-declaring engine
+    (failover lane max_tokens) or a reasoning-primary (RAG_REASONING_
+    HEADROOM) must never be capped BELOW its headroom: the stage cap
+    becomes a floor there. Engines without headroom keep the exact cap."""
+    import adaptive_rag as ar
+    import unittest.mock as mock
+
+    bound = {}
+
+    class _Engine:
+        max_tokens = 6000            # lane-declared headroom
+
+        def bind(self, **kw):
+            bound.update(kw)
+            return self
+
+    ar._bind_output_cap(_Engine(), 1800)
+    assert bound["max_tokens"] == 6000, \
+        "lane headroom must floor the stage cap"
+
+    bound.clear()
+
+    class _PlainEngine:
+        def bind(self, **kw):
+            bound.update(kw)
+            return self
+
+    with mock.patch.dict("os.environ", {"RAG_REASONING_HEADROOM": "5000"}):
+        ar._bind_output_cap(_PlainEngine(), 1800)
+    assert bound["max_tokens"] == 5000, \
+        "reasoning-primary headroom must floor the stage cap"
+
+    bound.clear()
+    with mock.patch.dict("os.environ", {}, clear=False):
+        import os
+        os.environ.pop("RAG_REASONING_HEADROOM", None)
+        ar._bind_output_cap(_PlainEngine(), 1800)
+    assert bound["max_tokens"] == 1800, \
+        "no headroom declared -> exact stage cap, unchanged behavior"
