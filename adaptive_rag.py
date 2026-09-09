@@ -664,84 +664,111 @@ def _get_checker():
 def _repairing_structured(engine: Any, schema: Any) -> Any:
     """Structured output with a deterministic JSON-REPAIR backstop.
 
-    Live lesson 2026-09-09 (Token Router GLM-5.3-free): reasoning-model
-    outputs through non-native schema channels arrive as markdown-decorated
-    text ('**vectorstore**', '\`\`\`json {...} \`\`\`', prose around JSON)
-    — Pydantic rejects them before our code runs, and the stage fail-closes
-    as if the model were broken. This wrapper uses include_raw=True so a
-    parse failure never surfaces raw: the model's text is repaired
-    deterministically (fences stripped, JSON extracted, bare enum words
-    wrapped) and re-parsed locally. Repair failure re-raises the original
-    error — the fail-closed paths above stay untouched.
+    Live lessons 2026-09-09 (Token Router GLM-5.3-free, two iterations):
+    (1) reasoning models through non-native schema channels emit markdown-
+    decorated output ('**vectorstore**\\n\\nThis question is about...') —
+    Pydantic rejects it before our code runs; (2) langchain's
+    include_raw=True RAISES on parse failure rather than returning the
+    dict on some paths — so the repair must live in an except path, and
+    when the raw text is unavailable there, we fall back to a PLAIN
+    (unstructured) call whose text is repaired deterministically.
 
-    Cost: zero on healthy lanes (langchain parses natively; the wrapper
-    returns its result). The repair runs ONLY on the failure path."""
+    Zero cost on healthy lanes: native parse returns untouched. Repair
+    failure re-raises — every fail-closed semantic stays intact."""
     bound = engine.with_structured_output(schema, include_raw=True)
 
-    def _invoke(messages: list, config: Optional[dict] = None, **kw):
-        result = bound.invoke(messages, config=config, **kw)
-        if isinstance(result, dict) and result.get("parsing_error") is None:
-            return result["parsed"]           # native path — untouched
-        raw = result.get("raw") if isinstance(result, dict) else None
+    def _extract_text(raw: Any) -> Optional[str]:
         text = getattr(raw, "content", None)
-        if isinstance(text, list):            # content blocks
+        if isinstance(text, list):
             text = "".join(b.get("text", "") for b in text
                            if isinstance(b, dict))
-        if not text:
-            # The raw dict may carry the text under other shapes.
-            if isinstance(result, dict):
-                for v in result.values():
-                    if isinstance(v, str) and v.strip():
-                        text = v
-                        break
+        if not text and isinstance(raw, dict):
+            for v in raw.values():
+                if isinstance(v, str) and v.strip():
+                    text = v
+                    break
+        return text if isinstance(text, str) and text.strip() else None
+
+    def _try_repair(raw: Any, exc: Exception):
+        text = _extract_text(raw)
         if text:
             repaired = _repair_json_like(text)
             if repaired is not None:
                 return schema.model_validate(repaired)
-        err = result.get("parsing_error") if isinstance(result, dict) else None
-        raise err or ValueError("structured-output repair failed")
+        raise exc
 
-    class _Runnable:
-        async def ainvoke(self, messages, config=None, **kw):
-            result = await bound.ainvoke(messages, config=config, **kw)
-            if isinstance(result, dict) and result.get("parsing_error") is None:
+    def _from_result(result: Any):
+        if isinstance(result, dict):
+            if result.get("parsing_error") is None:
                 return result["parsed"]
-            raw = result.get("raw") if isinstance(result, dict) else None
-            text = getattr(raw, "content", None)
-            if isinstance(text, list):
-                text = "".join(b.get("text", "") for b in text
-                               if isinstance(b, dict))
-            if not text and isinstance(result, dict):
-                for v in result.values():
-                    if isinstance(v, str) and v.strip():
-                        text = v
-                        break
+            raw, err = result.get("raw"), result.get("parsing_error")
+            text = _extract_text(raw)
             if text:
                 repaired = _repair_json_like(text)
                 if repaired is not None:
                     return schema.model_validate(repaired)
-            err = result.get("parsing_error") if isinstance(result, dict) else None
             raise err or ValueError("structured-output repair failed")
+        # Some langchain paths return the parsed object directly.
+        return result
+
+    class _Runnable:
+        async def ainvoke(self, messages, config=None, **kw):
+            try:
+                return _from_result(await bound.ainvoke(messages, config=config, **kw))
+            except Exception as first_err:
+                # langchain 1.6 raises through include_raw=True on parse
+                # failure — the raw text is NOT reliably in the exception.
+                # One plain (unstructured) call supplies it deterministically;
+                # its text is then repaired. The only added cost is on the
+                # failure path.
+                plain = await engine.ainvoke(messages, config=config, **kw)
+                text = _extract_text(plain)
+                if text:
+                    repaired = _repair_json_like(text)
+                    if repaired is not None:
+                        return schema.model_validate(repaired)
+                raise first_err
 
         def invoke(self, messages, config=None, **kw):
-            return _invoke(messages, config=config, **kw)
+            try:
+                return _from_result(bound.invoke(messages, config=config, **kw))
+            except Exception as first_err:
+                plain = engine.invoke(messages, config=config, **kw)
+                text = _extract_text(plain)
+                if text:
+                    repaired = _repair_json_like(text)
+                    if repaired is not None:
+                        return schema.model_validate(repaired)
+                raise first_err
 
     return _Runnable()
 
 
+def _schema_fields_match(candidate: Dict[str, Any], schema: Any) -> bool:
+    """Guard for the exception-embedded-JSON path: the candidate must
+    carry at least one field the schema actually declares — exception
+    strings contain JSON-looking fragments that are NOT answers."""
+    try:
+        fields = set(schema.model_fields.keys())
+    except AttributeError:
+        return False
+    return bool(fields & set(candidate.keys()))
+
+
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+_ENUM_VALUES = ("vectorstore", "general_knowledge", "out_of_domain",
+                "search", "rewrite", "refuse", "sharpen")
 
 
 def _repair_json_like(text: str) -> Optional[Dict[str, Any]]:
     """Extract parseable JSON from model text, tolerating the observed
-    failure shapes: fenced blocks, surrounding prose, and bare enum words
-    ('**vectorstore**' -> {'destination': 'vectorstore'}). Deterministic,
-    zero LLM. None when nothing parseable is found."""
+    failure shapes: fenced blocks, surrounding prose ('**vectorstore**\\n\\n
+    This question is about...'), and bare enum words. Deterministic, zero
+    LLM. None when nothing parseable is found."""
     candidates: List[str] = []
     m = _JSON_FENCE_RE.search(text)
     if m:
         candidates.append(m.group(1))
-    # First {...} object anywhere in the text.
     start = text.find("{")
     if start >= 0:
         depth, end = 0, -1
@@ -756,15 +783,15 @@ def _repair_json_like(text: str) -> Optional[Dict[str, Any]]:
         if end > start:
             candidates.append(text[start:end + 1])
     for cand in candidates:
-        cand = cand.strip()
         try:
-            return json.loads(cand)
+            return json.loads(cand.strip())
         except Exception:
             continue
-    # Bare enum word (strip markdown): '**vectorstore**' etc.
-    bare = text.strip().strip("*`_ \n")
-    for known in ("vectorstore", "general_knowledge", "out_of_domain"):
-        if bare.lower() == known:
+    # Enum ANYWHERE in markdown-decorated text (live shape 2026-09-09:
+    # '**vectorstore**\n\nThis question is about Tesla...'). The enum word
+    # IS the classification; the trailing prose is decoration.
+    for known in _ENUM_VALUES:
+        if re.search(rf"\b{re.escape(known)}\b", text, re.IGNORECASE):
             return {"destination": known}
     return None
 

@@ -568,32 +568,53 @@ def test_repairing_structured_passes_native(monkeypatch):
 
 
 def test_repairing_structured_repairs_markdown_enum(monkeypatch):
-    """Live lesson 2026-09-09 (Token Router GLM-5.3-free): the router
-    returned '**vectorstore**' — markdown bold, no JSON envelope — and
-    Pydantic rejected it before our code ran, fail-closing the whole
-    question. The wrapper repairs deterministically and re-parses."""
+    """Live lesson 2026-09-09 (Token Router GLM-5.3-free, run 4): the
+    router returned '**vectorstore**
+
+This question is about Tesla
+    revenue...' — markdown enum PLUS trailing prose. The wrapper repairs
+    via the result-dict path AND the exception path (langchain raises
+    through include_raw=True instead of returning the dict)."""
     import asyncio
     import adaptive_rag as ar
 
+    live_text = ("**vectorstore**\n\nThis question is about Tesla "
+                 "revenue which can be answered from the filings corpus.")
+
     class _Raw:
-        content = "**vectorstore**"
+        content = live_text
 
     class _Bound:
         async def ainvoke(self, messages, config=None, **kw):
             return {"raw": _Raw(), "parsed": None,
-                    "parsing_error": ValueError("json_invalid")}
+                    "parsing_error": ValueError("json_invalid: " + live_text)}
 
         def invoke(self, messages, config=None, **kw):
-            return {"raw": _Raw(), "parsed": None,
-                    "parsing_error": ValueError("json_invalid")}
+            raise ValueError("json_invalid: " + live_text)
+
+    calls = {"plain": 0}
+
+    class _Plain:
+        content = live_text
 
     class _Engine:
         def with_structured_output(self, schema, include_raw=False, **kw):
             return _Bound()
 
+        async def ainvoke(self, messages, config=None, **kw):
+            calls["plain"] += 1
+            return _Plain()
+
+        def invoke(self, messages, config=None, **kw):
+            calls["plain"] += 1
+            return _Plain()
+
     wrapped = ar._repairing_structured(_Engine(), ar.RouteDecision)
     r = asyncio.run(wrapped.ainvoke([("human", "q")]))
-    assert r.destination == "vectorstore"
+    assert r.destination == "vectorstore", "dict-path repair"
+    r2 = wrapped.invoke([("human", "q")])
+    assert r2.destination == "vectorstore", "exception path repairs via plain fallback"
+    assert calls["plain"] >= 1, "the raise path must fall back to a plain call"
 
 
 def test_repairing_structured_reraises_when_unrepairable(monkeypatch):
@@ -611,10 +632,22 @@ def test_repairing_structured_reraises_when_unrepairable(monkeypatch):
             return {"raw": _Raw(), "parsed": None,
                     "parsing_error": ValueError("json_invalid")}
 
+        def invoke(self, messages, config=None, **kw):
+            return {"raw": _Raw(), "parsed": None,
+                    "parsing_error": ValueError("json_invalid")}
+
     class _Engine:
         def with_structured_output(self, schema, include_raw=False, **kw):
             return _Bound()
 
+        async def ainvoke(self, messages, config=None, **kw):
+            return _Raw()          # plain fallback also returns garbage
+
+        def invoke(self, messages, config=None, **kw):
+            return _Raw()
+
     wrapped = ar._repairing_structured(_Engine(), ar.RouteDecision)
     with pytest.raises(ValueError):
         asyncio.run(wrapped.ainvoke([("human", "q")]))
+    with pytest.raises(ValueError):
+        wrapped.invoke([("human", "q")])
