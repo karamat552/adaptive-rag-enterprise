@@ -479,3 +479,80 @@ def test_verify_without_provenance_404_for_replay(client, monkeypatch):
     r = client.get("/verify/replay-run-99")
     assert r.status_code == 404
     assert "provenance_run_id" in r.json()["detail"]
+
+
+# ================== QUERY AUTHENTICATION (2026-09-08) ======================
+def test_query_auth_open_mode_without_env(client, monkeypatch):
+    """No QUERY_API_KEYS configured -> open mode (local/demo): requests
+    pass exactly as before. Backward-compatible by default."""
+    import os
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    r = client.request("POST", "/query",
+                      json={"question": "What was Tesla revenue in Q4 2023?"})
+    assert r.status_code in (200, 499), \
+        f"open mode must not reject: {r.status_code} {r.text[:120]}"
+
+
+def test_query_auth_missing_key_401(client, monkeypatch):
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?"})
+    assert r.status_code == 401, "enforced mode without a key must 401"
+
+
+def test_query_auth_valid_key_and_tenant(client, monkeypatch):
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a,tenant-b:secret-b")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?",
+                             "tenant_id": "tenant-a"},
+                       headers={"X-API-Key": "secret-a"})
+    assert r.status_code in (200, 499), \
+        f"valid key + matching tenant must pass: {r.status_code} {r.text[:120]}"
+
+
+def test_query_auth_cross_tenant_rejected(client, monkeypatch):
+    """The impersonation attack: a valid tenant-a key DECLARING tenant-b.
+    The key IS the identity — must 403."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a,tenant-b:secret-b")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?",
+                             "tenant_id": "tenant-b"},
+                       headers={"X-API-Key": "secret-a"})
+    assert r.status_code == 403
+
+
+def test_query_auth_wrong_key_403(client, monkeypatch):
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?"},
+                       headers={"X-API-Key": "not-a-key"})
+    assert r.status_code == 403
+
+
+def test_query_auth_malformed_env_loud(client, monkeypatch):
+    """A malformed QUERY_API_KEYS entry is a CONFIG error — fail loudly at
+    first use, never silently open or silently closed."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "no-colon-entry")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?"})
+    assert r.status_code == 500, "malformed config must surface as a server error"
+
+
+def test_query_auth_stream_key_bound_tenant(client, monkeypatch):
+    """The SSE stream endpoint carries the same auth: valid key passes;
+    the bound tenant overrides any declared tenant_id."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    r = client.request("GET",
+                       "/query/stream?question=What+was+Tesla+revenue+in+Q4+2023%3F",
+                       headers={"X-API-Key": "secret-a"})
+    assert r.status_code in (200, 499), \
+        f"stream with valid key must pass: {r.status_code}"
+    r2 = client.request("GET",
+                        "/query/stream?question=What+was+Tesla+revenue+in+Q4+2023%3F")
+    assert r2.status_code == 401, "stream without key in enforced mode must 401"

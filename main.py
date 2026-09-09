@@ -212,6 +212,80 @@ def require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
         raise HTTPException(status_code=403, detail="Invalid or missing X-Admin-Key")
 
 
+# ============================ QUERY AUTHENTICATION =========================
+# Tenant authentication (2026-09-08): RLS isolates tenants' DATA from each
+# other, but identity was client-declared — any anonymous caller could pose
+# as any tenant and burn its LLM budget. QUERY_API_KEYS closes that gap the
+# same way ADMIN_API_KEY does for /feedback:
+#   QUERY_API_KEYS='tenant-a:key1,tenant-b:key2'  (comma-separated tenant:key)
+# - Header X-API-Key: <key> -> the tenant bound to that key (client may no
+#   longer declare a DIFFERENT tenant_id — declared id must match the key's).
+# - QUERY_API_KEYS unset -> OPEN MODE (local/demo/dev): every caller is the
+#   default tenant, behavior unchanged. This mirrors the bootstrap posture
+#   of the rest of the service and keeps the Streamlit demo working.
+def _query_api_keys() -> Dict[str, str]:
+    """Parse QUERY_API_KEYS -> {api_key: tenant_id}. Malformed entries fail
+    LOUD at first use (config error, not runtime) as an explicit 500 —
+    never silently open and never silently closed."""
+    raw = os.getenv("QUERY_API_KEYS", "").strip()
+    if not raw:
+        return {}
+    keys: Dict[str, str] = {}
+    for i, entry in enumerate(raw.split(",")):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if ":" not in entry:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server misconfiguration: QUERY_API_KEYS[{i}] must "
+                       f"be 'tenant:key' — got {entry!r}")
+        tenant, key = entry.split(":", 1)
+        if not tenant or not key:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server misconfiguration: QUERY_API_KEYS[{i}] must "
+                       f"be 'tenant:key' — got {entry!r}")
+        keys[key.strip()] = tenant.strip()
+    return keys
+
+
+def require_query_key(x_api_key: Optional[str] = Header(default=None),
+                      tenant_id: Optional[str] = None) -> Optional[str]:
+    """FastAPI dependency for /query + /query/stream. Returns the
+    AUTHENTICATED tenant id (or None in open mode). The body's tenant_id
+    is NOT visible to a dependency (FastAPI resolves this signature's
+    tenant_id as a query param) — the ENDPOINT enforces the mismatch rule
+    after this returns: the key IS the identity; a declared tenant that
+    disagrees with the key's binding is impersonation and is rejected."""
+    keys = _query_api_keys()
+    if not keys:
+        return None                    # open mode — no QUERY_API_KEYS configured
+    METRICS.inc("auth_checked_total")
+    if not x_api_key:
+        METRICS.inc("auth_rejected_total")
+        raise HTTPException(status_code=401,
+                            detail="Missing X-API-Key (QUERY_API_KEYS is enforced)")
+    bound = keys.get(x_api_key)
+    if bound is None:
+        METRICS.inc("auth_rejected_total")
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return bound
+
+
+def _assert_tenant_match(auth_tenant: Optional[str],
+                         declared: Optional[str]) -> None:
+    """Endpoint-side impersonation check (the dependency cannot see the
+    body): a declared tenant that disagrees with the key's binding is a
+    cross-tenant attack — 403."""
+    if auth_tenant and declared and declared != auth_tenant:
+        METRICS.inc("auth_rejected_total")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Key is not authorized for tenant '{declared}' "
+                   f"(bound to '{auth_tenant}')")
+
+
 # ============================== RUN PLUMBING ===============================
 def _resolve_tenant(tenant_id: Optional[str]) -> str:
     # db.Settings owns the default; RagSettings (adaptive_rag) has no such field.
@@ -368,10 +442,16 @@ async def _run_guarded(request: Request, question: str,
 
 # ============================== POST /query ================================
 @app.post("/query")
-async def query(req: QueryRequest, request: Request) -> JSONResponse:
+async def query(req: QueryRequest, request: Request,
+                auth_tenant: Optional[str] = Depends(require_query_key)
+                ) -> JSONResponse:
     run_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
+    # Authenticated tenant wins over the declared one (the key IS identity);
+    # a declared tenant that disagrees with the key's binding is rejected.
+    _assert_tenant_match(auth_tenant, req.tenant_id)
+    tenant = auth_tenant or req.tenant_id
     try:
-        result = await _run_guarded(request, req.question, req.tenant_id, run_id)
+        result = await _run_guarded(request, req.question, tenant, run_id)
     except CircuitOpenError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except HTTPException:
@@ -486,10 +566,13 @@ async def _event_stream(request: Request, question: str,
 
 @app.get("/query/stream")
 async def query_stream(request: Request, question: str,
-                       tenant_id: Optional[str] = None):
+                       tenant_id: Optional[str] = None,
+                       auth_tenant: Optional[str] = Depends(require_query_key)):
     if len(question) < 3 or len(question) > 500:
         raise HTTPException(status_code=422, detail="question must be 3-500 chars")
     run_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
+    _assert_tenant_match(auth_tenant, tenant_id)
+    tenant = auth_tenant or tenant_id   # key-bound tenant wins (auth, not claim)
     return StreamingResponse(
         _event_stream(request, question, tenant_id, run_id),
         media_type="text/event-stream",
