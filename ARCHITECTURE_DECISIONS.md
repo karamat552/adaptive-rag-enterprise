@@ -760,3 +760,90 @@ ones), make refusals fast and specific, and publish recall@answerable +
 refusal-precision from a permanent coverage eval suite. "We answer 97% of
 answerable questions, measured, misses itemized" is the only claim that
 survives contact with an auditor.
+
+---
+
+## ADR-015: Token Efficiency & Doomed-Iteration Elimination — Measure, Then Cut
+
+**Date:** 2026-09-07 → 2026-09-08
+**Status:** Accepted (measured)
+
+### Context
+
+Free-tier quotas are the binding operational constraint (Groq gpt-oss-120b:
+200K tokens/day; the executive stage lives here; qwen fleet: 30 RPM). Two
+distinct failure economics dominated every battery run: (a) per-question
+waste — expansion fan-out fired 6+ LLM calls even on confident retrievals;
+(b) doomed-iteration waste — after a day-capped 429 announced "try again in
+31m39.504s", the bounded retry loop still burned a full fleet re-run +
+synthesis before refusing.
+
+Two external proposals were rejected on evidence: a Python-first audit
+bypass (the LLM auditor caught two fabrications in one week where every
+deterministic check passed — Apple "essentially flat" revenue that actually
+declined, and an interpretive RL "investment phase" claim), and fact-card
+context compaction (breaks the [n]-citation → chunk → transcript → SHA-256
+receipt chain).
+
+### Decision
+
+Six changes, each measured before/after by an interleaved A/B harness
+(wrapper-counted LLM calls, per-question token telemetry, per-question arm
+interleaving so quota weather hits both arms equally):
+
+1. **Conditional multi-query expansion.** Direct search first; the
+   paraphraser + variant searches fire only when the top result's
+   vec_similarity < RAG_EXPANSION_CONFIDENCE (0.55). Confident hits skip
+   them; the direct pass is reused in fusion, never re-searched.
+2. **Abort-on-hint.** csuite_synth AND fact_checker_guard thread
+   parse_retry_hint(exc) into state; transform_query aborts when the hint
+   ≥ RAG_QUOTA_ABORT_S (900s); a new conditional edge
+   (route_after_rewrite) routes aborted runs straight to verified refusal —
+   the old unconditional rewrite→exec_db edge burned the doomed re-run even
+   after the abort flag was set. RPM-scale hints (<30s) retry normally.
+3. **Evidence dedup.** Chunks quoted verbatim in specialist reports collapse
+   to stubs in the synthesis evidence list; chunks quoted in the DRAFT
+   collapse in the audit context. Slots are preserved — citation indices
+   still address identical chunks in receipts and /verify.
+4. **Premise-probe company scoping.** The unscoped probe matched Meta's
+   dividend-initiation headlines, so Tesla's no-dividend wrong-premise ran
+   the full pipeline to reach the refusal it could have reached in seconds.
+   The probe now filters to the question's own company; multi-company
+   questions stay ineligible.
+5. **% -Change verbatim mandate** (synthesis prompt rule 8): YoY percentages
+   quoted from the source table's own % Change column, cited to that table —
+   never self-computed (the auditor rejected a TRUE 25% claim as
+   "calculated, not stated").
+6. **Battery self-pacing + telemetry.** coverage_eval reads quota_hint_s
+   from each result (threaded through arun_query — the first battery with
+   the fix found the hint was computed but never surfaced) and waits out
+   announced windows (capped); per-question tokens/wall-time in every
+   report.
+
+### Measured results (A/B, live Groq, 3 questions, interleaved)
+
+- **Tokens: 67,004 → 46,006 per 3 questions (−31.3%)**
+- **LLM calls: 85 → 46 (−46%)**; expansion calls 33 → 1 (−97%)
+- Wall-time −91% on the walled run is *asterisked*: confounded by
+  429-backoff weather (the abort fix's honest contribution is that walled
+  refusals now take 30–90s instead of full retry loops — a 12-question
+  walled battery completed in 14 minutes vs 30+).
+- Zero recall change on confident questions; certification outcomes
+  identical across arms.
+- The white-whale (Apple-vs-Meta comparison) certified on the first
+  post-fix fresh window with all four gold figures and a 15/15-link
+  cryptographically verified receipt — with expansion skipping on every
+  confident retrieval in the same run.
+
+### Consequences
+
+- A full battery now fits comfortably in one 200K window (was marginal).
+- Refusals under quota fire faster AND cheaper — the fail-closed posture
+  now also has fail-closed economics.
+- Every future optimization must show its delta in coverage_report.json —
+  no guessed savings. Rejected proposals stay rejected: the audit is not
+  bypassed (moat preserved), the executive stays pinned (ADR-008).
+- Echo-leak found during validation (receipt e8650748687f: nemotron
+  rule-check deliberation certified as grounded) and closed with
+  regression-locked markers — efficiency work must never outrun the guard
+  suite, and this one nearly did.
