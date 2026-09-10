@@ -95,4 +95,4 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
   (open mode when unset — demo posture) — `99989df`.
 - Failover: primary (Groq) → NIM per-stage, executive PINNED (ADR-008).
 - Quota economics: a full battery fits one 200K window post-ADR-015.
-- ModelScope second backup: config-ready, awaiting signup token.
+- ModelScope second backup: **PARKED — external constraint** (2026-09-10). API-Inference requires Alibaba Cloud account binding + real-name verification (KYC); verified live (token lists 46 models, inference 401s until KYC completes). The failover stack is complete without it: Groq primary → NIM 120b (lane 1) → TokenRouter GLM-5.3-free (lane 2), with NIM/gemini-3.5-flash as executive peers. Revisit only if the active lanes prove insufficient.
