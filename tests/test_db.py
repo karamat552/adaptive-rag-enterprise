@@ -206,3 +206,81 @@ def test_verify_named_statuses_on_epoch_collision():
         assert f'"{status}"' in src, f"{status} must remain a named status"
     assert "links_ok == links_checked" in src, \
         "verified requires every single link to pass — no averaging"
+
+
+def test_pool_bounded_wait_absorbs_burst(monkeypatch):
+    """Concurrency-audit finding (2026-09-10): psycopg2's ThreadedConnection
+    pool RAISES PoolError instantly on exhaustion (never blocks — verified
+    from psycopg2's own _getconn source). At worst-burst, 8 admitted runs x
+    3 parallel specialist searches = 24 concurrent _db_calls against
+    pool_max=15: without a wait, ~9 calls fail loudly mid-run. The checkout
+    now waits up to DB_POOL_WAIT_S (poll 0.2s) before raising — the burst
+    drains through the pool as connections are released (~ms per checkout),
+    and only a genuinely saturated pool still fails, loudly."""
+    import time as _time
+    import db
+    from psycopg2 import pool as _pgpool
+
+    state = {"free": 0, "checked_out": 0}   # exhausted at entry — the burst state
+
+    class _FakeConn:
+        autocommit = False
+
+        def cursor(self):
+            class _Cur:
+                def __enter__(self):
+                    return self
+                def __exit__(self, *a):
+                    return False
+                def execute(self, *a):
+                    return None
+            return _Cur()
+
+    class _FakePool:
+        def getconn(self):
+            if state["free"] > 0:
+                state["free"] -= 1
+                return _FakeConn()
+            raise _pgpool.PoolError("connection pool exhausted")
+
+        def putconn(self, conn, close=False):
+            state["free"] += 1
+
+    monkeypatch.setattr(db, "_db_pool", _FakePool())
+    monkeypatch.setattr(db, "init_pool", lambda: None)
+    monkeypatch.setattr(db, "_configure_session", lambda conn: None)
+
+    class _WaitSettings:
+        pool_wait_s = 0.6
+    monkeypatch.setattr(db, "get_settings", lambda: _WaitSettings())
+
+    # Exhausted at t=0; a connection frees at ~0.3s -> checkout must WAIT
+    # and succeed, not raise.
+    import threading as _th
+
+    def _free_soon():
+        _time.sleep(0.3)
+        state["free"] += 1
+
+    _th.Thread(target=_free_soon, daemon=True).start()
+    t0 = _time.perf_counter()
+    conn = db._checkout_healthy_connection()
+    waited = _time.perf_counter() - t0
+    assert conn is not None
+    assert waited >= 0.25, f"checkout must wait for the freed slot, waited {waited:.2f}s"
+
+    # A pool that never frees: still fails loudly after the bounded wait.
+    state["free"] = 0
+
+    class _ShortWaitSettings:
+        pool_wait_s = 0.4
+    monkeypatch.setattr(db, "get_settings", lambda: _ShortWaitSettings())
+    t0 = _time.perf_counter()
+    try:
+        db._checkout_healthy_connection()
+        raised = False
+    except _pgpool.PoolError:
+        raised = True
+    waited = _time.perf_counter() - t0
+    assert raised, "a genuinely saturated pool must still fail loudly"
+    assert 0.3 <= waited < 2.0, "fail after the bounded window, not instantly, not forever"

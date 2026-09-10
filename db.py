@@ -32,6 +32,7 @@ import hashlib
 import json
 import logging
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -80,6 +81,9 @@ class Settings(BaseSettings):
 
     pool_min: int = 2
     pool_max: int = 15
+    # Concurrency-audit fix (2026-09-10): bounded wait for a busy pool
+    # instead of psycopg2's instant PoolError on exhaustion.
+    pool_wait_s: float = 5.0
     connect_timeout_s: int = 10
     statement_timeout_ms: int = 20_000
     hnsw_ef_search: int = 100
@@ -207,11 +211,37 @@ def _configure_session(conn) -> None:
 
 
 def _checkout_healthy_connection() -> psycopg2.extensions.connection:
-    """Bounded-retry checkout. Every connection is handed to the caller or closed."""
+    """Bounded-retry checkout with a SHORT WAIT for a busy pool.
+
+    Concurrency-audit finding (2026-09-10): ThreadedConnectionPool's
+    getconn on an exhausted pool RAISES PoolError IMMEDIATELY (verified
+    from psycopg2's source: 'connection pool exhausted') — it never
+    blocks. At the worst moment (max_concurrent_runs=8 admitted runs,
+    each fanning 3 parallel specialist searches) up to 24 concurrent
+    _db_calls contend for pool_max=15 slots: without a wait, ~9 calls
+    fail loudly mid-run and degrade answers under load — availability
+    failure by self-inflicted PoolError.
+
+    The wait is BOUNDED (DB_POOL_WAIT_S, default 5s — sub-second vs the
+    ~30s LLM stages around it, and far under db_timeout_s) and every
+    connection is still handed over or closed. Stale-connection
+    recycling (the live-saver from Elite-4) is unchanged.
+    """
     init_pool()
     last_exc: Optional[Exception] = None
-    for attempt in range(1, 4):
-        conn = _db_pool.getconn()
+    wait_s = float(get_settings().pool_wait_s)
+    deadline = time.monotonic() + wait_s
+    attempt = 0
+    while True:
+        try:
+            conn = _db_pool.getconn()
+        except pool.PoolError as exc:
+            last_exc = exc
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(min(0.2, max(0.0, deadline - time.monotonic())))
+            continue
+        attempt += 1
         try:
             conn.autocommit = True
             _configure_session(conn)
@@ -220,6 +250,8 @@ def _checkout_healthy_connection() -> psycopg2.extensions.connection:
             last_exc = exc
             _db_pool.putconn(conn, close=True)
             logger.warning("Stale connection recycled (attempt %d/3).", attempt)
+            if attempt >= 3:
+                break
     raise last_exc  # type: ignore[misc]
 
 
