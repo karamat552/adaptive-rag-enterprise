@@ -1065,14 +1065,90 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         logger.error("[%s] LLM timeout after %.0fs (failures=%d).",
                      stage, get_settings().llm_timeout_s, _circuit.failures)
         raise
-    except Exception:
+    except Exception as exc:
         _circuit.record_failure()
+        # PEER-TO-PEER EXECUTIVE FAILOVER (ADR-008 amendment, 2026-09-10):
+        # the executive stage is PINNED — but a quota-class failure may
+        # escalate to a strictly-vetted PEER pool of equal-or-better models.
+        # This is NOT the general failover registry: the peer pool is an
+        # explicit allowlist of vetted 120B-class executives (NIM
+        # nemotron-3-super-120b-a12b, Google gemini-3.5-flash), never the
+        # 8B/20B fleet models and never community/free proxies. A non-quota
+        # failure still fails closed exactly as before; the peer tier only
+        # answers the day-capped-TPD class that killed both morning
+        # batteries' audit stages.
+        if (os.getenv("RAG_EXEC_PEER_FAILOVER") == "1"
+                and _is_quota_error(exc)):
+            peer = await _exec_peer_fallback(messages, stage)
+            if peer is not None:
+                return peer
         raise
     _circuit.record_success()
     i, o, _, _ = collector.totals()
     logger.info("[%s] ok in %.2fs | tokens in=%d out=%d",
                 stage, time.perf_counter() - t0, i, o)
     return result, collector
+
+
+# The vetted executive peer pool (ADR-008 amendment): equal-or-better
+# 120B-class models ONLY. A model joins this pool by passing the 16-point
+# benchmark on the live pipeline — the same bar the primary executive is
+# held to. Never the fleet models, never community lanes.
+_EXEC_PEER_POOL: List[Dict[str, str]] = [
+    {"base_url": "https://integrate.api.nvidia.com/v1",
+     "api_key_env": "NIM_API_KEY",
+     "model": "nvidia/nemotron-3-super-120b-a12b"},
+    {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+     "api_key_env": "GEMINI_API_KEY",
+     "model": "gemini-3.5-flash"},
+]
+_EXEC_PEER_COOLDOWN = EndpointCooldown(default_s=900)
+
+
+async def _exec_peer_fallback(messages: list, stage: str) -> Optional[Tuple[Any, UsageCollector]]:
+    """One attempt across the vetted peer pool, in order. Each peer is a
+    benchmark-vetted 120B-class executive. Any failure other than 'peer
+    also quota-walled' ends the attempt (fail-closed to the original path).
+    A successful peer answer is logged loudly — receipts must be able to
+    say WHICH executive certified."""
+    for peer in _EXEC_PEER_POOL:
+        pid = f"exec-peer::{peer['model']}"
+        if _EXEC_PEER_COOLDOWN.blocked(pid):
+            continue
+        key = os.getenv(peer["api_key_env"])
+        if not key:
+            logger.warning("[exec-peer] %s skipped: %s not set.",
+                           peer["model"], peer["api_key_env"])
+            continue
+        try:
+            from langchain_openai import ChatOpenAI
+            engine = ChatOpenAI(model=peer["model"], temperature=0.0,
+                                timeout=get_settings().llm_timeout_s,
+                                max_retries=1, base_url=peer["base_url"],
+                                api_key=key)
+            collector = UsageCollector()
+            t0 = time.perf_counter()
+            result = await asyncio.wait_for(
+                engine.ainvoke(messages, config={"callbacks": [collector]}),
+                timeout=get_settings().llm_timeout_s)
+            _EXEC_PEER_COOLDOWN.clear(pid)
+            i, o, _, _ = collector.totals()
+            logger.warning("[exec-peer] %s stage '%s' rescued by PEER "
+                           "%s in %.1fs | tokens in=%d out=%d — receipt "
+                           "records the primary PLUS this peer.",
+                           peer["model"], stage,
+                           time.perf_counter() - t0, i, o)
+            return result, collector
+        except Exception as pexc:
+            if _is_quota_error(pexc):
+                _EXEC_PEER_COOLDOWN.mark(pid, parse_retry_hint(pexc))
+                logger.warning("[exec-peer] %s also quota-walled — next.",
+                               peer["model"])
+                continue
+            logger.warning("[exec-peer] %s failed non-quota: %r — "
+                           "stopping (fail-closed).", peer["model"], pexc)
+            return None
+    return None
 
 
 async def _db_call(fn, *args, **kwargs):

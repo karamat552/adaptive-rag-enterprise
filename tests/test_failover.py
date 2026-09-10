@@ -695,3 +695,102 @@ def test_bind_output_cap_headroom_floor():
         ar._bind_output_cap(_PlainEngine(), 1800)
     assert bound["max_tokens"] == 1800, \
         "no headroom declared -> exact stage cap, unchanged behavior"
+
+
+# ============ peer-to-peer executive failover (ADR-008 amendment) ========
+def test_exec_peer_failover_disabled_by_default(monkeypatch):
+    """The executive stays PINNED unless RAG_EXEC_PEER_FAILOVER=1 — the
+    amendment is opt-in, the ADR-008 default behavior is unchanged."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Boom:
+        async def ainvoke(self, *a, **k):
+            raise Exception("429 Rate limit reached TPD")
+
+    rescued = {"n": 0}
+
+    async def _fake_fallback(messages, stage):
+        rescued["n"] += 1
+        return object()
+
+    import unittest.mock as mock
+    monkeypatch.delenv("RAG_EXEC_PEER_FAILOVER", raising=False)
+    with mock.patch.object(ar, "_exec_peer_fallback", _fake_fallback):
+        with pytest.raises(Exception, match="429"):
+            asyncio.run(ar._llm_call(_Boom(), [("h", "q")], "synthesize"))
+
+    assert rescued["n"] == 0, "without the flag, quota walls stay fail-closed"
+
+
+def test_exec_peer_failover_rescues_quota_walls(monkeypatch):
+    """With the flag set, a day-capped TPD wall at the executive escalates
+    to the vetted peer pool — the exact class that killed both batteries'
+    audit stages."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Resp:
+        content = "rescued by peer"
+
+    class _Boom:
+        async def ainvoke(self, *a, **k):
+            raise Exception("429 Rate limit reached ... TPD: Limit 200000")
+
+    async def _fake_fallback(messages, stage):
+        return _Resp(), ar.UsageCollector()
+
+    import unittest.mock as mock
+    monkeypatch.setenv("RAG_EXEC_PEER_FAILOVER", "1")
+    with mock.patch.object(ar, "_exec_peer_fallback", _fake_fallback):
+        result, collector = asyncio.run(
+            ar._llm_call(_Boom(), [("h", "q")], "synthesize"))
+    assert result.content == "rescued by peer"
+
+
+def test_exec_peer_non_quota_never_escalates(monkeypatch):
+    """THE GUARDRAIL: a non-quota executive failure (garbage output,
+    protocol error, 5xx) NEVER reaches a peer — fail-closed exactly as
+    ADR-008 always required."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Boom:
+        async def ainvoke(self, *a, **k):
+            raise Exception("500 Internal Server Error")
+
+    rescued = {"n": 0}
+
+    async def _fake_fallback(messages, stage):
+        rescued["n"] += 1
+        return None
+
+    import unittest.mock as mock
+    monkeypatch.setenv("RAG_EXEC_PEER_FAILOVER", "1")
+    with mock.patch.object(ar, "_exec_peer_fallback", _fake_fallback):
+        with pytest.raises(Exception, match="500"):
+            asyncio.run(ar._llm_call(_Boom(), [("h", "q")], "audit"))
+    assert rescued["n"] == 0, "non-quota failures must never touch peers"
+
+
+def test_exec_peer_pool_is_allowlist_only():
+    """The peer pool is an explicit vetted allowlist — never the general
+    failover registry, never 8B/20B fleet models, never community lanes."""
+    import adaptive_rag as ar
+    models = [p["model"] for p in ar._EXEC_PEER_POOL]
+    assert "nvidia/nemotron-3-super-120b-a12b" in models
+    assert "gemini-3.5-flash" in models
+
+    import re as _re
+
+    def _param_count(m: str):
+        # 'nemotron-3-super-120b-a12b' -> 120; 'gemini-3.5-flash' -> None
+        mm = _re.search(r"-(\d+)b", m.lower())
+        return int(mm.group(1)) if mm else None
+
+    for m in models:
+        pc = _param_count(m)
+        assert pc is None or pc >= 100, \
+            f"{m}: sub-100B models may never hold the executive seat"
+        assert "free" not in m.lower(), \
+            f"{m}: community/free lanes may never hold the executive seat"

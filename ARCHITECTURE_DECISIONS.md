@@ -968,3 +968,44 @@ flight, which endpoints are healthy, what quota remains.
   corrected by them. Never treated as billing data.
 - Single-worker remains the deployment until a trigger fires — Redis is
   the prepared path, not the default tax.
+
+---
+
+## ADR-008 Amendment: Peer-to-Peer Executive Failover (2026-09-10)
+
+**Context.** Two batteries died with their audit stages quota-walled
+mid-run: the executive (gpt-oss-120b) hit its 200K TPD ceiling with
+hundreds of thousands of specialist tokens already spent. Fail-closed
+refusal was CORRECT — but the day-capped-TPD class is a *capacity* event,
+not a quality event, and the original ADR-008 language ("never a weaker
+model certifying a financial brief") was drafted against quality risk,
+not quota clocks.
+
+**Amendment.** With `RAG_EXEC_PEER_FAILOVER=1` (opt-in, default OFF — the
+pinned behavior remains the default), a QUOTA-CLASS failure at the
+executive stage may escalate to a strictly-vetted **peer pool** of
+benchmark-passed, equal-or-better models:
+
+    Groq gpt-oss-120b → (429) → NIM nemotron-3-super-120b-a12b
+                                 → (429) → Google gemini-3.5-flash
+
+**The guardrails (all invariant, all regression-locked):**
+- **Allowlist only:** the peer pool is an explicit constant — never the
+  general failover registry, never 8B/20B fleet models, never community/
+  free lanes (a pool test parses parameter counts: sub-100B models are
+  structurally barred).
+- **Vetted only:** a model enters the pool by passing the 16-point
+  benchmark on the live pipeline — the same bar the primary executive
+  is held to.
+- **Quota-only:** non-quota failures (5xx, garbage output, protocol
+  errors) NEVER escalate — fail-closed exactly as before. The peer tier
+  answers day-capacity walls, not uncertainty.
+- **Loud:** every peer rescue logs which peer certified; receipts name
+  the executive.
+- **Cooldown-aware:** a peer that 429s is skipped for its server-stated
+  window, mirroring the fleet failover semantics.
+
+**Why gemini-3.5-flash qualifies:** it is the 1,500-RPD-tier model
+(NOT the tiny 20/day 3.6-flash), benchmark-passed on the live pipeline.
+
+32 failover-suite tests green including the four new invariants.
