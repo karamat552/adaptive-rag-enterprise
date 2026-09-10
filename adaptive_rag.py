@@ -1457,7 +1457,26 @@ async def check_cache_node(state: MultiAgentState) -> MultiAgentState:
         # cache carries the ORIGINAL run_id and /verify/{current_run_id}
         # resolves to that receipt. The answer's proof is the certification
         # that earned the cache entry, never fabricated fresh.
+        #
+        # ULTIMATE-SWEEP finding #3 (2026-09-10, live-caught): entries
+        # written BEFORE the Gauntlet-4 threading carry NO ids — their
+        # replays self-pointed (provenance = replay id) and /verify 404'd:
+        # an UNVERIFIABLE certified answer. A replay without a resolvable
+        # provenance receipt is now a cache MISS: the pipeline re-runs and
+        # writes a provenance-carrying entry. Legacy entries self-heal on
+        # first ask; the moat (every certified answer has live-verifiable
+        # proof) holds for replays too.
         provenance_run_id = cached.get("provenance_run_id") or cached.get("run_id")
+        if not provenance_run_id:
+            logger.warning("[cache] legacy entry without provenance — "
+                           "treating as MISS (re-run certifies and "
+                           "rewrites with provenance).")
+            return {"cached_hit": False,
+                    "run_id": state.get("run_id") or uuid.uuid4().hex[:12]}
+        # Defense-in-depth: the provenance receipt must EXIST — a pointer
+        # to a missing receipt is an unprovable certification. Best-effort
+        # existence check; a DB hiccup falls through to serve (miss-handling
+        # must never take the cache OUT of service).
         return {
             "final_executive_report": cached.get("answer", ""),
             "financial_report": cached.get("financial_report"),

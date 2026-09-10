@@ -575,3 +575,52 @@ def test_legitimate_answers_never_hit_injection_markers():
              "### Verified Sources Ledger\n- [2] – Meta – Page 1")
     hits = [m for m in ar._ECHO_MARKERS if m in legit.lower()]
     assert hits == [], f"false positives on legitimate prose: {hits}"
+
+
+def test_legacy_cache_entry_without_provenance_is_miss():
+    """ULTIMATE-SWEEP finding #3 (2026-09-10, live-caught): cache entries
+    written before the Gauntlet-4 provenance threading carry NO ids — their
+    replays self-pointed (provenance == replay run_id) and /verify 404'd:
+    an UNVERIFIABLE certified answer served to users. A provenance-less
+    entry is now a MISS: the pipeline re-runs, certifies, and writes a
+    provenance-carrying entry (legacy self-heal on first ask)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    def _legacy(*a, **k):
+        return {"answer": "old cached text", "grounded": True}  # NO ids
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _legacy), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "fresh-run-1", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is False, \
+        "a provenance-less legacy entry must be treated as a cache miss"
+
+
+def test_cache_replay_with_provenance_serves_normally():
+    """Guardrail: entries WITH provenance (the Gauntlet-4 contract) keep
+    serving as replays, threaded to the original certification run."""
+    import asyncio
+    import adaptive_rag as ar
+
+    def _modern(*a, **k):
+        return {"answer": "certified [1]",
+                "provenance_run_id": "orig-run-7"}
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _modern), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "replay-run-9", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is True
+    assert upd.get("provenance_run_id") == "orig-run-7"
