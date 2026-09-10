@@ -83,7 +83,7 @@ def _spy_auditor(monkeypatch):
     import adaptive_rag as ar
     calls = {"n": 0}
 
-    async def _spy(runnable, messages, stage):
+    async def _spy(runnable, messages, stage, **kw):
         calls["n"] += 1
 
         class _Audit:

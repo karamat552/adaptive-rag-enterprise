@@ -1031,7 +1031,8 @@ def _with_usage(state: MultiAgentState, totals: Tuple[int, int, int, int],
 # 6. RESILIENT LLM CALL (circuit + timeout + per-call telemetry + failover)
 # ===========================================================================
 async def _llm_call(runnable: Any, messages: list, stage: str,
-                    allow_failover: bool = False) -> Tuple[Any, UsageCollector]:
+                    allow_failover: bool = False,
+                    peer_schema: Any = None) -> Tuple[Any, UsageCollector]:
     """allow_failover=True (router/fleet stages ONLY): quota-class failures
     transparently retry on configured backup endpoints. False (executive
     stage): pinned to the primary model — a quota wall means fail-closed
@@ -1066,7 +1067,14 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
                      stage, get_settings().llm_timeout_s, _circuit.failures)
         raise
     except Exception as exc:
-        _circuit.record_failure()
+        # CIRCUIT OWNERSHIP (deep-dive fix 2026-09-10): quota walls are
+        # COOLDOWN events, not circuit events — the same ownership rule the
+        # failover branch documents (ADR-008's consult-fix: a quota storm
+        # must not trip the 5-failure global circuit and stall every stage
+        # for 60s). Recorded here only for NON-quota failures.
+        is_quota = _is_quota_error(exc)
+        if not is_quota:
+            _circuit.record_failure()
         # PEER-TO-PEER EXECUTIVE FAILOVER (ADR-008 amendment, 2026-09-10):
         # the executive stage is PINNED — but a quota-class failure may
         # escalate to a strictly-vetted PEER pool of equal-or-better models.
@@ -1078,8 +1086,9 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         # answers the day-capped-TPD class that killed both morning
         # batteries' audit stages.
         if (os.getenv("RAG_EXEC_PEER_FAILOVER") == "1"
-                and _is_quota_error(exc)):
-            peer = await _exec_peer_fallback(messages, stage)
+                and is_quota):
+            peer = await _exec_peer_fallback(messages, stage,
+                                             schema=peer_schema)
             if peer is not None:
                 return peer
         raise
@@ -1105,12 +1114,22 @@ _EXEC_PEER_POOL: List[Dict[str, str]] = [
 _EXEC_PEER_COOLDOWN = EndpointCooldown(default_s=900)
 
 
-async def _exec_peer_fallback(messages: list, stage: str) -> Optional[Tuple[Any, UsageCollector]]:
+async def _exec_peer_fallback(messages: list, stage: str,
+                               schema: Any = None
+                               ) -> Optional[Tuple[Any, UsageCollector]]:
     """One attempt across the vetted peer pool, in order. Each peer is a
     benchmark-vetted 120B-class executive. Any failure other than 'peer
     also quota-walled' ends the attempt (fail-closed to the original path).
     A successful peer answer is logged loudly — receipts must be able to
-    say WHICH executive certified."""
+    say WHICH executive certified.
+
+    SCHEMA AWARENESS (deep-dive fix 2026-09-10): the audit stage expects a
+    GroundingCheck OBJECT (audit.grounded / audit.explanation) — a peer
+    rescue that returned raw text would AttributeError exactly when the
+    feature fires. With schema set, the peer's raw text is repaired and
+    validated into the same object the primary produces
+    (_repairing_structured handles the markdown-decorated output reasoning
+    models emit). Synthesis (no schema) keeps returning raw text."""
     for peer in _EXEC_PEER_POOL:
         pid = f"exec-peer::{peer['model']}"
         if _EXEC_PEER_COOLDOWN.blocked(pid):
@@ -1132,11 +1151,23 @@ async def _exec_peer_fallback(messages: list, stage: str) -> Optional[Tuple[Any,
                 engine.ainvoke(messages, config={"callbacks": [collector]}),
                 timeout=get_settings().llm_timeout_s)
             _EXEC_PEER_COOLDOWN.clear(pid)
+            if schema is not None:
+                text = extract_text_content(result.content)
+                repaired = _repair_json_like(text) if text else None
+                if repaired is None:
+                    # structured stage: unparseable peer output is a
+                    # non-quota failure — next peer, never certify on
+                    # garbage.
+                    logger.warning("[exec-peer] %s returned unparseable "
+                                   "structured output — next peer "
+                                   "(fail-closed).", peer["model"])
+                    continue
+                result = schema.model_validate(repaired)
             i, o, _, _ = collector.totals()
-            logger.warning("[exec-peer] %s stage '%s' rescued by PEER "
-                           "%s in %.1fs | tokens in=%d out=%d — receipt "
+            logger.warning("[exec-peer] stage '%s' rescued by PEER %s "
+                           "in %.1fs | tokens in=%d out=%d — receipt "
                            "records the primary PLUS this peer.",
-                           peer["model"], stage,
+                           stage, peer["model"],
                            time.perf_counter() - t0, i, o)
             return result, collector
         except Exception as pexc:
@@ -2761,7 +2792,11 @@ Return grounded=True only if 100% verified."""
             _get_checker(),
             [("system", sys_prompt),
              ("human", f"[SOURCE DOCUMENTS]\n{docs_str}\n\n[DRAFT REPORT]\n{draft}")],
-            "audit")
+            "audit",
+            # peer_schema: a peer-rescued audit must deliver the SAME
+            # GroundingCheck object the primary produces (deep-dive fix
+            # 2026-09-10) — raw text would AttributeError at audit.grounded.
+            peer_schema=GroundingCheck)
         is_safe = audit.grounded
     except Exception as e:
         # v3.1 FIX preserved: empty collector, not a raw tuple — .totals() stays safe

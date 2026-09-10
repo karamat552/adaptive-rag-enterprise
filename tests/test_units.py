@@ -166,7 +166,7 @@ def test_guard_fail_closes_on_scale_lie_before_auditor(monkeypatch):
         grounded = True
         explanation = None
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         auditor_calls["n"] += 1
         return _Audit(), ar.UsageCollector()
 
@@ -204,7 +204,7 @@ def test_guard_certifies_honest_scale(monkeypatch):
         grounded = True
         explanation = None
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         return _Audit(), ar.UsageCollector()
 
     monkeypatch.setattr(ar, "_llm_call", _spy_llm)

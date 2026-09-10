@@ -113,7 +113,7 @@ def test_guard_fail_closes_on_direction_lie(monkeypatch):
     class _Audit:
         grounded = True
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         auditor_calls["n"] += 1
         return _Audit(), ar.UsageCollector()
 
@@ -217,7 +217,7 @@ def test_guard_fail_closes_on_xbrl_mismatch(monkeypatch):
     class _Audit:
         grounded = True
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         auditor_calls["n"] += 1
         return _Audit(), ar.UsageCollector()
 
@@ -254,7 +254,7 @@ def test_guard_certifies_when_xbrl_agrees(monkeypatch):
     class _Audit:
         grounded = True
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         return _Audit(), ar.UsageCollector()
 
     async def _facts(*a, **k):

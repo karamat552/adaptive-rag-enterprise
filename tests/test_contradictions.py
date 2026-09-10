@@ -232,7 +232,7 @@ def test_synthesis_gets_consistency_alert_on_conflict(monkeypatch):
     class _Resp:
         content = "brief"
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         captured["messages"] = messages
         return _Resp(), ar.UsageCollector()
 
@@ -256,7 +256,7 @@ def test_synthesis_clean_run_notes_no_contradictions(monkeypatch):
     class _Resp:
         content = "brief"
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         captured["messages"] = messages
         return _Resp(), ar.UsageCollector()
 

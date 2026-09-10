@@ -710,7 +710,7 @@ def test_exec_peer_failover_disabled_by_default(monkeypatch):
 
     rescued = {"n": 0}
 
-    async def _fake_fallback(messages, stage):
+    async def _fake_fallback(messages, stage, schema=None):
         rescued["n"] += 1
         return object()
 
@@ -737,7 +737,7 @@ def test_exec_peer_failover_rescues_quota_walls(monkeypatch):
         async def ainvoke(self, *a, **k):
             raise Exception("429 Rate limit reached ... TPD: Limit 200000")
 
-    async def _fake_fallback(messages, stage):
+    async def _fake_fallback(messages, stage, schema=None):
         return _Resp(), ar.UsageCollector()
 
     import unittest.mock as mock
@@ -761,7 +761,7 @@ def test_exec_peer_non_quota_never_escalates(monkeypatch):
 
     rescued = {"n": 0}
 
-    async def _fake_fallback(messages, stage):
+    async def _fake_fallback(messages, stage, schema=None):
         rescued["n"] += 1
         return None
 
@@ -794,3 +794,109 @@ def test_exec_peer_pool_is_allowlist_only():
             f"{m}: sub-100B models may never hold the executive seat"
         assert "free" not in m.lower(), \
             f"{m}: community/free lanes may never hold the executive seat"
+
+
+def test_exec_peer_rescue_returns_schema_object(monkeypatch):
+    """DEEP-DIVE DEFECT 1 (2026-09-10): the audit stage reads audit.grounded
+    — a peer rescue returning raw text would AttributeError exactly when
+    the feature fires. With peer_schema set, the peer's raw text is
+    repaired + validated into the same GroundingCheck object."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Raw:
+        content = '**{"grounded": true, "explanation": "verified"}**'
+
+    captured = {}
+
+    class _FakeEngine:
+        def __init__(self, **kw):
+            pass
+
+        async def ainvoke(self, messages, config=None, **kw):
+            return _Raw()
+
+    import langchain_openai as lo
+    monkeypatch.setattr(lo, "ChatOpenAI", _FakeEngine)
+    monkeypatch.setenv("NIM_API_KEY", "test-key")
+
+    async def _go():
+        return await ar._exec_peer_fallback([("h", "q")], "audit",
+                                            schema=ar.GroundingCheck)
+
+    result, collector = asyncio.run(_go())
+    assert result.grounded is True
+    assert result.explanation == "verified"
+
+
+def test_exec_peer_unparseable_structured_output_next_peer(monkeypatch):
+    """A structured-stage peer whose output cannot be repaired is a
+    NON-quota failure — next peer, never certify on garbage."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Raw:
+        content = "I cannot audit this."
+
+    class _FakeEngine:
+        def __init__(self, **kw):
+            pass
+
+        async def ainvoke(self, messages, config=None, **kw):
+            return _Raw()
+
+    import langchain_openai as lo
+    monkeypatch.setattr(lo, "ChatOpenAI", _FakeEngine)
+    monkeypatch.setenv("NIM_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    # Both peers unparseable -> no rescue -> fail-closed path upstream.
+    result = asyncio.run(ar._exec_peer_fallback([("h", "q")], "audit",
+                                                schema=ar.GroundingCheck))
+    assert result is None
+
+
+def test_quota_walls_do_not_trip_global_circuit(monkeypatch):
+    """DEEP-DIVE DEFECT 2 (2026-09-10): quota 429s were counting toward the
+    5-failure GLOBAL circuit — a day-capped executive wall could stall
+    every stage for 60s. Quota walls are COOLDOWN events (ADR-008's
+    ownership rule, now enforced in the pinned branch too); only non-quota
+    failures count."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _AlwaysQuotaWalled:
+        async def ainvoke(self, *a, **k):
+            raise Exception("429 Rate limit reached ... TPD: Limit 200000")
+
+    import unittest.mock as mock
+    monkeypatch.setenv("RAG_EXEC_PEER_FAILOVER", "1")
+    before = ar._circuit.failures
+    with mock.patch.object(ar, "_exec_peer_fallback",
+                           lambda m, s, schema=None: _none_async()):
+        for _ in range(3):
+            with pytest.raises(Exception, match="429"):
+                asyncio.run(ar._llm_call(_AlwaysQuotaWalled(),
+                                         [("h", "q")], "audit"))
+    assert ar._circuit.failures == before, \
+        "quota walls must never count toward the global circuit"
+
+
+async def _none_async():
+    return None
+
+
+def test_non_quota_failures_still_trip_circuit():
+    """Guardrail: the ownership fix must not mute REAL failures — 5xx and
+    timeouts keep counting exactly as before."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Always500:
+        async def ainvoke(self, *a, **k):
+            raise Exception("500 Internal Server Error")
+
+    before = ar._circuit.failures
+    for _ in range(2):
+        with pytest.raises(Exception, match="500"):
+            asyncio.run(ar._llm_call(_Always500(), [("h", "q")], "audit"))
+    assert ar._circuit.failures == before + 2

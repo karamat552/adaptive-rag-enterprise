@@ -266,7 +266,7 @@ def test_guard_saves_receipt_on_certified(monkeypatch):
         grounded = True
         explanation = None
 
-    async def _spy_llm(runnable, messages, stage):
+    async def _spy_llm(runnable, messages, stage, **kw):
         return _Audit(), ar.UsageCollector()
 
     def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
@@ -359,7 +359,7 @@ def test_guard_rejects_leaked_draft_pre_audit(monkeypatch):
     class _Audit:
         grounded = True
 
-    async def _spy(runnable, messages, stage):
+    async def _spy(runnable, messages, stage, **kw):
         auditor_calls["n"] += 1
         return _Audit(), ar.UsageCollector()
 
