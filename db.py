@@ -1405,6 +1405,16 @@ if __name__ == "__main__":
     setup_database()
     verify_rls_runtime_identity()
     report = migrate_from_manifest()
+    # TRANSCRIPT SYNC (deep-dive fix 2026-09-10): sync_page_transcripts was
+    # defined but NEVER CALLED — a re-ingest would DELETE+reinsert chunks and
+    # bump the epoch while page_transcripts silently held the OLD corpus's
+    # text. New-epoch receipts would then verify against stale pages (or
+    # fail transcript fetches). Order matters: AFTER migrate (reads the NEW
+    # epoch), and only when the corpus actually changed.
+    if report.reindexed or report.deleted_orphaned:
+        n_pages = sync_page_transcripts()
+        logger.info("Transcript ledger synced: %d pages for the new epoch.",
+                     n_pages)
     logger.info("Health: %s", health_check())
 
     logger.info("Sanity search: 'Tesla vehicle delivery numbers'...")

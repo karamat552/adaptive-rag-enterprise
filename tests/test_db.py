@@ -172,3 +172,37 @@ def test_runtime_identity_guard_passes(db_env):
     runtime URL it raises — the exact regression it exists to catch."""
     from db import verify_rls_runtime_identity
     verify_rls_runtime_identity()
+
+def test_reingest_flow_calls_transcript_sync():
+    """Deep-dive finding (2026-09-10): sync_page_transcripts was defined
+    but NEVER CALLED — a re-ingest would DELETE+reinsert chunks and bump
+    the epoch while page_transcripts silently held the OLD corpus text.
+    The db.py main entry must sync transcripts after migrate_from_manifest
+    WHEN (and only when) the corpus changed. Source-level contract test:
+    the __main__ block references sync after migrate."""
+    import re
+    src = open(Path(__file__).parent.parent / "db.py", encoding="utf-8").read()
+    main_block = src[src.index('if __name__ == "__main__":'):]
+    m_migrate = main_block.index("migrate_from_manifest()")
+    m_sync = main_block.index("sync_page_transcripts()")
+    m_bump_in_migrate = src.index("bump_corpus_epoch()")  # inside migrate
+    assert m_migrate < m_sync, \
+        "transcript sync must run AFTER migrate (it reads the new epoch)"
+    # migrate itself bumps BEFORE returning; sync reads corpus_state fresh.
+    assert "if report.reindexed or report.deleted_orphaned:" in main_block, \
+        "sync must be conditional on the corpus actually changing"
+
+
+def test_verify_named_statuses_on_epoch_collision():
+    """The three named failure statuses a cross-epoch verify can produce —
+    regression-locked so a re-ingest can never make an old receipt
+    silently pass: unknown_chunk (hash deleted by re-ingest),
+    transcript_missing (page row gone), span/hash mismatch."""
+    # Pure contract check: the statuses exist in the verify chain and the
+    # verified computation requires ALL links ok.
+    src = open(Path(__file__).parent.parent / "db.py", encoding="utf-8").read()
+    for status in ("unknown_chunk", "transcript_missing",
+                   "span_out_of_bounds", "attribution_mismatch"):
+        assert f'"{status}"' in src, f"{status} must remain a named status"
+    assert "links_ok == links_checked" in src, \
+        "verified requires every single link to pass — no averaging"
