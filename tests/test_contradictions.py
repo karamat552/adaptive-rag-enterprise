@@ -427,3 +427,64 @@ def test_single_company_sentences_still_attributed():
     m = extract_metric_mentions(
         "Apple revenue was $22,314 million in Q4 2023.", "apple")
     assert m and m[0]["company"] == "apple"
+
+
+# ===== deep-dive verifications 2026-09-10 (span locator + math engine) ===
+def test_scale_normalization_thousands_vs_millions():
+    '''Deep-dive 5, Q1: the same figure rendered as '$250,000 thousand' and
+    '$250.0 million' must normalize to the same value and NEVER conflict —
+    _SCALE multiplies at extraction (thousand 1e3, million 1e6).'''
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Meta revenue was $250,000 thousand in Q4 2023. "
+            "Meta revenue was $250.0 million in Q4 2023.")
+    m = extract_metric_mentions(text, "meta")
+    assert {mn["value"] for mn in m} == {250000000.0}
+    assert detect_contradictions(m) == []
+
+
+def test_float_precision_tail_never_false_flags():
+    '''Deep-dive 5, Q2: 65.4e9 carries the binary float tail 0.00001 —
+    against its exact rendering 65,400 million the pair must NOT conflict
+    (rel_gap ~1.5e-16, far under 2%).'''
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Apple long-term debt was $65.4 billion in Q4 2023. "
+            "Apple long-term debt was $65,400 million in Q4 2023.")
+    m = extract_metric_mentions(text, "apple")
+    vals = [mn["value"] for mn in m]
+    assert any(v == 65400000000.00001 for v in vals), "fixture must carry the tail"
+    assert detect_contradictions(m) == []
+
+
+def test_euro_figures_never_group_with_dollar():
+    '''Deep-dive 5, Q3: _MONEY_RE anchors on $ — a € figure never enters the
+    dollar space (declined, not guessed); its bare number lands in the
+    count space. Neither crosses the $ group: a euro claim can never
+    collide with a dollar claim (silent-miss risk documented in ADR —
+    the LLM audit owns cross-currency equivalence).'''
+    from adaptive_rag import extract_metric_mentions, detect_contradictions
+    text = ("Apple net income was $20,955 million in Q4 2023. "
+            "Apple net income was €20,955 million in Q4 2023.")
+    m = extract_metric_mentions(text, "apple")
+    dollars = [mn for mn in m if mn["unit"] == "$"]
+    assert len(dollars) == 1, "the euro figure must not enter the $ space"
+    assert detect_contradictions(m) == []
+
+
+def test_span_construction_exactness_arithmetic():
+    '''Deep-dive 4: the transcript is built FROM the emitted pieces with
+    offsets assigned in the same loop (same .strip(), same +2 for the
+    join) — transcript[a:b] == chunk.text BY CONSTRUCTION, no find(), no
+    duplicate-text ambiguity. This test re-derives the arithmetic.'''
+    pieces = ["  Alpha.  ", "", "  Beta text. ", "  Item 1A. Risk Factors  "]
+    transcript = "\n\n".join(p.strip() for p in pieces if p.strip())
+    offsets, pos = [], 0
+    for p in pieces:
+        s = p.strip()
+        if not s:
+            continue
+        offsets.append((pos, pos + len(s)))
+        pos += len(s) + 2
+    for (a, b), p in zip(offsets, [p for p in pieces if p.strip()]):
+        assert transcript[a:b] == p.strip()
+    # Duplicate text across pages is a NON-issue: spans are assigned, never
+    # searched — same text at two offsets yields two distinct recorded spans.
