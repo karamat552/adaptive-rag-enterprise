@@ -624,3 +624,39 @@ def test_cache_replay_with_provenance_serves_normally():
         upd = asyncio.run(ar.check_cache_node(state))
     assert upd.get("cached_hit") is True
     assert upd.get("provenance_run_id") == "orig-run-7"
+
+
+def test_graph_channels_complete():
+    """DEPLOY-VERIFICATION FINDING #4 (2026-09-10, live-caught on Render):
+    LangGraph DROPS undeclared TypedDict keys at node-merge. FIVE keys were
+    silently discarded — each killing a feature in the GRAPH path while
+    node-level tests (which bypass the graph) stayed green:
+      provenance_run_id (replays self-pointed, /verify 404'd),
+      quota_hint_s (abort-on-hint never fired), echo_reject, xbrl_issues
+    (finding records dropped), quota_aborted (abort routing blind),
+    _premise_fast_path (142s refusals instead of <1s).
+    This test introspects the COMPILED graph's channels against the
+    declared state keys — the guard that makes the class unrepeatable."""
+    import adaptive_rag as ar
+    app = ar.get_graph()
+    channels = getattr(app, "channels", None) or \
+        getattr(getattr(app, "graph", None), "channels", None)
+    assert channels, "graph channel introspection must work on this version"
+    ks = set(channels.keys())
+    for key in ("provenance_run_id", "quota_hint_s", "echo_reject",
+                "xbrl_issues", "quota_aborted", "_premise_fast_path",
+                "cached_hit", "run_id", "grounded", "outcome"):
+        assert key in ks, (
+            f"state key '{key}' used by nodes but NOT declared in "
+            f"MultiAgentState — LangGraph silently drops it at merge")
+
+
+def test_premise_fast_path_routes_refusal_fast(monkeypatch):
+    """The live casualty proof: the dividend question ran 142s through the
+    full pipeline because _premise_fast_path was dropped. With the channel
+    declared, route_premise must see it. Node+router contract."""
+    import adaptive_rag as ar
+    state = {"_premise_fast_path": True,
+             "outcome": "verified_refusal", "grounded": False}
+    assert ar.route_premise(state) == "verified_refusal"
+    # And the flag survives the graph merge (channel-level, covered above).

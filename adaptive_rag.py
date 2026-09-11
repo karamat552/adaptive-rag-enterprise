@@ -1021,6 +1021,25 @@ class MultiAgentState(TypedDict, total=False):
     degraded_agents: List[str]
     run_id: str
     tenant_id: str
+    # STATE-CHANNEL COMPLETENESS (deploy-verification finding #4, 2026-09-10):
+    # LangGraph DROPS undeclared TypedDict keys at node-merge — five keys the
+    # nodes returned were silently discarded, each killing a feature in the
+    # GRAPH path while node-level tests (which bypass the graph) stayed
+    # green. Live-proven casualties before this fix:
+    #   provenance_run_id — cache replays self-pointed; /verify 404'd
+    #     (live-caught on the Render deploy verification)
+    #   quota_hint_s — abort-on-hint NEVER fired; battery self-pacing blind
+    #   echo_reject / xbrl_issues — finding records dropped from state
+    #   quota_aborted — route_after_rewrite never saw the abort flag
+    #   _premise_fast_path — 142s full-pipeline refusals instead of <1s
+    # The graph-channel introspection test (test_graph_channels_complete)
+    # now guards the full set.
+    provenance_run_id: str
+    quota_hint_s: float
+    echo_reject: bool
+    xbrl_issues: List[Dict[str, Any]]
+    quota_aborted: bool
+    _premise_fast_path: bool
     contradictions: List[Dict[str, Any]]
     contradiction_retry: int
     usage_in: int
