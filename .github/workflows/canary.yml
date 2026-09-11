@@ -1,0 +1,54 @@
+# CANARY — Nightly Drift Watcher (P2.2)
+# Runs the 12-question coverage battery against Groq's fresh daily window
+# (05:30 IST reset; 00:30 UTC is safely inside the new window). Separates
+# CAPACITY refusals (quota 429s/TPD walls — expected sometimes, not a
+# regression) from LOGIC drift (gate rejections, gold misses, audit
+# anomalies — the real alarm). Pushes a coverage_report artifact every run.
+
+name: canary
+
+on:
+  schedule:
+    - cron: "30 0 * * *"   # 00:30 UTC = 06:00 IST, right after Groq's daily reset
+  workflow_dispatch: {}     # manual trigger for ad-hoc runs
+
+jobs:
+  coverage-battery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Canary — 12-question coverage battery
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+          TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DB_DATABASE_URL: ${{ secrets.DB_DATABASE_URL }}
+          DB_ADMIN_DATABASE_URL: ${{ secrets.DB_ADMIN_DATABASE_URL }}
+          RAG_EXEC_PEER_FAILOVER: "1"
+          RAG_DISABLE_CACHE_READ: "1"
+          RAG_DISABLE_CACHE_WRITE: "1"
+          COVERAGE_HINT_WAIT_CAP_S: "1200"
+        run: python scripts/coverage_eval.py --provider groq --report coverage_report_canary.json
+
+      - name: Upload coverage report (every run, pass or fail)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.run_id }}
+          path: coverage_report_canary.json
+          retention-days: 90
+
+      - name: Classify result (drift vs capacity)
+        if: always()
+        run: python scripts/classify_canary.py coverage_report_canary.json
