@@ -28,6 +28,7 @@ Interface (unchanged from v2.3):
 from __future__ import annotations
 
 import atexit
+import base64
 import hashlib
 import json
 import logging
@@ -1209,6 +1210,110 @@ def get_verification_receipt(run_id: str,
     return out
 
 
+def verify_bundle_core(receipt: Dict[str, Any], claims: List[Dict[str, Any]],
+                       evidence: List[Dict[str, Any]],
+                       transcripts: Dict[Tuple[str, int], str],
+                       chunk_truth: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """The PURE verification core — zero I/O, zero dependencies beyond the
+    stdlib. Consumes pre-fetched data: receipt (with claims_json/evidence_
+    json inside), claims, evidence, per-(source, page) transcripts, and the
+    chunk-truth table. Returns the standard verification result dict.
+
+    Refactor (P2.1, 2026-09-10): extracted from verify_receipt_chain so the
+    OFFLINE certificate verifier (verify_certificate.py) and the server run
+    the same algorithm through two entry points. verify_certificate.py is a
+    DELIBERATELY INDEPENDENT stdlib reimplementation (auditor-grade: the
+    verifier shares no code with the producer) — tests/test_offline_bundle.py
+    proves equivalence by driving the same tamper vectors through both."""
+    links_checked = links_ok = 0
+    link_results: List[Dict[str, Any]] = []
+    for e in evidence:
+        cs, ce = e.get("char_start"), e.get("char_end")
+        if cs is None or ce is None:
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "no_span"})
+            continue
+        links_checked += 1
+        t = transcripts.get((e.get("source"), e.get("page")))
+        if t is None:
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "transcript_missing"})
+            continue
+        # Tamper-suite fix 1: bounds. Python slicing truncates silently
+        # (t[0:600] returns what exists) — a span claiming bytes past the
+        # transcript end must FAIL, never truncate into accidental agreement.
+        if not (isinstance(cs, int) and isinstance(ce, int)
+                and 0 <= cs < ce <= len(t)):
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "span_out_of_bounds"})
+            continue
+        # Tamper-suite fix 2: cross-attribution. The receipt's company/page
+        # must match the chunk table's record for this chunk_hash — the DB
+        # is the authority, the receipt is the claim. Without this, a
+        # relabeled company (hash recomputed over the lie) certified.
+        truth = chunk_truth.get(e.get("chunk_hash"))
+        if truth is None:
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "unknown_chunk"})
+            continue
+        if (truth["company"] != (e.get("company") or "")
+                or truth["page"] != e.get("page")
+                or truth["source"] != (e.get("source") or "")):
+            link_results.append({"chunk_hash": e.get("chunk_hash"),
+                                 "status": "attribution_mismatch"})
+            continue
+        slice_text = t[cs:ce]
+        expected = e.get("content") or ""
+        key = f'{e.get("company") or ""}{e.get("source") or ""}{e.get("page") or 0}{slice_text}'
+        hash_ok = (hashlib.sha256(key.encode("utf-8")).hexdigest()
+                   == e.get("chunk_hash"))
+        verbatim_ok = slice_text == expected
+        ok = hash_ok and verbatim_ok
+        links_ok += int(ok)
+        link_results.append({"chunk_hash": e.get("chunk_hash"),
+                             "status": "ok" if ok else
+                                       ("hash_mismatch" if not hash_ok
+                                        else "text_mismatch"),
+                             "verbatim": verbatim_ok, "hash_ok": hash_ok})
+
+    claims_ok = True
+    claim_issues: List[Dict[str, Any]] = []
+    for c in claims:
+        for idx in (c.get("citations") or []):
+            if not (isinstance(idx, int) and 1 <= idx <= len(evidence)):
+                claims_ok = False
+                claim_issues.append({"claim": str(c.get("claim", ""))[:80],
+                                     "bad_citation": idx})
+    verified = (links_checked > 0 and links_ok == links_checked
+                and claims_ok)
+    reason = ("all links verified" if verified else
+              ("no locatable evidence spans" if links_checked == 0
+               else f"{links_checked - links_ok} broken link(s)")
+              if claims_ok else f"{len(claim_issues)} bad citation(s)")
+    # Receipt-Explorer support (read-only, same query results): the page
+    # transcripts and per-link slices let a UI highlight the exact evidence
+    # span; chunk_truth gives the authoritative attribution per chunk.
+    transcripts_out: Dict[str, Dict[str, Any]] = {}
+    for (src, pg), txt in transcripts.items():
+        transcripts_out[f"{src}{pg}"] = {
+            "source": src, "page": pg,
+            "transcript": txt,
+            "sha256": hashlib.sha256(txt.encode("utf-8")).hexdigest(),
+        }
+    return {
+        "verified": verified,
+        "links_checked": links_checked,
+        "links_ok": links_ok,
+        "evidence_total": len(evidence),
+        "claims_total": len(claims),
+        "links": link_results,
+        "claim_issues": claim_issues,
+        "transcripts": transcripts_out,
+        "attribution": {h: t for h, t in chunk_truth.items()},
+        "reason": reason,
+    }
+
+
 def verify_receipt_chain(receipt: Dict[str, Any]) -> Dict[str, Any]:
     """DETERMINISTIC re-verification, zero LLM tokens: for each evidence item
     carrying (source, page, char_start, char_end, chunk_hash, content), slice
@@ -1262,82 +1367,8 @@ def verify_receipt_chain(receipt: Dict[str, Any]) -> Dict[str, Any]:
             return {"verified": False, "reason": f"transcript-fetch-failed: {exc}",
                     "links_checked": 0, "links_ok": 0}
 
-    links_checked = links_ok = 0
-    link_results: List[Dict[str, Any]] = []
-    for e in evidence:
-        cs, ce = e.get("char_start"), e.get("char_end")
-        if cs is None or ce is None:
-            link_results.append({"chunk_hash": e.get("chunk_hash"),
-                                 "status": "no_span"})
-            continue
-        links_checked += 1
-        t = transcripts.get((e.get("source"), e.get("page")))
-        if t is None:
-            link_results.append({"chunk_hash": e.get("chunk_hash"),
-                                 "status": "transcript_missing"})
-            continue
-        # Tamper-suite fix 1: bounds. Python slicing truncates silently
-        # (t[0:600] returns what exists) — a span claiming bytes past the
-        # transcript end must FAIL, never truncate into accidental agreement.
-        if not (isinstance(cs, int) and isinstance(ce, int)
-                and 0 <= cs < ce <= len(t)):
-            link_results.append({"chunk_hash": e.get("chunk_hash"),
-                                 "status": "span_out_of_bounds"})
-            continue
-        # Tamper-suite fix 2: cross-attribution. The receipt's company/page
-        # must match the chunk table's record for this chunk_hash — the DB
-        # is the authority, the receipt is the claim. Without this, a
-        # relabeled company (hash recomputed over the lie) certified.
-        truth = chunk_truth.get(e.get("chunk_hash"))
-        if truth is None:
-            link_results.append({"chunk_hash": e.get("chunk_hash"),
-                                 "status": "unknown_chunk"})
-            continue
-        if (truth["company"] != (e.get("company") or "")
-                or truth["page"] != e.get("page")
-                or truth["source"] != (e.get("source") or "")):
-            link_results.append({"chunk_hash": e.get("chunk_hash"),
-                                 "status": "attribution_mismatch"})
-            continue
-        slice_text = t[cs:ce]
-        expected = e.get("content") or ""
-        key = f'{e.get("company") or ""}\x1f{e.get("source") or ""}\x1f{e.get("page") or 0}\x1f{slice_text}'
-        hash_ok = (hashlib.sha256(key.encode("utf-8")).hexdigest()
-                   == e.get("chunk_hash"))
-        verbatim_ok = slice_text == expected
-        ok = hash_ok and verbatim_ok
-        links_ok += int(ok)
-        link_results.append({"chunk_hash": e.get("chunk_hash"),
-                             "status": "ok" if ok else
-                                       ("hash_mismatch" if not hash_ok
-                                        else "text_mismatch"),
-                             "verbatim": verbatim_ok, "hash_ok": hash_ok})
-
-    n_ev = max(len(evidence), 1)
-    claims_ok = True
-    claim_issues: List[Dict[str, Any]] = []
-    for c in claims:
-        for idx in (c.get("citations") or []):
-            if not (isinstance(idx, int) and 1 <= idx <= len(evidence)):
-                claims_ok = False
-                claim_issues.append({"claim": str(c.get("claim", ""))[:80],
-                                     "bad_citation": idx})
-    verified = (links_checked > 0 and links_ok == links_checked
-                and claims_ok)
-    reason = ("all links verified" if verified else
-              ("no locatable evidence spans" if links_checked == 0
-               else f"{links_checked - links_ok} broken link(s)")
-              if claims_ok else f"{len(claim_issues)} bad citation(s)")
-    # Receipt-Explorer support (read-only, same query results): the page
-    # transcripts and per-link slices let a UI highlight the exact evidence
-    # span; chunk_truth gives the authoritative attribution per chunk.
-    transcripts_out: Dict[str, Dict[str, Any]] = {}
-    for (src, pg), txt in transcripts.items():
-        transcripts_out[f"{src}\x1f{pg}"] = {
-            "source": src, "page": pg,
-            "transcript": txt,
-            "sha256": hashlib.sha256(txt.encode("utf-8")).hexdigest(),
-        }
+    return verify_bundle_core(receipt, claims, evidence, transcripts,
+                              chunk_truth)
     return {
         "verified": verified,
         "links_checked": links_checked,
@@ -1349,6 +1380,113 @@ def verify_receipt_chain(receipt: Dict[str, Any]) -> Dict[str, Any]:
         "transcripts": transcripts_out,
         "attribution": {h: t for h, t in chunk_truth.items()},
     }
+
+
+def build_certificate_bundle(run_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    """Assembles the OFFLINE-VERIFIABLE Compliance Audit Bundle for one
+    grounded run (P2.1, 2026-09-10): everything an external auditor needs
+    to re-verify the certification on an air-gapped machine, with zero
+    access to our API or database.
+
+    Contents:
+      receipt      — the certified answer, claims, evidence (spans+hashes)
+      transcripts  — the cited pages' texts (span-slice targets)
+      chunk_truth  — the authoritative (company, source, page) per hash
+      sources      — per-source pdf_sha256 anchors (auditor re-hashes the
+                     EDGAR-hosted filings independently)
+      signature    — Ed25519 attestation over the canonical payload
+                     (ATTESTATION_PRIVATE_KEY; absent if key not configured)
+
+    The offline verifier (verify_certificate.py, shipped WITH the bundle)
+    re-derives the full chain offline. We deliberately do NOT point it at
+    this codebase — the verifier shares no code with the producer."""
+    tid = tenant_id or get_settings().default_tenant
+    receipt = get_verification_receipt(run_id, tenant_id=tenant_id)
+    if not receipt:
+        raise ValueError(f"no receipt for run {run_id!r}")
+
+    evidence = receipt.get("evidence_json") or []
+    claims = receipt.get("claims_json") or []
+    hashes_needed = sorted({e.get("chunk_hash") for e in evidence
+                            if e.get("chunk_hash")})
+
+    transcripts, chunk_truth, sources = [], [], []
+    if hashes_needed:
+        with get_db_connection(tenant_id=tid) as conn,                 conn.cursor(cursor_factory=extras.DictCursor) as cur:
+            marks = ",".join(["%s"] * len(hashes_needed))
+            cur.execute(f"""SELECT chunk_hash, company, source, page
+                             FROM multi_agent_chunks
+                             WHERE chunk_hash IN ({marks})""", hashes_needed)
+            for r in cur.fetchall():
+                chunk_truth.append({"chunk_hash": r["chunk_hash"],
+                                    "company": r["company"],
+                                    "source": r["source"],
+                                    "page": r["page"]})
+            src_names = sorted({t["source"] for t in chunk_truth})
+            if src_names:
+                marks2 = ",".join(["%s"] * len(src_names))
+                cur.execute(f"""SELECT source, pdf_sha256 FROM source_registry
+                                 WHERE source IN ({marks2})""", src_names)
+                for r in cur.fetchall():
+                    sources.append({"source": r["source"],
+                                    "pdf_sha256": r["pdf_sha256"]})
+        marks3 = ",".join(["%s"] * len({(t["source"]) for t in chunk_truth}))
+        cur_sources = sorted({t["source"] for t in chunk_truth})
+        with get_db_connection(tenant_id=tid) as conn,                 conn.cursor(cursor_factory=extras.DictCursor) as cur:
+            cur.execute(f"""SELECT source, page, transcript FROM page_transcripts
+                             WHERE tenant_id = %s AND corpus_epoch = %s
+                               AND source IN ({marks3})""",
+                        [tid, receipt.get("corpus_epoch")] + cur_sources)
+            for r in cur.fetchall():
+                transcripts.append({"source": r["source"], "page": r["page"],
+                                    "transcript": r["transcript"]})
+
+    cert = {
+        "bundle_type": "adaptive_rag_compliance_certificate",
+        "schema_version": 1,
+        "created_at": __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc).isoformat(),
+        "run_id": run_id,
+        "receipt": receipt,
+        "claims": claims,
+        "evidence": evidence,
+        "chunk_truth": chunk_truth,
+        "transcripts": transcripts,
+        "sources": sources,
+        "corpus_epoch": receipt.get("corpus_epoch"),
+    }
+    cert["signature"] = sign_certificate_payload(cert)
+    return cert
+
+
+def sign_certificate_payload(cert: Dict[str, Any]) -> Dict[str, Any]:
+    """Ed25519 attestation over the canonical payload (everything except
+    the signature block). Private key from ATTESTATION_PRIVATE_KEY
+    (base64, 32 raw bytes — generate with scripts/generate_attestation_key.py).
+    Absent key -> {'status': 'unsigned'} — the hash chain inside the bundle
+    remains fully verifiable offline; the attestation is an additional
+    anti-forgery layer, not the integrity mechanism."""
+    priv_b64 = os.getenv("ATTESTATION_PRIVATE_KEY", "").strip()
+    if not priv_b64:
+        return {"status": "unsigned"}
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey)
+        from cryptography.hazmat.primitives import serialization
+        raw = base64.b64decode(priv_b64)
+        key = Ed25519PrivateKey.from_private_bytes(raw)
+        payload = {k: v for k, v in cert.items() if k != "signature"}
+        canonical = json.dumps(payload, sort_keys=True,
+                               separators=(",", ":"), ensure_ascii=False)
+        sig = key.sign(canonical.encode("utf-8"))
+        pub = key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw)
+        return {"algorithm": "Ed25519", "key_id": "adaptive-rag-attest-1",
+                "public_key": base64.b64encode(pub).decode("ascii"),
+                "signature": base64.b64encode(sig).decode("ascii")}
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)[:200]}
 
 
 def get_source_registry() -> List[Dict[str, Any]]:

@@ -487,9 +487,32 @@ with st.expander("🔏 Receipt Explorer — verify any run (zero LLM tokens)",
                         help="Every grounded run stores a tamper-evident "
                              "receipt: claims → citations → evidence spans → "
                              "transcript slices → recomputed hashes.")
-    if st.button("Verify receipt", disabled=len(rid.strip()) < 3):
-        pass
-    elif len(rid.strip()) >= 3:
+    bcol1, bcol2 = st.columns(2)
+    with bcol1:
+        do_verify = st.button("Verify receipt", disabled=len(rid.strip()) < 3)
+    with bcol2:
+        do_export = st.button("⬇ Download Audit Certificate 🔏",
+                              disabled=len(rid.strip()) < 3,
+                              help="Air-gapped compliance bundle: receipt + "
+                                   "evidence spans + transcripts + Ed25519 "
+                                   "attestation + the stdlib-only offline "
+                                   "verifier. A regulator can re-verify the "
+                                   "proof without this API.")
+    if do_export and len(rid.strip()) >= 3:
+        try:
+            r = _client().get(f"/export/{rid.strip()}")
+            if r.status_code == 200:
+                st.download_button(
+                    "⬇ Save audit_bundle zip", data=r.content,
+                    file_name=f"audit_bundle_{rid.strip()}.zip",
+                    mime="application/zip")
+                st.success(f"Bundle assembled ({len(r.content):,} bytes) — "
+                           "verify offline with: python verify_certificate.py")
+            else:
+                st.error(f"HTTP {r.status_code}: {r.text[:200]}")
+        except httpx.RequestError as exc:
+            st.error(f"Export failed: {exc}")
+    elif do_verify and len(rid.strip()) >= 3:
         _render_receipt_explorer(rid.strip(), tenant.strip() or DEFAULT_TENANT)
 
 # ============================== SEARCH CONSOLE =============================

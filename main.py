@@ -45,7 +45,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
@@ -632,6 +632,72 @@ async def verify(run_id: str, tenant_id: Optional[str] = None,
 
 
 # ============================== POST /feedback =============================
+@app.get("/export/{run_id}")
+async def export_certificate(run_id: str, tenant_id: Optional[str] = None,
+                             auth_tenant: Optional[str] = Depends(require_query_key)):
+    """Downloadable Compliance Audit Bundle (P2.1): receipt + evidence spans
+    + page transcripts + chunk-truth + EDGAR anchors + Ed25519 attestation,
+    packaged with the stdlib-only offline verifier. An external auditor can
+    re-verify the certification on an air-gapped machine with zero access
+    to this API."""
+    import io
+    import zipfile
+    from datetime import datetime as _dt, timezone as _tz
+    tenant = auth_tenant or tenant_id
+    try:
+        bundle = await asyncio.to_thread(
+            db.build_certificate_bundle, run_id, tenant)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Certificate export failed [%s]", run_id)
+        raise HTTPException(status_code=500,
+                            detail="certificate export failed — see server logs") from exc
+    verifier_src = (Path(__file__).parent / "verify_certificate.py").read_text(
+        encoding="utf-8")
+    cert_json = json.dumps(bundle, indent=1, ensure_ascii=False)
+    readme_lines = [
+        "ADAPTIVE-RAG COMPLIANCE AUDIT BUNDLE",
+        f"run_id   : {run_id}",
+        f"exported : {_dt.now(_tz.utc).isoformat()}",
+        "==============================================",
+        "",
+        "OFFLINE VERIFICATION (air-gapped machine, stdlib Python only):",
+        "  1. python verify_certificate.py        -> PASS/FAIL + exit code",
+        "  2. OPTIONAL attestation check (needs pip install cryptography):",
+        "     the script verifies the Ed25519 signature in certificate.json",
+        "     against PUBLIC_KEY.pem embedded in this bundle.",
+        "",
+        "INDEPENDENT SOURCE ANCHORING (recommended):",
+        "  certificate.json[sources] carries the SHA-256 of each source PDF",
+        "  as ingested. These filings are public on SEC EDGAR - download them",
+        "  yourself, hash them, and compare. The bundles page transcripts are",
+        "  thus anchored to documents WE do not control.",
+        "",
+        "WHAT THIS PROVES / DOES NOT PROVE:",
+        "  PROVES : every cited span exists verbatim in the ingested corpus",
+        "           with cryptographic hash custody; claims cite in-range.",
+        "  DOES NOT PROVE : that the ingested corpus matches the original",
+        "           PDFs beyond the recorded pdf_sha256 anchors (verify those",
+        "           against EDGAR yourself - see above), or corpus coverage.",
+    ]
+    readme = chr(10).join(readme_lines) + chr(10)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("certificate.json", cert_json)
+        zf.writestr("verify_certificate.py", verifier_src)
+        zf.writestr("PUBLIC_KEY.pem",
+                    bundle.get("signature", {}).get("public_key", "") or "")
+        zf.writestr("README.txt", readme)
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition":
+                 f'attachment; filename="audit_bundle_{run_id}.zip"',
+                 "X-Request-ID": run_id})
+
+
 @app.post("/feedback", dependencies=[Depends(require_admin)])
 async def feedback(req: FeedbackRequest) -> Dict[str, Any]:
     purged = await asyncio.to_thread(
