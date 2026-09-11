@@ -1,0 +1,718 @@
+{
+ "bundle_type": "adaptive_rag_compliance_certificate",
+ "schema_version": 1,
+ "created_at": "2026-09-11T17:12:15.566403+00:00",
+ "run_id": "1efc9fe87875",
+ "receipt": {
+  "run_id": "1efc9fe87875",
+  "question": "Compare the revenue growth and net income performance between Apple and Meta in Q4 2023.",
+  "answer": "**Executive Summary**  \nApple’s Q4 2023 revenue slipped marginally year‑over‑year, while its net income rose modestly. Meta’s Q4 2023 revenue surged 25 % year‑over‑year, and its net income more than doubled.\n\n**Financial & Strategy Highlights**\n\n*Apple* reported total net sales of **$89,498 million** in Q4 2023, down from **$90,146 million** in Q4 2022【1】. *Apple* posted net income of **$22,956 million** in Q4 2023, up from **$20,721 million** in Q4 2022【2】.  \n\n*Meta* generated revenue of **$40,111 million** in Q4 2023, up from **$32,165 million** in Q4 2022, reflecting a **25 %** year‑over‑year increase【3】. *Meta* recorded net income of **$14,017 million** in Q4 2023, compared with **$4,652 million** in Q4 2022【4】.\n\n**Key Headwinds**\n\n*Apple* faces pressure on its product sales segment, which contributed to the slight revenue contraction. *Meta* must manage elevated cost structures in its Reality Labs division, which continues to weigh on profitability despite strong top‑line growth.\n\n---\n\n### Verified Sources Ledger  \n| Footnote | Company | Document & Page |\n|----------|---------|-----------------|\n| 【1】 | Apple | Apple_Q4_2023.pdf, Page 1 (Condensed Consolidated Statements of Operations – Total net sales) |\n| 【2】 | Apple | Apple_Q4_2023.pdf, Page 1 (Net income line) |\n| 【3】 | Meta | Meta_Q4_2023.pdf, Page 1 (Revenue and % Change column) |\n| 【4】 | Meta | Meta_Q4_2023.pdf, Page 6 (Net income line) |",
+  "claims_json": [
+   {
+    "claim": "**Executive Summary**  \nApple’s Q4 2023 revenue slipped marginally year‑over‑year, while its net income rose modestly.",
+    "citations": []
+   },
+   {
+    "claim": "Meta’s Q4 2023 revenue surged 25 % year‑over‑year, and its net income more than doubled.",
+    "citations": []
+   },
+   {
+    "claim": "**Financial & Strategy Highlights**\n\n*Apple* reported total net sales of **$89,498 million** in Q4 2023, down from **$90,146 million** in Q4 2022【1】.",
+    "citations": [
+     1
+    ]
+   },
+   {
+    "claim": "*Apple* posted net income of **$22,956 million** in Q4 2023, up from **$20,721 million** in Q4 2022【2】.",
+    "citations": [
+     2
+    ]
+   },
+   {
+    "claim": "*Meta* generated revenue of **$40,111 million** in Q4 2023, up from **$32,165 million** in Q4 2022, reflecting a **25 %** year‑over‑year increase【3】.",
+    "citations": [
+     3
+    ]
+   },
+   {
+    "claim": "*Meta* recorded net income of **$14,017 million** in Q4 2023, compared with **$4,652 million** in Q4 2022【4】.",
+    "citations": [
+     4
+    ]
+   },
+   {
+    "claim": "**Key Headwinds**\n\n*Apple* faces pressure on its product sales segment, which contributed to the slight revenue contraction.",
+    "citations": []
+   },
+   {
+    "claim": "*Meta* must manage elevated cost structures in its Reality Labs division, which continues to weigh on profitability despite strong top‑line growth.",
+    "citations": []
+   },
+   {
+    "claim": "---\n\n| Footnote | Company | Document & Page |\n|----------|---------|-----------------|\n| 【1】 | Apple | Apple_Q4_2023.pdf, Page 1 (Condensed Consolidated Statements of Operations – Total net sales) |\n| 【2】 | Apple | Apple_Q4_2023.pdf, Page 1 (Net income line) |\n| 【3】 | Meta | Meta_Q4_2023.pdf, Page 1 (Revenue and % Change column) |\n| 【4】 | Meta | Meta_Q4_2023.pdf, Page 6 (Net income line) |",
+    "citations": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  ],
+  "evidence_json": [
+   {
+    "page": 1,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "TABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Selling, general and administrative | 6,151 |  | 6,440 |  | 24,932 |  | 25,094 |\n| Total operating expenses | 13,458 |  | 13,201 |  | 54,847 |  | 51,345 |\n| Operating income | 26,969 |  | 24,894 |  | 114,301 |  | 119,437 |\n| Other income/(expense), net | 29 |  | (237) |  | (565) |  | (334) |\n| Income before provision for income taxes | 26,998 |  | 24,657 |  | 113,736 |  | 119,103 |\n| Provision for income taxes | 4,042 |  | 3,936 |  | 16,741 |  | 19,300 |\n| Net income | ! 22,956 |  | ! 20,721 |  | ! 96,995 |  | ! 99,803 |\n| Earnings per share: |  |  |  |  |  |  |  |",
+    "char_end": 7166,
+    "char_start": 6502,
+    "chunk_hash": "10de784420b758bdf4a23c6f6bcdcf0545640ac7ec88c11665afd1cee9931047",
+    "arithmetic_ok": null,
+    "contains_table": true,
+    "transcript_version": 1
+   },
+   {
+    "page": 1,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "Provision for income taxes \n \n4,042    \n3,936   \n16,741    \n19,300\nNet income \n! \n22,956  ! \n20,721  ! \n96,995  ! \n99,803\nEarnings per share:\nBasic \n! \n1.47   ! \n1.29   ! \n6.16   ! \n6.15\nDiluted \n! \n1.46   ! \n1.29   ! \n6.13   ! \n6.11\nShares used in computing earnings per share:\nBasic \n \n15,599,434   \n16,030,382    \n15,744,231    \n16,215,963\nDiluted \n \n15,672,400    \n16,118,465    \n15,812,547    \n16,325,819\n(1) Net sales by reportable segment:\nAmericas \n! \n40,115   ! \n39,808  ! \n162,560   ! \n169,658\nEurope \n \n22,463   \n22,795    \n94,294   \n95,118\nGreater China \n \n15,084    \n15,470    \n72,559    \n74,200\nJapan \n \n5,505    \n5,700    \n24,257    \n25,977\nRest of Asia Pacific \n \n6,331    \n6,373",
+    "char_end": 2089,
+    "char_start": 1394,
+    "chunk_hash": "40c0c9be5984196a650cb5429f1f7facde77701c2243c3c4e13bdc6f5c08e504",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 1,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "Apple Inc.\nCONDENSED CONSOLIDATED STATEMENTS OF OPERATIONS (Unaudited) \n(In millions, except number of shares, which are reflected in thousands, and per-share amounts)\nThree Months Ended \n \nTwelve Months Ended\nSeptember 30,\nSeptember 24,\nSeptember 30,\nSeptember 24,\n2023\n2022\n2023\n2022\nNet sales:\nProducts \n! \n67,184   ! \n70,958   ! \n298,085  ! \n316,199\nServices \n \n22,314    \n19,188    \n85,200   \n78,129\nTotal net sales (1) \n \n89,498   \n90,146   \n383,285   \n394,328\nCost of sales:\nProducts \n \n42,586   \n46,387   \n189,282    \n201,471\nServices \n \n6,485   \n5,664   \n24,855    \n22,075\nTotal cost of sales \n \n49,071   \n52,051   \n214,137   \n223,546\nGross margin \n \n40,427   \n38,095   \n169,148   \n170,782",
+    "char_end": 698,
+    "char_start": 0,
+    "chunk_hash": "e6a1f9b3893ed088175fbd2ce3d95a149ca62832f1bf1007a77c4196127a615d",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 1,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "TABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Services | 22,314 |  | 19,188 |  | 85,200 |  | 78,129 |\n| Total net sales (1) | 89,498 |  | 90,146 |  | 383,285 |  | 394,328 |\n| Cost of sales: |  |  |  |  |  |  |  |\n| Products | 42,586 |  | 46,387 |  | 189,282 |  | 201,471 |\n| Services | 6,485 |  | 5,664 |  | 24,855 |  | 22,075 |\n| Total cost of sales | 49,071 |  | 52,051 |  | 214,137 |  | 223,546 |\n| Gross margin | 40,427 |  | 38,095 |  | 169,148 |  | 170,782 |\n| Operating expenses: |  |  |  |  |  |  |  |\n| Research and development | 7,307 |  | 6,761 |  | 29,915 |  | 26,251 |",
+    "char_end": 6500,
+    "char_start": 5873,
+    "chunk_hash": "0ac6c2186ea66396dbc3979918aebce9b954808a9312d21663facb22fdf9ebe7",
+    "arithmetic_ok": null,
+    "contains_table": true,
+    "transcript_version": 1
+   },
+   {
+    "page": 1,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "TABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nTotal net sales (1) :: ! 67,184=89,498 | ! 70,958=90,146 | ! 298,085=383,285 | ! 316,199=394,328\nProducts :: ! 67,184=42,586 | ! 70,958=46,387 | ! 298,085=189,282 | ! 316,199=201,471\nServices :: ! 67,184=6,485 | ! 70,958=5,664 | ! 298,085=24,855 | ! 316,199=22,075\nTotal cost of sales :: ! 67,184=49,071 | ! 70,958=52,051 | ! 298,085=214,137 | ! 316,199=223,546\nGross margin :: ! 67,184=40,427 | ! 70,958=38,095 | ! 298,085=169,148 | ! 316,199=170,782\nResearch and development :: ! 67,184=7,307 | ! 70,958=6,761 | ! 298,085=29,915 | ! 316,199=26,251",
+    "char_end": 3287,
+    "char_start": 2647,
+    "chunk_hash": "310f36b9a46e7a4984b113eb286a17515d161f7201ddbcede78f7fe21861b2a3",
+    "arithmetic_ok": false,
+    "contains_table": true,
+    "transcript_version": 1
+   },
+   {
+    "page": 2,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "TABLE:\n| Current assets: |  |  |  |\n| LIABILITIES AND SHAREHOLDERS’ EQUITY: |  |  |  |\n| Current liabilities: |  |  |  |\n| Accounts payable | ! 62,611 |  | ! 64,115 |\n| Other current liabilities | 58,829 |  | 60,845 |\n| Deferred revenue | 8,061 |  | 7,912 |\n| Commercial paper | 5,985 |  | 9,982 |\n| Term debt | 9,822 |  | 11,128 |\n| Total current liabilities | 145,308 |  | 153,982 |\n| Non-current liabilities: |  |  |  |\n| Term debt | 95,281 |  | 98,959 |\n| Other non-current liabilities | 49,848 |  | 49,142 |\n| Total non-current liabilities | 145,129 |  | 148,101 |\n| Total liabilities | 290,437 |  | 302,083 |\n| Commitments and contingencies |  |  |  |\n| Shareholders’ equity: |  |  |  |",
+    "char_end": 3292,
+    "char_start": 2600,
+    "chunk_hash": "86dcea477dd2211d5187c131b17e3124271a5f4ed187126536c9c5177a1265ab",
+    "arithmetic_ok": null,
+    "contains_table": true,
+    "transcript_version": 1
+   },
+   {
+    "page": 2,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "120,805\nProperty, plant and equipment, net \n \n43,715    \n42,117\nOther non-current assets \n \n64,758    \n54,428\nTotal non-current assets \n \n209,017   \n217,350\nTotal assets \n! \n352,583  ! \n352,755  \n \n \n  \nLIABILITIES AND SHAREHOLDERS’ EQUITY:\nCurrent liabilities:\nAccounts payable \n! \n62,611   ! \n64,115\nOther current liabilities \n \n58,829   \n60,845\nDeferred revenue \n \n8,061    \n7,912\nCommercial paper \n \n5,985    \n9,982\nTerm debt \n \n9,822    \n11,128\nTotal current liabilities \n \n145,308   \n153,982\nNon-current liabilities:\nTerm debt \n \n95,281    \n98,959\nOther non-current liabilities \n \n49,848   \n49,142\nTotal non-current liabilities \n \n145,129   \n148,101\nTotal liabilities \n \n290,437   \n302,083",
+    "char_end": 1377,
+    "char_start": 682,
+    "chunk_hash": "c616eda92d285f5d561faa35b9cdffc445d501525c592373b4fb32430de5a207",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 3,
+    "source": "Apple_Q4_2023.pdf",
+    "company": "Apple",
+    "content": "(10,959)   \n(10,708)\nOther \n \n(1,337)   \n(2,086)\nCash generated by/(used in) investing activities \n \n3,705   \n(22,354)\nFinancing activities:\nPayments for taxes related to net share settlement of equity awards \n \n(5,431)   \n(6,223)\nPayments for dividends and dividend equivalents \n \n(15,025)   \n(14,841)\nRepurchases of common stock \n \n(77,550)   \n(89,402)\nProceeds from issuance of term debt, net \n \n5,228    \n5,465\nRepayments of term debt \n \n(11,151)   \n(9,543)\nProceeds from/(Repayments of) commercial paper, net \n \n(3,978)   \n3,955\nOther \n \n(581)   \n(160)\nCash used in financing activities \n \n(108,488)  \n(110,749)\nIncrease/(Decrease) in cash, cash equivalents and restricted cash \n \n5,760",
+    "char_end": 2050,
+    "char_start": 1359,
+    "chunk_hash": "04e8c5022d39eaa51fb2db3004efbdc9e8a233f02cf63f936f765ed028d6e863",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 1,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "Meta Reports Fourth Quarter and Full Year 2023 Results; Initiates Quarterly Dividend\nMENLO PARK, Calif. – February 1, 2024 – Meta Platforms, Inc. (Nasdaq: META) today reported financial results for the quarter \nand full year ended December 31, 2023.\n\"We had a good quarter as our community and business continue to grow,\" said Mark Zuckerberg, Meta founder and CEO. \"We've \nmade a lot of progress on our vision for advancing AI and the metaverse.\"\nFourth Quarter and Full Year 2023 Financial Highlights\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n% Change\nIn millions, except percentages and per \nshare amounts\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 \n$ \n32,165 \n 25 % $ \n134,902",
+    "char_end": 698,
+    "char_start": 0,
+    "chunk_hash": "bd8a945fd367b4e606d577750f885f6505dc20d3886aa18ea4aa2f9cb3241130",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 3,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "TABLE:\n| We anticipate our full-year 2024 capital expenditures will be in the range of (our prior range (centers as we ramp up construction on sites with our previously announced new data center architecture | . We expect growth will be driven by investments in servers, including both | $ | 30-37 billion | , a $2 billion increase of the high end of | AI and | non- | AI (. Our updated outlook | hardware, and data |\n| reflects our evolving understanding of our |  |  |  |  |  |  |  |  |",
+    "char_end": 3912,
+    "char_start": 3424,
+    "chunk_hash": "e4d75aece7f844185943a90f8f6cfa3c62c46b03d017063a0e6b17e366a6e600",
+    "arithmetic_ok": null,
+    "contains_table": true,
+    "transcript_version": 1
+   },
+   {
+    "page": 6,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "TABLE:\nCost of revenue :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=7,695 8,336 25,959 25,249\n| Net income | $ 14,017 $ 4,652 $ 39,098 $ 23,200 |\n| Earnings per share attributable to Class A and Class B common stockholders: |  |\n| Basic | $ 5.46 $ 1.76 $ 15.19 $ 8.63 |\n| Diluted | $ 5.33 $ 1.76 $ 14.87 $ 8.59 |\n| Weighted-average shares used to compute earnings per share attributable to Class A and Class B common stockholders: |  |\n| Basic | 2,566 2,638 2,574 2,687 |\n| Diluted | 2,630 2,640 2,629 2,702 |",
+    "char_end": 3853,
+    "char_start": 3348,
+    "chunk_hash": "27412bffbb5b2b4574d742aff4ca13b562e6e5f4e0d80bdb43c94455ce6e74e5",
+    "arithmetic_ok": null,
+    "contains_table": true,
+    "transcript_version": 1
+   },
+   {
+    "page": 6,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "CONDENSED CONSOLIDATED STATEMENTS OF INCOME\n(In millions, except per share amounts)\n(Unaudited)\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 $ \n32,165 $ \n134,902 $ \n116,609 \nCosts and expenses:\n \nCost of revenue\n \n7,695  \n8,336  \n25,959  \n25,249 \nResearch and development\n \n10,517  \n9,771  \n38,483  \n35,338 \nMarketing and sales\n \n3,226  \n4,574  \n12,301  \n15,262 \nGeneral and administrative\n \n2,289  \n3,085  \n11,408  \n11,816 \nTotal costs and expenses\n \n23,727  \n25,766  \n88,151  \n87,665 \nIncome from operations\n \n16,384  \n6,399  \n46,751  \n28,944 \nInterest and other income (expense), net\n \n424  \n(250)  \n677  \n(125)",
+    "char_end": 672,
+    "char_start": 0,
+    "chunk_hash": "149a41a06a26c6525cc1d948661cab1a8a9eae0223e17de2a336bc756848f99c",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 7,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "6,794  \n6,583 \nTotal assets\n$ \n229,623 $ \n185,727\nLiabilities and stockholders' equity\nCurrent liabilities:\nAccounts payable\n$ \n4,849 $ \n4,990 \nPartners payable\n \n863  \n1,117 \nOperating lease liabilities, current\n \n1,623  \n1,367 \nAccrued expenses and other current liabilities\n \n24,625  \n19,552 \nTotal current liabilities\n \n31,960  \n27,026 \nOperating lease liabilities, non-current\n \n17,226  \n15,301 \nLong-term debt\n \n18,385  \n9,923 \nOther liabilities\n \n8,884  \n7,764 \nTotal liabilities\n \n76,455  \n60,014 \nCommitments and contingencies\nStockholders' equity:\nCommon stock and additional paid-in capital\n \n73,253  \n64,444 \nAccumulated other comprehensive loss\n \n(2,155)  \n(3,530) \nRetained earnings",
+    "char_end": 1390,
+    "char_start": 694,
+    "chunk_hash": "6d5b88ea8d02997f17e243fbf1e40b37f53518c0ef8ea96d82b1deb803683899",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 8,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "Cash flows from financing activities\nTaxes paid related to net share settlement of equity awards\n \n(2,223)  \n(656)  \n(7,012)  \n(3,595) \nRepurchases of Class A common stock\n \n(5,942)  \n(6,863)  \n(19,774)  \n(27,956) \nProceeds from issuance of long-term debt, net\n \n—  \n—  \n8,455  \n9,921 \nPrincipal payments on finance leases\n \n(307)  \n(235)  \n(1,058)  \n(850) \nOther financing activities\n \n71  \n695  \n(111)  \n344 \nNet cash used in financing activities\n \n(8,401)  \n(7,059)  \n(19,500)  \n(22,136) \nEffect of exchange rate changes on cash, cash equivalents, and restricted \ncash\n \n396  \n424  \n113  \n(638) \nNet increase (decrease) in cash, cash equivalents, and restricted cash\n \n4,927  \n345  \n27,231",
+    "char_end": 2772,
+    "char_start": 2080,
+    "chunk_hash": "4faad99b05e2ed5737882608ca26108d6c2fd32a9c244473abba8784803f07d0",
+    "arithmetic_ok": null,
+    "contains_table": false,
+    "transcript_version": 1
+   },
+   {
+    "page": 10,
+    "source": "Meta_Q4_2023.pdf",
+    "company": "Meta",
+    "content": "TABLE:\n| Revenue: |  |  |\n| Advertising $ 38,706 $ 31,254 $ 131,948 |  | $ 113,642 |\n| Other revenue 334 184 1,058 808 |  |  |\n| Family of Apps 39,040 31,438 133,006 114,450 |  |  |\n| Reality Labs 1,071 727 1,896 2,159 |  |  |\n| Total revenue $ 40,111 $ 32,165 $ 134,902 $ 116,609 |  |  |\n| Income (loss) from operations: |  |  |\n| Family of Apps $ 21,030 $ 10,678 $ 62,871 $ 42,661 |  |  |\n| Reality Labs (4,646) (4,279) (16,120) (13,717) |  |  |\n| Total income from operations $ 16,384 $ 6,399 $ 46,751 $ 28,944 |  |  |",
+    "char_end": 1642,
+    "char_start": 1121,
+    "chunk_hash": "3b89c6a87290c0de8a234dea09f77183445c855e80d947db980724d5f2a7d088",
+    "arithmetic_ok": null,
+    "contains_table": true,
+    "transcript_version": 1
+   }
+  ],
+  "n_claims": 9,
+  "n_evidence": 15,
+  "audit_verdict": "grounded",
+  "contradictions_json": [
+   {
+    "kind": "value",
+    "unit": "$",
+    "family": "cash",
+    "period": null,
+    "values": [
+     60014000000.0,
+     302083000000.0
+    ],
+    "company": "apple",
+    "rel_gap": 0.8013,
+    "contexts": [
+     "$60,014 million (2022)\n    *   Cash Flow from Financing Activities: Net cash used of $(19,500) million in 2023.",
+     "$302,083 million (2022)\n    *   Cash Flow from Financing Activities: Net cash used of $(108,488) million in 2023."
+    ]
+   },
+   {
+    "kind": "value",
+    "unit": "$",
+    "family": "net_income",
+    "period": "Q4-2023",
+    "values": [
+     22956000000.0,
+     22956000000.0,
+     96995000000.0
+    ],
+    "company": "apple",
+    "rel_gap": 0.7633,
+    "contexts": [
+     "**Apple**\n*   **Q4 2023 Revenue:** $96,995 million (Note: The provided text for Apple lists \"Net income\" as $96,995 mill",
+     "**Apple**\n*   **Q4 2023 Revenue:** $96,995 million (Note: The provided text for Apple lists \"Net income\" as $96,995 mill",
+     "*   *Correction/Refinement:* The Apple evidence provided lists \"Net income\" as $22,956 million for Q4 2023."
+    ]
+   },
+   {
+    "kind": "value",
+    "unit": "count",
+    "family": "revenue",
+    "period": null,
+    "values": [
+     15084.0,
+     22463.0,
+     40115.0
+    ],
+    "company": "apple",
+    "rel_gap": 0.624,
+    "contexts": [
+     "The segment sales are: Americas 40,115 + Europe 22,463 + Greater China 15,084 + Japan 5,505 + Rest of Asia Pacific 6,331",
+     "The segment sales are: Americas 40,115 + Europe 22,463 + Greater China 15,084 + Japan 5,505 + Rest of Asia Pacific 6,331",
+     "The segment sales are: Americas 40,115 + Europe 22,463 + Greater China 15,084 + Japan 5,505 + Rest of Asia Pacific 6,331"
+    ]
+   }
+  ],
+  "corpus_epoch": 9,
+  "created_at": "2026-09-08T09:59:48.574598+00:00",
+  "tenant_id": "default"
+ },
+ "claims": [
+  {
+   "claim": "**Executive Summary**  \nApple’s Q4 2023 revenue slipped marginally year‑over‑year, while its net income rose modestly.",
+   "citations": []
+  },
+  {
+   "claim": "Meta’s Q4 2023 revenue surged 25 % year‑over‑year, and its net income more than doubled.",
+   "citations": []
+  },
+  {
+   "claim": "**Financial & Strategy Highlights**\n\n*Apple* reported total net sales of **$89,498 million** in Q4 2023, down from **$90,146 million** in Q4 2022【1】.",
+   "citations": [
+    1
+   ]
+  },
+  {
+   "claim": "*Apple* posted net income of **$22,956 million** in Q4 2023, up from **$20,721 million** in Q4 2022【2】.",
+   "citations": [
+    2
+   ]
+  },
+  {
+   "claim": "*Meta* generated revenue of **$40,111 million** in Q4 2023, up from **$32,165 million** in Q4 2022, reflecting a **25 %** year‑over‑year increase【3】.",
+   "citations": [
+    3
+   ]
+  },
+  {
+   "claim": "*Meta* recorded net income of **$14,017 million** in Q4 2023, compared with **$4,652 million** in Q4 2022【4】.",
+   "citations": [
+    4
+   ]
+  },
+  {
+   "claim": "**Key Headwinds**\n\n*Apple* faces pressure on its product sales segment, which contributed to the slight revenue contraction.",
+   "citations": []
+  },
+  {
+   "claim": "*Meta* must manage elevated cost structures in its Reality Labs division, which continues to weigh on profitability despite strong top‑line growth.",
+   "citations": []
+  },
+  {
+   "claim": "---\n\n| Footnote | Company | Document & Page |\n|----------|---------|-----------------|\n| 【1】 | Apple | Apple_Q4_2023.pdf, Page 1 (Condensed Consolidated Statements of Operations – Total net sales) |\n| 【2】 | Apple | Apple_Q4_2023.pdf, Page 1 (Net income line) |\n| 【3】 | Meta | Meta_Q4_2023.pdf, Page 1 (Revenue and % Change column) |\n| 【4】 | Meta | Meta_Q4_2023.pdf, Page 6 (Net income line) |",
+   "citations": [
+    1,
+    2,
+    3,
+    4
+   ]
+  }
+ ],
+ "evidence": [
+  {
+   "page": 1,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "TABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Selling, general and administrative | 6,151 |  | 6,440 |  | 24,932 |  | 25,094 |\n| Total operating expenses | 13,458 |  | 13,201 |  | 54,847 |  | 51,345 |\n| Operating income | 26,969 |  | 24,894 |  | 114,301 |  | 119,437 |\n| Other income/(expense), net | 29 |  | (237) |  | (565) |  | (334) |\n| Income before provision for income taxes | 26,998 |  | 24,657 |  | 113,736 |  | 119,103 |\n| Provision for income taxes | 4,042 |  | 3,936 |  | 16,741 |  | 19,300 |\n| Net income | ! 22,956 |  | ! 20,721 |  | ! 96,995 |  | ! 99,803 |\n| Earnings per share: |  |  |  |  |  |  |  |",
+   "char_end": 7166,
+   "char_start": 6502,
+   "chunk_hash": "10de784420b758bdf4a23c6f6bcdcf0545640ac7ec88c11665afd1cee9931047",
+   "arithmetic_ok": null,
+   "contains_table": true,
+   "transcript_version": 1
+  },
+  {
+   "page": 1,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "Provision for income taxes \n \n4,042    \n3,936   \n16,741    \n19,300\nNet income \n! \n22,956  ! \n20,721  ! \n96,995  ! \n99,803\nEarnings per share:\nBasic \n! \n1.47   ! \n1.29   ! \n6.16   ! \n6.15\nDiluted \n! \n1.46   ! \n1.29   ! \n6.13   ! \n6.11\nShares used in computing earnings per share:\nBasic \n \n15,599,434   \n16,030,382    \n15,744,231    \n16,215,963\nDiluted \n \n15,672,400    \n16,118,465    \n15,812,547    \n16,325,819\n(1) Net sales by reportable segment:\nAmericas \n! \n40,115   ! \n39,808  ! \n162,560   ! \n169,658\nEurope \n \n22,463   \n22,795    \n94,294   \n95,118\nGreater China \n \n15,084    \n15,470    \n72,559    \n74,200\nJapan \n \n5,505    \n5,700    \n24,257    \n25,977\nRest of Asia Pacific \n \n6,331    \n6,373",
+   "char_end": 2089,
+   "char_start": 1394,
+   "chunk_hash": "40c0c9be5984196a650cb5429f1f7facde77701c2243c3c4e13bdc6f5c08e504",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 1,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "Apple Inc.\nCONDENSED CONSOLIDATED STATEMENTS OF OPERATIONS (Unaudited) \n(In millions, except number of shares, which are reflected in thousands, and per-share amounts)\nThree Months Ended \n \nTwelve Months Ended\nSeptember 30,\nSeptember 24,\nSeptember 30,\nSeptember 24,\n2023\n2022\n2023\n2022\nNet sales:\nProducts \n! \n67,184   ! \n70,958   ! \n298,085  ! \n316,199\nServices \n \n22,314    \n19,188    \n85,200   \n78,129\nTotal net sales (1) \n \n89,498   \n90,146   \n383,285   \n394,328\nCost of sales:\nProducts \n \n42,586   \n46,387   \n189,282    \n201,471\nServices \n \n6,485   \n5,664   \n24,855    \n22,075\nTotal cost of sales \n \n49,071   \n52,051   \n214,137   \n223,546\nGross margin \n \n40,427   \n38,095   \n169,148   \n170,782",
+   "char_end": 698,
+   "char_start": 0,
+   "chunk_hash": "e6a1f9b3893ed088175fbd2ce3d95a149ca62832f1bf1007a77c4196127a615d",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 1,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "TABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Services | 22,314 |  | 19,188 |  | 85,200 |  | 78,129 |\n| Total net sales (1) | 89,498 |  | 90,146 |  | 383,285 |  | 394,328 |\n| Cost of sales: |  |  |  |  |  |  |  |\n| Products | 42,586 |  | 46,387 |  | 189,282 |  | 201,471 |\n| Services | 6,485 |  | 5,664 |  | 24,855 |  | 22,075 |\n| Total cost of sales | 49,071 |  | 52,051 |  | 214,137 |  | 223,546 |\n| Gross margin | 40,427 |  | 38,095 |  | 169,148 |  | 170,782 |\n| Operating expenses: |  |  |  |  |  |  |  |\n| Research and development | 7,307 |  | 6,761 |  | 29,915 |  | 26,251 |",
+   "char_end": 6500,
+   "char_start": 5873,
+   "chunk_hash": "0ac6c2186ea66396dbc3979918aebce9b954808a9312d21663facb22fdf9ebe7",
+   "arithmetic_ok": null,
+   "contains_table": true,
+   "transcript_version": 1
+  },
+  {
+   "page": 1,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "TABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nTotal net sales (1) :: ! 67,184=89,498 | ! 70,958=90,146 | ! 298,085=383,285 | ! 316,199=394,328\nProducts :: ! 67,184=42,586 | ! 70,958=46,387 | ! 298,085=189,282 | ! 316,199=201,471\nServices :: ! 67,184=6,485 | ! 70,958=5,664 | ! 298,085=24,855 | ! 316,199=22,075\nTotal cost of sales :: ! 67,184=49,071 | ! 70,958=52,051 | ! 298,085=214,137 | ! 316,199=223,546\nGross margin :: ! 67,184=40,427 | ! 70,958=38,095 | ! 298,085=169,148 | ! 316,199=170,782\nResearch and development :: ! 67,184=7,307 | ! 70,958=6,761 | ! 298,085=29,915 | ! 316,199=26,251",
+   "char_end": 3287,
+   "char_start": 2647,
+   "chunk_hash": "310f36b9a46e7a4984b113eb286a17515d161f7201ddbcede78f7fe21861b2a3",
+   "arithmetic_ok": false,
+   "contains_table": true,
+   "transcript_version": 1
+  },
+  {
+   "page": 2,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "TABLE:\n| Current assets: |  |  |  |\n| LIABILITIES AND SHAREHOLDERS’ EQUITY: |  |  |  |\n| Current liabilities: |  |  |  |\n| Accounts payable | ! 62,611 |  | ! 64,115 |\n| Other current liabilities | 58,829 |  | 60,845 |\n| Deferred revenue | 8,061 |  | 7,912 |\n| Commercial paper | 5,985 |  | 9,982 |\n| Term debt | 9,822 |  | 11,128 |\n| Total current liabilities | 145,308 |  | 153,982 |\n| Non-current liabilities: |  |  |  |\n| Term debt | 95,281 |  | 98,959 |\n| Other non-current liabilities | 49,848 |  | 49,142 |\n| Total non-current liabilities | 145,129 |  | 148,101 |\n| Total liabilities | 290,437 |  | 302,083 |\n| Commitments and contingencies |  |  |  |\n| Shareholders’ equity: |  |  |  |",
+   "char_end": 3292,
+   "char_start": 2600,
+   "chunk_hash": "86dcea477dd2211d5187c131b17e3124271a5f4ed187126536c9c5177a1265ab",
+   "arithmetic_ok": null,
+   "contains_table": true,
+   "transcript_version": 1
+  },
+  {
+   "page": 2,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "120,805\nProperty, plant and equipment, net \n \n43,715    \n42,117\nOther non-current assets \n \n64,758    \n54,428\nTotal non-current assets \n \n209,017   \n217,350\nTotal assets \n! \n352,583  ! \n352,755  \n \n \n  \nLIABILITIES AND SHAREHOLDERS’ EQUITY:\nCurrent liabilities:\nAccounts payable \n! \n62,611   ! \n64,115\nOther current liabilities \n \n58,829   \n60,845\nDeferred revenue \n \n8,061    \n7,912\nCommercial paper \n \n5,985    \n9,982\nTerm debt \n \n9,822    \n11,128\nTotal current liabilities \n \n145,308   \n153,982\nNon-current liabilities:\nTerm debt \n \n95,281    \n98,959\nOther non-current liabilities \n \n49,848   \n49,142\nTotal non-current liabilities \n \n145,129   \n148,101\nTotal liabilities \n \n290,437   \n302,083",
+   "char_end": 1377,
+   "char_start": 682,
+   "chunk_hash": "c616eda92d285f5d561faa35b9cdffc445d501525c592373b4fb32430de5a207",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 3,
+   "source": "Apple_Q4_2023.pdf",
+   "company": "Apple",
+   "content": "(10,959)   \n(10,708)\nOther \n \n(1,337)   \n(2,086)\nCash generated by/(used in) investing activities \n \n3,705   \n(22,354)\nFinancing activities:\nPayments for taxes related to net share settlement of equity awards \n \n(5,431)   \n(6,223)\nPayments for dividends and dividend equivalents \n \n(15,025)   \n(14,841)\nRepurchases of common stock \n \n(77,550)   \n(89,402)\nProceeds from issuance of term debt, net \n \n5,228    \n5,465\nRepayments of term debt \n \n(11,151)   \n(9,543)\nProceeds from/(Repayments of) commercial paper, net \n \n(3,978)   \n3,955\nOther \n \n(581)   \n(160)\nCash used in financing activities \n \n(108,488)  \n(110,749)\nIncrease/(Decrease) in cash, cash equivalents and restricted cash \n \n5,760",
+   "char_end": 2050,
+   "char_start": 1359,
+   "chunk_hash": "04e8c5022d39eaa51fb2db3004efbdc9e8a233f02cf63f936f765ed028d6e863",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 1,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "Meta Reports Fourth Quarter and Full Year 2023 Results; Initiates Quarterly Dividend\nMENLO PARK, Calif. – February 1, 2024 – Meta Platforms, Inc. (Nasdaq: META) today reported financial results for the quarter \nand full year ended December 31, 2023.\n\"We had a good quarter as our community and business continue to grow,\" said Mark Zuckerberg, Meta founder and CEO. \"We've \nmade a lot of progress on our vision for advancing AI and the metaverse.\"\nFourth Quarter and Full Year 2023 Financial Highlights\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n% Change\nIn millions, except percentages and per \nshare amounts\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 \n$ \n32,165 \n 25 % $ \n134,902",
+   "char_end": 698,
+   "char_start": 0,
+   "chunk_hash": "bd8a945fd367b4e606d577750f885f6505dc20d3886aa18ea4aa2f9cb3241130",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 3,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "TABLE:\n| We anticipate our full-year 2024 capital expenditures will be in the range of (our prior range (centers as we ramp up construction on sites with our previously announced new data center architecture | . We expect growth will be driven by investments in servers, including both | $ | 30-37 billion | , a $2 billion increase of the high end of | AI and | non- | AI (. Our updated outlook | hardware, and data |\n| reflects our evolving understanding of our |  |  |  |  |  |  |  |  |",
+   "char_end": 3912,
+   "char_start": 3424,
+   "chunk_hash": "e4d75aece7f844185943a90f8f6cfa3c62c46b03d017063a0e6b17e366a6e600",
+   "arithmetic_ok": null,
+   "contains_table": true,
+   "transcript_version": 1
+  },
+  {
+   "page": 6,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "TABLE:\nCost of revenue :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=7,695 8,336 25,959 25,249\n| Net income | $ 14,017 $ 4,652 $ 39,098 $ 23,200 |\n| Earnings per share attributable to Class A and Class B common stockholders: |  |\n| Basic | $ 5.46 $ 1.76 $ 15.19 $ 8.63 |\n| Diluted | $ 5.33 $ 1.76 $ 14.87 $ 8.59 |\n| Weighted-average shares used to compute earnings per share attributable to Class A and Class B common stockholders: |  |\n| Basic | 2,566 2,638 2,574 2,687 |\n| Diluted | 2,630 2,640 2,629 2,702 |",
+   "char_end": 3853,
+   "char_start": 3348,
+   "chunk_hash": "27412bffbb5b2b4574d742aff4ca13b562e6e5f4e0d80bdb43c94455ce6e74e5",
+   "arithmetic_ok": null,
+   "contains_table": true,
+   "transcript_version": 1
+  },
+  {
+   "page": 6,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "CONDENSED CONSOLIDATED STATEMENTS OF INCOME\n(In millions, except per share amounts)\n(Unaudited)\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 $ \n32,165 $ \n134,902 $ \n116,609 \nCosts and expenses:\n \nCost of revenue\n \n7,695  \n8,336  \n25,959  \n25,249 \nResearch and development\n \n10,517  \n9,771  \n38,483  \n35,338 \nMarketing and sales\n \n3,226  \n4,574  \n12,301  \n15,262 \nGeneral and administrative\n \n2,289  \n3,085  \n11,408  \n11,816 \nTotal costs and expenses\n \n23,727  \n25,766  \n88,151  \n87,665 \nIncome from operations\n \n16,384  \n6,399  \n46,751  \n28,944 \nInterest and other income (expense), net\n \n424  \n(250)  \n677  \n(125)",
+   "char_end": 672,
+   "char_start": 0,
+   "chunk_hash": "149a41a06a26c6525cc1d948661cab1a8a9eae0223e17de2a336bc756848f99c",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 7,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "6,794  \n6,583 \nTotal assets\n$ \n229,623 $ \n185,727\nLiabilities and stockholders' equity\nCurrent liabilities:\nAccounts payable\n$ \n4,849 $ \n4,990 \nPartners payable\n \n863  \n1,117 \nOperating lease liabilities, current\n \n1,623  \n1,367 \nAccrued expenses and other current liabilities\n \n24,625  \n19,552 \nTotal current liabilities\n \n31,960  \n27,026 \nOperating lease liabilities, non-current\n \n17,226  \n15,301 \nLong-term debt\n \n18,385  \n9,923 \nOther liabilities\n \n8,884  \n7,764 \nTotal liabilities\n \n76,455  \n60,014 \nCommitments and contingencies\nStockholders' equity:\nCommon stock and additional paid-in capital\n \n73,253  \n64,444 \nAccumulated other comprehensive loss\n \n(2,155)  \n(3,530) \nRetained earnings",
+   "char_end": 1390,
+   "char_start": 694,
+   "chunk_hash": "6d5b88ea8d02997f17e243fbf1e40b37f53518c0ef8ea96d82b1deb803683899",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 8,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "Cash flows from financing activities\nTaxes paid related to net share settlement of equity awards\n \n(2,223)  \n(656)  \n(7,012)  \n(3,595) \nRepurchases of Class A common stock\n \n(5,942)  \n(6,863)  \n(19,774)  \n(27,956) \nProceeds from issuance of long-term debt, net\n \n—  \n—  \n8,455  \n9,921 \nPrincipal payments on finance leases\n \n(307)  \n(235)  \n(1,058)  \n(850) \nOther financing activities\n \n71  \n695  \n(111)  \n344 \nNet cash used in financing activities\n \n(8,401)  \n(7,059)  \n(19,500)  \n(22,136) \nEffect of exchange rate changes on cash, cash equivalents, and restricted \ncash\n \n396  \n424  \n113  \n(638) \nNet increase (decrease) in cash, cash equivalents, and restricted cash\n \n4,927  \n345  \n27,231",
+   "char_end": 2772,
+   "char_start": 2080,
+   "chunk_hash": "4faad99b05e2ed5737882608ca26108d6c2fd32a9c244473abba8784803f07d0",
+   "arithmetic_ok": null,
+   "contains_table": false,
+   "transcript_version": 1
+  },
+  {
+   "page": 10,
+   "source": "Meta_Q4_2023.pdf",
+   "company": "Meta",
+   "content": "TABLE:\n| Revenue: |  |  |\n| Advertising $ 38,706 $ 31,254 $ 131,948 |  | $ 113,642 |\n| Other revenue 334 184 1,058 808 |  |  |\n| Family of Apps 39,040 31,438 133,006 114,450 |  |  |\n| Reality Labs 1,071 727 1,896 2,159 |  |  |\n| Total revenue $ 40,111 $ 32,165 $ 134,902 $ 116,609 |  |  |\n| Income (loss) from operations: |  |  |\n| Family of Apps $ 21,030 $ 10,678 $ 62,871 $ 42,661 |  |  |\n| Reality Labs (4,646) (4,279) (16,120) (13,717) |  |  |\n| Total income from operations $ 16,384 $ 6,399 $ 46,751 $ 28,944 |  |  |",
+   "char_end": 1642,
+   "char_start": 1121,
+   "chunk_hash": "3b89c6a87290c0de8a234dea09f77183445c855e80d947db980724d5f2a7d088",
+   "arithmetic_ok": null,
+   "contains_table": true,
+   "transcript_version": 1
+  }
+ ],
+ "chunk_truth": [
+  {
+   "chunk_hash": "bd8a945fd367b4e606d577750f885f6505dc20d3886aa18ea4aa2f9cb3241130",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 1
+  },
+  {
+   "chunk_hash": "e4d75aece7f844185943a90f8f6cfa3c62c46b03d017063a0e6b17e366a6e600",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 3
+  },
+  {
+   "chunk_hash": "149a41a06a26c6525cc1d948661cab1a8a9eae0223e17de2a336bc756848f99c",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 6
+  },
+  {
+   "chunk_hash": "27412bffbb5b2b4574d742aff4ca13b562e6e5f4e0d80bdb43c94455ce6e74e5",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 6
+  },
+  {
+   "chunk_hash": "6d5b88ea8d02997f17e243fbf1e40b37f53518c0ef8ea96d82b1deb803683899",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 7
+  },
+  {
+   "chunk_hash": "4faad99b05e2ed5737882608ca26108d6c2fd32a9c244473abba8784803f07d0",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 8
+  },
+  {
+   "chunk_hash": "3b89c6a87290c0de8a234dea09f77183445c855e80d947db980724d5f2a7d088",
+   "company": "Meta",
+   "source": "Meta_Q4_2023.pdf",
+   "page": 10
+  },
+  {
+   "chunk_hash": "e6a1f9b3893ed088175fbd2ce3d95a149ca62832f1bf1007a77c4196127a615d",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 1
+  },
+  {
+   "chunk_hash": "40c0c9be5984196a650cb5429f1f7facde77701c2243c3c4e13bdc6f5c08e504",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 1
+  },
+  {
+   "chunk_hash": "310f36b9a46e7a4984b113eb286a17515d161f7201ddbcede78f7fe21861b2a3",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 1
+  },
+  {
+   "chunk_hash": "0ac6c2186ea66396dbc3979918aebce9b954808a9312d21663facb22fdf9ebe7",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 1
+  },
+  {
+   "chunk_hash": "10de784420b758bdf4a23c6f6bcdcf0545640ac7ec88c11665afd1cee9931047",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 1
+  },
+  {
+   "chunk_hash": "c616eda92d285f5d561faa35b9cdffc445d501525c592373b4fb32430de5a207",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 2
+  },
+  {
+   "chunk_hash": "86dcea477dd2211d5187c131b17e3124271a5f4ed187126536c9c5177a1265ab",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 2
+  },
+  {
+   "chunk_hash": "04e8c5022d39eaa51fb2db3004efbdc9e8a233f02cf63f936f765ed028d6e863",
+   "company": "Apple",
+   "source": "Apple_Q4_2023.pdf",
+   "page": 3
+  }
+ ],
+ "transcripts": [
+  {
+   "source": "Apple_Q4_2023.pdf",
+   "page": 1,
+   "transcript": "Apple Inc.\nCONDENSED CONSOLIDATED STATEMENTS OF OPERATIONS (Unaudited) \n(In millions, except number of shares, which are reflected in thousands, and per-share amounts)\nThree Months Ended \n \nTwelve Months Ended\nSeptember 30,\nSeptember 24,\nSeptember 30,\nSeptember 24,\n2023\n2022\n2023\n2022\nNet sales:\nProducts \n! \n67,184   ! \n70,958   ! \n298,085  ! \n316,199\nServices \n \n22,314    \n19,188    \n85,200   \n78,129\nTotal net sales (1) \n \n89,498   \n90,146   \n383,285   \n394,328\nCost of sales:\nProducts \n \n42,586   \n46,387   \n189,282    \n201,471\nServices \n \n6,485   \n5,664   \n24,855    \n22,075\nTotal cost of sales \n \n49,071   \n52,051   \n214,137   \n223,546\nGross margin \n \n40,427   \n38,095   \n169,148   \n170,782\n\nTotal cost of sales \n \n49,071   \n52,051   \n214,137   \n223,546\nGross margin \n \n40,427   \n38,095   \n169,148   \n170,782  \n \n \n  \n  \n  \nOperating expenses:\nResearch and development \n \n7,307    \n6,761    \n29,915    \n26,251\nSelling, general and administrative \n \n6,151    \n6,440   \n24,932    \n25,094\nTotal operating expenses \n \n13,458   \n13,201   \n54,847   \n51,345  \n \n \n  \n  \n  \nOperating income \n \n26,969   \n24,894   \n114,301    \n119,437\nOther income/(expense), net \n \n29    \n(237)   \n(565)   \n(334)\nIncome before provision for income taxes \n \n26,998   \n24,657   \n113,736   \n119,103\nProvision for income taxes \n \n4,042    \n3,936   \n16,741    \n19,300\nNet income \n! \n22,956  ! \n20,721  ! \n96,995  !\n\nProvision for income taxes \n \n4,042    \n3,936   \n16,741    \n19,300\nNet income \n! \n22,956  ! \n20,721  ! \n96,995  ! \n99,803\nEarnings per share:\nBasic \n! \n1.47   ! \n1.29   ! \n6.16   ! \n6.15\nDiluted \n! \n1.46   ! \n1.29   ! \n6.13   ! \n6.11\nShares used in computing earnings per share:\nBasic \n \n15,599,434   \n16,030,382    \n15,744,231    \n16,215,963\nDiluted \n \n15,672,400    \n16,118,465    \n15,812,547    \n16,325,819\n(1) Net sales by reportable segment:\nAmericas \n! \n40,115   ! \n39,808  ! \n162,560   ! \n169,658\nEurope \n \n22,463   \n22,795    \n94,294   \n95,118\nGreater China \n \n15,084    \n15,470    \n72,559    \n74,200\nJapan \n \n5,505    \n5,700    \n24,257    \n25,977\nRest of Asia Pacific \n \n6,331    \n6,373\n\n15,470    \n72,559    \n74,200\nJapan \n \n5,505    \n5,700    \n24,257    \n25,977\nRest of Asia Pacific \n \n6,331    \n6,373    \n29,615    \n29,375\nTotal net sales \n! \n89,498  ! \n90,146  ! \n383,285  ! \n394,328\n(1) Net sales by category:\niPhone \n! \n43,805  ! \n42,626  ! \n200,583  ! \n205,489\nMac \n \n7,614    \n11,508    \n29,357    \n40,177\niPad \n \n6,443   \n7,174    \n28,300   \n29,292\nWearables, Home and Accessories \n \n9,322    \n9,650    \n39,845   \n41,241\nServices \n \n22,314    \n19,188    \n85,200   \n78,129\nTotal net sales \n! \n89,498  ! \n90,146  ! \n383,285  ! \n394,328\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nTotal net sales (1) :: ! 67,184=89,498 | ! 70,958=90,146 | ! 298,085=383,285 | ! 316,199=394,328\nProducts :: ! 67,184=42,586 | ! 70,958=46,387 | ! 298,085=189,282 | ! 316,199=201,471\nServices :: ! 67,184=6,485 | ! 70,958=5,664 | ! 298,085=24,855 | ! 316,199=22,075\nTotal cost of sales :: ! 67,184=49,071 | ! 70,958=52,051 | ! 298,085=214,137 | ! 316,199=223,546\nGross margin :: ! 67,184=40,427 | ! 70,958=38,095 | ! 298,085=169,148 | ! 316,199=170,782\nResearch and development :: ! 67,184=7,307 | ! 70,958=6,761 | ! 298,085=29,915 | ! 316,199=26,251\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nSelling, general and administrative :: ! 67,184=6,151 | ! 70,958=6,440 | ! 298,085=24,932 | ! 316,199=25,094\nTotal operating expenses :: ! 67,184=13,458 | ! 70,958=13,201 | ! 298,085=54,847 | ! 316,199=51,345\nOperating income :: ! 67,184=26,969 | ! 70,958=24,894 | ! 298,085=114,301 | ! 316,199=119,437\nOther income/(expense), net :: ! 67,184=29 | ! 70,958=(237) | ! 298,085=(565) | ! 316,199=(334)\nIncome before provision for income taxes :: ! 67,184=26,998 | ! 70,958=24,657 | ! 298,085=113,736 | ! 316,199=119,103\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nProvision for income taxes :: ! 67,184=4,042 | ! 70,958=3,936 | ! 298,085=16,741 | ! 316,199=19,300\nNet income :: ! 67,184=! 22,956 | ! 70,958=! 20,721 | ! 298,085=! 96,995 | ! 316,199=! 99,803\nBasic :: ! 67,184=! 1.47 | ! 70,958=! 1.29 | ! 298,085=! 6.16 | ! 316,199=! 6.15\nDiluted :: ! 67,184=! 1.46 | ! 70,958=! 1.29 | ! 298,085=! 6.13 | ! 316,199=! 6.11\nBasic :: ! 67,184=15,599,434 | ! 70,958=16,030,382 | ! 298,085=15,744,231 | ! 316,199=16,215,963\nDiluted :: ! 67,184=15,672,400 | ! 70,958=16,118,465 | ! 298,085=15,812,547 | ! 316,199=16,325,819\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nAmericas :: ! 67,184=! 40,115 | ! 70,958=! 39,808 | ! 298,085=! 162,560 | ! 316,199=! 169,658\nEurope :: ! 67,184=22,463 | ! 70,958=22,795 | ! 298,085=94,294 | ! 316,199=95,118\nGreater China :: ! 67,184=15,084 | ! 70,958=15,470 | ! 298,085=72,559 | ! 316,199=74,200\nJapan :: ! 67,184=5,505 | ! 70,958=5,700 | ! 298,085=24,257 | ! 316,199=25,977\nRest of Asia Pacific :: ! 67,184=6,331 | ! 70,958=6,373 | ! 298,085=29,615 | ! 316,199=29,375\nTotal net sales :: ! 67,184=! 89,498 | ! 70,958=! 90,146 | ! 298,085=! 383,285 | ! 316,199=! 394,328\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\niPhone :: ! 67,184=! 43,805 | ! 70,958=! 42,626 | ! 298,085=! 200,583 | ! 316,199=! 205,489\nMac :: ! 67,184=7,614 | ! 70,958=11,508 | ! 298,085=29,357 | ! 316,199=40,177\niPad :: ! 67,184=6,443 | ! 70,958=7,174 | ! 298,085=28,300 | ! 316,199=29,292\nWearables, Home and Accessories :: ! 67,184=9,322 | ! 70,958=9,650 | ! 298,085=39,845 | ! 316,199=41,241\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\nTotal net sales :: ! 67,184=! 89,498 | ! 70,958=! 90,146 | ! 298,085=! 383,285 | ! 316,199=! 394,328\n| Products | ! 67,184 |  | ! 70,958 |  | ! 298,085 |  | ! 316,199 |\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Services | 22,314 |  | 19,188 |  | 85,200 |  | 78,129 |\n| Total net sales (1) | 89,498 |  | 90,146 |  | 383,285 |  | 394,328 |\n| Cost of sales: |  |  |  |  |  |  |  |\n| Products | 42,586 |  | 46,387 |  | 189,282 |  | 201,471 |\n| Services | 6,485 |  | 5,664 |  | 24,855 |  | 22,075 |\n| Total cost of sales | 49,071 |  | 52,051 |  | 214,137 |  | 223,546 |\n| Gross margin | 40,427 |  | 38,095 |  | 169,148 |  | 170,782 |\n| Operating expenses: |  |  |  |  |  |  |  |\n| Research and development | 7,307 |  | 6,761 |  | 29,915 |  | 26,251 |\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Selling, general and administrative | 6,151 |  | 6,440 |  | 24,932 |  | 25,094 |\n| Total operating expenses | 13,458 |  | 13,201 |  | 54,847 |  | 51,345 |\n| Operating income | 26,969 |  | 24,894 |  | 114,301 |  | 119,437 |\n| Other income/(expense), net | 29 |  | (237) |  | (565) |  | (334) |\n| Income before provision for income taxes | 26,998 |  | 24,657 |  | 113,736 |  | 119,103 |\n| Provision for income taxes | 4,042 |  | 3,936 |  | 16,741 |  | 19,300 |\n| Net income | ! 22,956 |  | ! 20,721 |  | ! 96,995 |  | ! 99,803 |\n| Earnings per share: |  |  |  |  |  |  |  |\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Basic | ! 1.47 |  | ! 1.29 |  | ! 6.16 |  | ! 6.15 |\n| Diluted | ! 1.46 |  | ! 1.29 |  | ! 6.13 |  | ! 6.11 |\n| Shares used in computing earnings per share: |  |  |  |  |  |  |  |\n| Basic | 15,599,434 |  | 16,030,382 |  | 15,744,231 |  | 16,215,963 |\n| Diluted | 15,672,400 |  | 16,118,465 |  | 15,812,547 |  | 16,325,819 |\n| (1) Net sales by reportable segment: |  |  |  |  |  |  |  |\n| Americas | ! 40,115 |  | ! 39,808 |  | ! 162,560 |  | ! 169,658 |\n| Europe | 22,463 |  | 22,795 |  | 94,294 |  | 95,118 |\n| Greater China | 15,084 |  | 15,470 |  | 72,559 |  | 74,200 |\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Japan | 5,505 |  | 5,700 |  | 24,257 |  | 25,977 |\n| Rest of Asia Pacific | 6,331 |  | 6,373 |  | 29,615 |  | 29,375 |\n| Total net sales | ! 89,498 |  | ! 90,146 |  | ! 383,285 |  | ! 394,328 |\n| (1) Net sales by category: |  |  |  |  |  |  |  |\n| iPhone | ! 43,805 |  | ! 42,626 |  | ! 200,583 |  | ! 205,489 |\n| Mac | 7,614 |  | 11,508 |  | 29,357 |  | 40,177 |\n| iPad | 6,443 |  | 7,174 |  | 28,300 |  | 29,292 |\n| Wearables, Home and Accessories | 9,322 |  | 9,650 |  | 39,845 |  | 41,241 |\n| Services | 22,314 |  | 19,188 |  | 85,200 |  | 78,129 |\n\nTABLE:\nServices :: ! 67,184=22,314 | ! 70,958=19,188 | ! 298,085=85,200 | ! 316,199=78,129\n| Total net sales | ! 89,498 |  | ! 90,146 |  | ! 383,285 |  | ! 394,328 |\nFOOTNOTES:\n(1) Net sales by reportable segment:\n(1) Net sales by category:"
+  },
+  {
+   "source": "Apple_Q4_2023.pdf",
+   "page": 2,
+   "transcript": "Apple Inc.\nCONDENSED CONSOLIDATED BALANCE SHEETS (Unaudited) \n(In millions, except number of shares, which are reflected in thousands, and par value)\nSeptember 30,\nSeptember 24,\n2023\n2022 \nASSETS:\nCurrent assets:\nCash and cash equivalents \n! \n29,965  ! \n23,646\nMarketable securities \n \n31,590    \n24,658\nAccounts receivable, net \n \n29,508   \n28,184\nVendor non-trade receivables \n \n31,477   \n32,748\nInventories \n \n6,331    \n4,946\nOther current assets \n \n14,695    \n21,223\nTotal current assets \n \n143,566   \n135,405\nNon-current assets:\nMarketable securities \n \n100,544    \n120,805\nProperty, plant and equipment, net \n \n43,715    \n42,117\nOther non-current assets \n \n64,758    \n54,428\n\n120,805\nProperty, plant and equipment, net \n \n43,715    \n42,117\nOther non-current assets \n \n64,758    \n54,428\nTotal non-current assets \n \n209,017   \n217,350\nTotal assets \n! \n352,583  ! \n352,755  \n \n \n  \nLIABILITIES AND SHAREHOLDERS’ EQUITY:\nCurrent liabilities:\nAccounts payable \n! \n62,611   ! \n64,115\nOther current liabilities \n \n58,829   \n60,845\nDeferred revenue \n \n8,061    \n7,912\nCommercial paper \n \n5,985    \n9,982\nTerm debt \n \n9,822    \n11,128\nTotal current liabilities \n \n145,308   \n153,982\nNon-current liabilities:\nTerm debt \n \n95,281    \n98,959\nOther non-current liabilities \n \n49,848   \n49,142\nTotal non-current liabilities \n \n145,129   \n148,101\nTotal liabilities \n \n290,437   \n302,083\n\n49,848   \n49,142\nTotal non-current liabilities \n \n145,129   \n148,101\nTotal liabilities \n \n290,437   \n302,083\nCommitments and contingencies\nShareholders’ equity:\nCommon stock and additional paid-in capital, !0.00001 par value: 50,400,000 shares\nauthorized; 15,550,061 and 15,943,425 shares issued and outstanding, respectively  \n73,812   \n64,849\nAccumulated deficit \n \n(214)   \n(3,068)\nAccumulated other comprehensive loss \n \n(11,452)   \n(11,109)\nTotal shareholders’ equity \n \n62,146   \n50,672\nTotal liabilities and shareholders’ equity \n! \n352,583  ! \n352,755\n\nTABLE:\n| Current assets: |  |  |  |\n| Cash and cash equivalents | ! 29,965 |  | ! 23,646 |\n| Marketable securities | 31,590 |  | 24,658 |\n| Accounts receivable, net | 29,508 |  | 28,184 |\n| Vendor non-trade receivables | 31,477 |  | 32,748 |\n| Inventories | 6,331 |  | 4,946 |\n| Other current assets | 14,695 |  | 21,223 |\n| Total current assets | 143,566 |  | 135,405 |\n| Non-current assets: |  |  |  |\n| Marketable securities | 100,544 |  | 120,805 |\n| Property, plant and equipment, net | 43,715 |  | 42,117 |\n| Other non-current assets | 64,758 |  | 54,428 |\n| Total non-current assets | 209,017 |  | 217,350 |\n| Total assets | ! 352,583 |  | ! 352,755 |\n\nTABLE:\n| Current assets: |  |  |  |\n| LIABILITIES AND SHAREHOLDERS’ EQUITY: |  |  |  |\n| Current liabilities: |  |  |  |\n| Accounts payable | ! 62,611 |  | ! 64,115 |\n| Other current liabilities | 58,829 |  | 60,845 |\n| Deferred revenue | 8,061 |  | 7,912 |\n| Commercial paper | 5,985 |  | 9,982 |\n| Term debt | 9,822 |  | 11,128 |\n| Total current liabilities | 145,308 |  | 153,982 |\n| Non-current liabilities: |  |  |  |\n| Term debt | 95,281 |  | 98,959 |\n| Other non-current liabilities | 49,848 |  | 49,142 |\n| Total non-current liabilities | 145,129 |  | 148,101 |\n| Total liabilities | 290,437 |  | 302,083 |\n| Commitments and contingencies |  |  |  |\n| Shareholders’ equity: |  |  |  |\n\nTABLE:\n| Current assets: |  |  |  |\n| Common stock and additional paid-in capital, !0.00001 par value: 50,400,000 shares |  |  |  |\n|  | 73,812 |  | 64,849 |\n| authorized; 15,550,061 and 15,943,425 shares issued and outstanding, respectively |  |  |  |\n| Accumulated deficit | (214) |  | (3,068) |\n| Accumulated other comprehensive loss | (11,452) |  | (11,109) |\n| Total shareholders’ equity | 62,146 |  | 50,672 |\n| Total liabilities and shareholders’ equity | ! 352,583 |  | ! 352,755 |"
+  },
+  {
+   "source": "Apple_Q4_2023.pdf",
+   "page": 3,
+   "transcript": "Apple Inc.\nCONDENSED CONSOLIDATED STATEMENTS OF CASH FLOWS (Unaudited)\n(In millions)\nTwelve Months Ended\nSeptember 30,\nSeptember 24,\n2023\n2022 \nCash, cash equivalents and restricted cash, beginning balances \n! \n24,977  ! \n35,929\nOperating activities:\nNet income \n \n96,995   \n99,803\nAdjustments to reconcile net income to cash generated by operating activities:\nDepreciation and amortization \n \n11,519    \n11,104\nShare-based compensation expense \n \n10,833    \n9,038\nOther \n \n(2,227)   \n1,006\nChanges in operating assets and liabilities:\nAccounts receivable, net \n \n(1,688)   \n(1,823)\nVendor non-trade receivables \n \n1,271   \n(7,520)\nInventories \n \n(1,618)   \n1,484\n\n(1,688)   \n(1,823)\nVendor non-trade receivables \n \n1,271   \n(7,520)\nInventories \n \n(1,618)   \n1,484\nOther current and non-current assets \n \n(5,684)   \n(6,499)\nAccounts payable \n \n(1,889)   \n9,448\nOther current and non-current liabilities \n \n3,031    \n6,110\nCash generated by operating activities \n \n110,543   \n122,151\nInvesting activities:\nPurchases of marketable securities \n \n(29,513)   \n(76,923)\nProceeds from maturities of marketable securities \n \n39,686   \n29,917\nProceeds from sales of marketable securities \n \n5,828    \n37,446\nPayments for acquisition of property, plant and equipment \n \n(10,959)   \n(10,708)\nOther \n \n(1,337)   \n(2,086)\nCash generated by/(used in) investing activities\n\n(10,959)   \n(10,708)\nOther \n \n(1,337)   \n(2,086)\nCash generated by/(used in) investing activities \n \n3,705   \n(22,354)\nFinancing activities:\nPayments for taxes related to net share settlement of equity awards \n \n(5,431)   \n(6,223)\nPayments for dividends and dividend equivalents \n \n(15,025)   \n(14,841)\nRepurchases of common stock \n \n(77,550)   \n(89,402)\nProceeds from issuance of term debt, net \n \n5,228    \n5,465\nRepayments of term debt \n \n(11,151)   \n(9,543)\nProceeds from/(Repayments of) commercial paper, net \n \n(3,978)   \n3,955\nOther \n \n(581)   \n(160)\nCash used in financing activities \n \n(108,488)  \n(110,749)\nIncrease/(Decrease) in cash, cash equivalents and restricted cash \n \n5,760\n\n(108,488)  \n(110,749)\nIncrease/(Decrease) in cash, cash equivalents and restricted cash \n \n5,760    \n(10,952)\nCash, cash equivalents and restricted cash, ending balances \n! \n30,737  ! \n24,977  \n \n \n  \nSupplemental cash flow disclosure:\nCash paid for income taxes, net \n! \n18,679   ! \n19,573\nCash paid for interest \n! \n3,803   ! \n2,865\n\nTABLE:\n| Operating activities: |  |  |  |\n| Net income | 96,995 |  | 99,803 |\n| Adjustments to reconcile net income to cash generated by operating activities: |  |  |  |\n| Depreciation and amortization | 11,519 |  | 11,104 |\n| Share-based compensation expense | 10,833 |  | 9,038 |\n| Other | (2,227) |  | 1,006 |\n| Changes in operating assets and liabilities: |  |  |  |\n| Accounts receivable, net | (1,688) |  | (1,823) |\n| Vendor non-trade receivables | 1,271 |  | (7,520) |\n| Inventories | (1,618) |  | 1,484 |\n| Other current and non-current assets | (5,684) |  | (6,499) |\n| Accounts payable | (1,889) |  | 9,448 |\n| Other current and non-current liabilities | 3,031 |  | 6,110 |\n\nTABLE:\n| Operating activities: |  |  |  |\n| Cash generated by operating activities | 110,543 |  | 122,151 |\n| Investing activities: |  |  |  |\n| Purchases of marketable securities | (29,513) |  | (76,923) |\n| Proceeds from maturities of marketable securities | 39,686 |  | 29,917 |\n| Proceeds from sales of marketable securities | 5,828 |  | 37,446 |\n| Payments for acquisition of property, plant and equipment | (10,959) |  | (10,708) |\n| Other | (1,337) |  | (2,086) |\n| Cash generated by/(used in) investing activities | 3,705 |  | (22,354) |\n| Financing activities: |  |  |  |\n| Payments for taxes related to net share settlement of equity awards | (5,431) |  | (6,223) |\n\nTABLE:\n| Operating activities: |  |  |  |\n| Payments for dividends and dividend equivalents | (15,025) |  | (14,841) |\n| Repurchases of common stock | (77,550) |  | (89,402) |\n| Proceeds from issuance of term debt, net | 5,228 |  | 5,465 |\n| Repayments of term debt | (11,151) |  | (9,543) |\n| Proceeds from/(Repayments of) commercial paper, net | (3,978) |  | 3,955 |\n| Other | (581) |  | (160) |\n| Cash used in financing activities | (108,488) |  | (110,749) |\n| Increase/(Decrease) in cash, cash equivalents and restricted cash | 5,760 |  | (10,952) |\n| Cash, cash equivalents and restricted cash, ending balances | ! 30,737 |  | ! 24,977 |\n| Supplemental cash flow disclosure: |  |  |  |\n\nTABLE:\n| Operating activities: |  |  |  |\n| Cash paid for income taxes, net | ! 18,679 |  | ! 19,573 |\n| Cash paid for interest | ! 3,803 |  | ! 2,865 |"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 1,
+   "transcript": "Meta Reports Fourth Quarter and Full Year 2023 Results; Initiates Quarterly Dividend\nMENLO PARK, Calif. – February 1, 2024 – Meta Platforms, Inc. (Nasdaq: META) today reported financial results for the quarter \nand full year ended December 31, 2023.\n\"We had a good quarter as our community and business continue to grow,\" said Mark Zuckerberg, Meta founder and CEO. \"We've \nmade a lot of progress on our vision for advancing AI and the metaverse.\"\nFourth Quarter and Full Year 2023 Financial Highlights\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n% Change\nIn millions, except percentages and per \nshare amounts\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 \n$ \n32,165 \n 25 % $ \n134,902\n\nshare amounts\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 \n$ \n32,165 \n 25 % $ \n134,902 \n$ \n116,609 \n 16 %\nCosts and expenses\n \n23,727 \n \n25,766 \n (8) % \n88,151 \n \n87,665 \n 1 %\nIncome from operations\n$ \n16,384 \n$ \n6,399 \n 156 % $ \n46,751 \n$ \n28,944 \n 62 %\nOperating margin\n 41 %\n 20 %\n 35 %\n 25 %\nProvision for income taxes\n$ \n2,791 \n$ \n1,497 \n 86 % $ \n8,330 \n$ \n5,619 \n 48 %\nEffective tax rate\n 17 %\n 24 %\n 18 %\n 19 %\nNet income\n$ \n14,017 \n$ \n4,652 \n 201 % $ \n39,098 \n$ \n23,200 \n 69 %\nDiluted earnings per share (EPS)\n$ \n5.33 \n$ \n1.76 \n 203 % $ \n14.87 \n$ \n8.59 \n 73 %\n% Change\nFourth Quarter and Full Year 2023 Operational and Other Financial Highlights\n•\n\n203 % $ \n14.87 \n$ \n8.59 \n 73 %\n% Change\nFourth Quarter and Full Year 2023 Operational and Other Financial Highlights\n•\nFamily daily active people (DAP) – DAP was 3.19 billion on average for December 2023, an increase of 8% year-over-\nyear.\n•\nFamily monthly active people (MAP) – MAP was 3.98 billion as of December 31, 2023, an increase of 6% year-over-\nyear.\n•\nFacebook daily active users (DAUs) – DAUs were 2.11 billion on average for December 2023, an increase of 6% year-\nover-year.\n•\nFacebook monthly active users (MAUs) – MAUs were 3.07 billion as of December 31, 2023, an increase of 3% year-\nover-year.\n•\n\nover-year.\n•\nAd impressions and price per ad – In the fourth quarter of 2023, ad impressions delivered across our Family of Apps \nincreased by 21% year-over-year and the average price per ad increased by 2% year-over-year. For the full year 2023, ad \nimpressions increased by 28% year-over-year and the average price per ad decreased by 9% year-over-year.\n•\nRevenue – Revenue was $40.11 billion and $134.90 billion, an increase of 25% and 16% year-over-year for the fourth \nquarter and full year 2023, respectively. Had foreign exchange rates remained constant with the same periods of 2022,\n\nquarter and full year 2023, respectively. Had foreign exchange rates remained constant with the same periods of 2022, \nrevenue would have been $816 million and $374 million lower, an increase of 22% and 15% on a constant currency basis \nfor the fourth quarter and full year 2023, respectively.\n•\nCosts and expenses – Total costs and expenses were $23.73 billion and $88.15 billion for the fourth quarter and full year \n2023, a decrease of 8% and an increase of 1% year-over-year, respectively. Restructuring charges included in costs and \nexpenses were $1.15 billion and $3.45 billion for the fourth quarter and full year 2023, respectively.\n•\n\nexpenses were $1.15 billion and $3.45 billion for the fourth quarter and full year 2023, respectively.\n•\nCapital expenditures – Capital expenditures, including principal payments on finance leases, were $7.90 billion and \n$28.10 billion for the fourth quarter and full year 2023, respectively. \n•\nShare repurchases – We repurchased $6.32 billion and $20.03 billion of our Class A common stock in the fourth quarter \nand full year 2023, respectively. As of December 31, 2023, we had $30.93 billion available and authorized for \nrepurchases. We also announced a $50 billion increase in our share repurchase authorization today.\n•\n\nrepurchases. We also announced a $50 billion increase in our share repurchase authorization today.\n•\nCash, cash equivalents, and marketable securities – Cash, cash equivalents, and marketable securities were \n$65.40 billion as of December 31, 2023. Free cash flow was $11.50 billion and $43.01 billion for the fourth quarter and \nfull year 2023, respectively.\n•\nLong-term debt – Long-term debt was $18.39 billion as of December 31, 2023.\n•\nHeadcount – Headcount was 67,317 as of December 31, 2023, a decrease of 22% year-over-year.\n1"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 2,
+   "transcript": "Meta Initiates Quarterly Dividend\nToday, Meta's board of directors declared a cash dividend of $0.50 per share of our outstanding common stock (including both \nClass A common stock and Class B common stock), payable on March 26, 2024 to stockholders of record as of the close of \nbusiness on February 22, 2024. We intend to pay a cash dividend on a quarterly basis going forward, subject to market conditions \nand approval by our board of directors.\nRestructuring\nBeginning in 2022, we initiated several measures to pursue greater efficiency and to realign our business and strategic priorities.\n\nAs of December 31, 2023, we have completed the data center initiatives and the employee layoffs, and substantially completed the \nfacilities consolidation initiatives.\nA summary of our restructuring charges, including subsequent adjustments, for the three and twelve months ended December 31, \n2023 by major activity type is as follows (in millions):\nThree Months Ended December 31, 2023\nTwelve Months Ended December 31, 2023\nSeverance \nand Other\nSeverance \nand Other\nFacilities \nConsolidation\nPersonnel\nData Center\nFacilities \nConsolidation\nPersonnel\nData Center\nAssets \nTotal\nCost of revenue\n$ \n86 $ \n— $ \n7 $ \n93 $ \n177 $ \n— $ \n(224) $ \n(47) \nResearch and development\n \n710  \n28  \n—  \n738\n\nCost of revenue\n$ \n86 $ \n— $ \n7 $ \n93 $ \n177 $ \n— $ \n(224) $ \n(47) \nResearch and development\n \n710  \n28  \n—  \n738  \n1,581  \n413  \n—  \n1,994 \nMarketing and sales\n \n162  \n16  \n—  \n178  \n396  \n307  \n—  \n703 \nGeneral and administrative\n \n142  \n(3)  \n—  \n139  \n352  \n450  \n—  \n802 \nTotal\n$ \n1,100 $ \n41 $ \n7 $ \n1,148 $ \n2,506 $ \n1,170 $ \n(224) $ 3,452\nCosts\nAssets \nTotal\nCosts\nDuring the three and twelve months ended December 31, 2022, we recorded total restructuring charges of $4.20 billion and \n$4.61 billion, respectively.\n2\n\nTABLE:\n| Today, Meta's board of directors declared a cash dividend of |  |  |  | $0.50 |  | per share of our |  |  | outstanding common stock (including both |\n| Class A common stock and Class B common stock), payable on |  |  |  |  | March 26, 2024 |  | to stockholders of record as of the close of |  |  |\n| business on | February 22, 2024 | . We intend to pay a cash dividend on a quarterly basis going forward, subject to market conditions |  |  |  |  |  |  |  |\n| and approval by our board of directors. |  |  |  |  |  |  |  |  |  |\nFOOTNOTES:\n7 $\n(47)\n(3)\n7 $\n\nTABLE:\n| Beginning in 2022, we initiated several measures to pursue greater efficiency and to realign our business and strategic priorities. |  |  |\n| As of | December 31, 2023 | , we have completed the data center initiatives and the employee layoffs, and substantially completed the |\n| facilities consolidation initiatives. |  |  |\nFOOTNOTES:\n7 $\n(47)\n(3)\n7 $\n\nTABLE:\n| During the three and twelve months ended December 31, |  |  | 2022 | , we recorded total restructuring charges of | $4.20 billion | and |\n| $4.61 billion | , respectively. |  |  |  |  |  |\nFOOTNOTES:\n7 $\n(47)\n(3)\n7 $"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 3,
+   "transcript": "CFO Outlook Commentary\nWe expect first quarter 2024 total revenue to be in the range of $34.5-37 billion. Our guidance assumes foreign currency is neutral \nto year-over-year total revenue growth, based on current exchange rates.\nWe expect full-year 2024 total expenses to be in the range of $94-99 billion, unchanged from our prior outlook. We continue to \nexpect a few factors to be drivers of total expense growth in 2024:\n•\nFirst, we expect higher infrastructure-related costs this year. Given our increased capital investments in recent years, we \nexpect depreciation expenses in 2024 to increase by a larger amount than in 2023. We also expect to incur higher\n\nexpect depreciation expenses in 2024 to increase by a larger amount than in 2023. We also expect to incur higher \noperating costs from running a larger infrastructure footprint.\n•\nSecond, we anticipate growth in payroll expenses as we work down our current hiring underrun and add incremental \ntalent to support priority areas in 2024, which we expect will further shift our workforce composition toward higher-cost \ntechnical roles.\n•\nFinally, for Reality Labs, we expect operating losses to increase meaningfully year-over-year due to our ongoing product \ndevelopment efforts in augmented reality/virtual reality and our investments to further scale our ecosystem.\n\ndevelopment efforts in augmented reality/virtual reality and our investments to further scale our ecosystem.\nWe anticipate our full-year 2024 capital expenditures will be in the range of $30-37 billion, a $2 billion increase of the high end of \nour prior range. We expect growth will be driven by investments in servers, including both AI and non-AI hardware, and data \ncenters as we ramp up construction on sites with our previously announced new data center architecture. Our updated outlook \nreflects our evolving understanding of our artificial intelligence (AI) capacity demands as we anticipate what we may need for the\n\nnext generations of foundational research and product development. While we are not providing guidance for years beyond 2024, \nwe expect our ambitious long-term AI research and product development efforts will require growing infrastructure investments \nbeyond this year.\nAbsent any changes to U.S. tax law, we expect our full-year 2024 tax rate to be in the mid-teens.\nIn addition, we continue to monitor the active regulatory landscape, including the increasing legal and regulatory headwinds in the \nEU and the U.S. that could significantly impact our business and our financial results. Of note, the Federal Trade Commission is\n\nseeking to substantially modify our existing consent order and impose additional restrictions on our ability to operate. We are \ncontesting this matter, but if we are unsuccessful it would have an adverse impact on our business.\nThis was a pivotal year for our company. We increased our operating discipline, delivered strong execution across our product \npriorities, and improved advertising performance for the businesses who rely on our services. We will look to build on our \nprogress in each of those areas in 2024 while advancing our ambitious, longer-term efforts in AI and Reality Labs.\n3\n\nTABLE:\n| We expect full-year 2024 total expenses to be in the range of |  | $94-99 billion | , unchanged from our prior outlook. | We continue to |\n| expect a few factors to be drivers of | total expense growth in 2024: |  |  |  |\n\nTABLE:\n| We anticipate our full-year 2024 capital expenditures will be in the range of (our prior range (centers as we ramp up construction on sites with our previously announced new data center architecture | . We expect growth will be driven by investments in servers, including both | $ | 30-37 billion | , a $2 billion increase of the high end of | AI and | non- | AI (. Our updated outlook | hardware, and data |\n| reflects our evolving understanding of our |  |  |  |  |  |  |  |  |\n\nTABLE:\n| In addition, we continue to monitor the active regulatory landscape, including the increasing legal and regulatory headwinds in the (EU and the U.S. that could significantly impact our business and our financial results. Of note, the (seeking to substantially modify our existing consent order and impose additional restrictions on our ability to operate. We are |  | Federal Trade Commission | is |\n| contesting this matter, but if we are unsuccessful it would have an adverse impact on our business. |  |  |  |\n\nTABLE:\n| This was a pivotal year for our company. We increased our operating discipline, delivered strong execution across our product (priorities, and improved advertising performance for the businesses who rely on our services. We will look to build on our |  |\n| progress in each of those areas in 2024 while advancing our ambitious, longer-term efforts in AI and Reality Labs. |  |"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 4,
+   "transcript": "Webcast and Conference Call Information\nMeta will host a conference call to discuss the results at 1:30 p.m. PT / 4:30 p.m. ET today. The live webcast of Meta's earnings \nconference call can be accessed at investor.fb.com, along with the earnings press release, financial tables, and slide presentation. \nMeta uses the investor.fb.com and about.fb.com/news/ websites as well as Mark Zuckerberg's Facebook Page (facebook.com/\nzuck), Instagram account (instagram.com/zuck) and Threads profile (threads.net/zuck) as means of disclosing material non-public \ninformation and for complying with its disclosure obligations under Regulation FD.\n\ninformation and for complying with its disclosure obligations under Regulation FD.\nFollowing the call, a replay will be available at the same website. A telephonic replay will be available for one week following the \nconference call at +1 (800) 770-2030 or +1 (647) 362-9199, conference ID 8032328.\nTranscripts of conference calls with publishing equity research analysts held today will also be posted to the investor.fb.com \nwebsite.\nAbout Meta\nMeta builds technologies that help people connect, find communities, and grow businesses. When Facebook launched in 2004, it \nchanged the way people connect. Apps like Messenger, Instagram, and WhatsApp further empowered billions around the world.\n\nNow, Meta is moving beyond 2D screens toward immersive experiences like augmented and virtual reality to help build the next \nevolution in social technology.\nContacts\nInvestors: \nKenneth Dorell\ninvestor@meta.com / investor.fb.com\nPress: \nRyan Moore\npress@meta.com / about.fb.com/news/\n4"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 5,
+   "transcript": "Forward-Looking Statements\nThis press release contains forward-looking statements regarding our future business plans and expectations. These forward-\nlooking statements are only predictions and may differ materially from actual results due to a variety of factors including: the \nimpact of macroeconomic conditions on our business and financial results, including as a result of geopolitical events; our ability \nto retain or increase users and engagement levels; our reliance on advertising revenue; our dependency on data signals and mobile \noperating systems, networks, and standards that we do not control; changes to the content or application of third-party policies that\n\nimpact our advertising practices; risks associated with new products and changes to existing products as well as other new \nbusiness initiatives, including our metaverse efforts; our emphasis on community growth and engagement and the user experience \nover short-term financial results; maintaining and enhancing our brand and reputation; our ongoing privacy, safety, security, and \ncontent review efforts; competition; risks associated with government actions that could restrict access to our products or impair \nour ability to sell advertising in certain countries; litigation and government inquiries; privacy, legislative, and regulatory concerns\n\nor developments; risks associated with acquisitions; security breaches; our ability to manage our scale and geographically-\ndispersed operations; and market conditions or other factors affecting the payment of dividends. These and other potential risks \nand uncertainties that could cause actual results to differ from the results predicted are more fully detailed under the caption \"Risk \nFactors\" in our Quarterly Report on Form 10-Q filed with the SEC on October 26, 2023, which is available on our Investor \nRelations website at investor.fb.com and on the SEC website at www.sec.gov. Additional information will also be set forth in our\n\nAnnual Report on Form 10-K for the year ended December 31, 2023. In addition, please note that the date of this press release is \nFebruary 1, 2024, and any forward-looking statements contained herein are based on assumptions that we believe to be reasonable \nas of this date. We undertake no obligation to update these statements as a result of new information or future events.\nFor a discussion of limitations in the measurement of certain of our community metrics, see the section entitled \"Limitations of \nKey Metrics and Other Data\" in our most recent quarterly or annual report filed with the SEC.\nNon-GAAP Financial Measures\n\nNon-GAAP Financial Measures\nTo supplement our condensed consolidated financial statements, which are prepared and presented in accordance with generally \naccepted accounting principles in the United States (GAAP), we use the following non-GAAP financial measures: revenue \nexcluding foreign exchange effect, advertising revenue excluding foreign exchange effect, and free cash flow. The presentation of \nthese financial measures is not intended to be considered in isolation or as a substitute for, or superior to, financial information \nprepared and presented in accordance with GAAP. Investors are cautioned that there are material limitations associated with the\n\nuse of non-GAAP financial measures as an analytical tool. In addition, these measures may be different from non-GAAP financial \nmeasures used by other companies, limiting their usefulness for comparison purposes. We compensate for these limitations by \nproviding specific information regarding the GAAP amounts excluded from these non-GAAP financial measures.\nWe believe these non-GAAP financial measures provide investors with useful supplemental information about the financial \nperformance of our business, enable comparison of financial results between periods where certain items may vary independent of\n\nbusiness performance, and allow for greater transparency with respect to key metrics used by management in operating our \nbusiness.\nWe exclude the following items from our non-GAAP financial measures:\nForeign exchange effect on revenue. We translated revenue for the three months and full year ended December 31, 2023 using the \nprior year's monthly exchange rates for our settlement or billing currencies other than the U.S. dollar, which we believe is a useful \nmetric that facilitates comparison to our historical performance.\nPurchases of property and equipment; Principal payments on finance leases. We subtract both purchases of property and\n\nPurchases of property and equipment; Principal payments on finance leases. We subtract both purchases of property and \nequipment, net of proceeds and principal payments on finance leases in our calculation of free cash flow because we believe that \nthese two items collectively represent the amount of property and equipment we need to procure to support our business, \nregardless of whether we procure such property or equipment with a finance lease. We believe that this methodology can provide \nuseful supplemental information to help investors better understand underlying trends in our business. Free cash flow is not\n\nintended to represent our residual cash flow available for discretionary expenditures.\nFor more information on our non-GAAP financial measures and a reconciliation of GAAP to non-GAAP measures, please see the \n\"Reconciliation of GAAP to Non-GAAP Results\" table in this press release.\n5"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 6,
+   "transcript": "CONDENSED CONSOLIDATED STATEMENTS OF INCOME\n(In millions, except per share amounts)\n(Unaudited)\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n2023\n2022\n2023\n2022\nRevenue\n$ \n40,111 $ \n32,165 $ \n134,902 $ \n116,609 \nCosts and expenses:\n \nCost of revenue\n \n7,695  \n8,336  \n25,959  \n25,249 \nResearch and development\n \n10,517  \n9,771  \n38,483  \n35,338 \nMarketing and sales\n \n3,226  \n4,574  \n12,301  \n15,262 \nGeneral and administrative\n \n2,289  \n3,085  \n11,408  \n11,816 \nTotal costs and expenses\n \n23,727  \n25,766  \n88,151  \n87,665 \nIncome from operations\n \n16,384  \n6,399  \n46,751  \n28,944 \nInterest and other income (expense), net\n \n424  \n(250)  \n677  \n(125)\n\n16,384  \n6,399  \n46,751  \n28,944 \nInterest and other income (expense), net\n \n424  \n(250)  \n677  \n(125) \nIncome before provision for income taxes\n \n16,808  \n6,149  \n47,428  \n28,819 \nProvision for income taxes\n \n2,791  \n1,497  \n8,330  \n5,619 \nNet income\n$ \n14,017 $ \n4,652 $ \n39,098 $ \n23,200 \nEarnings per share attributable to Class A and Class B \ncommon stockholders:\nBasic\n$ \n5.46 $ \n1.76 $ \n15.19 $ \n8.63 \nDiluted\n$ \n5.33 $ \n1.76 $ \n14.87 $ \n8.59 \nWeighted-average shares used to compute earnings per \nshare attributable to Class A and Class B common \nstockholders:\nBasic\n \n2,566  \n2,638  \n2,574  \n2,687 \nDiluted\n \n2,630  \n2,640  \n2,629  \n2,702\n6\n\nTABLE:\nCost of revenue :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=7,695 8,336 25,959 25,249\nResearch and development :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=10,517 9,771 38,483 35,338\nMarketing and sales :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=3,226 4,574 12,301 15,262\nGeneral and administrative :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=2,289 3,085 11,408 11,816\nTotal costs and expenses :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=23,727 25,766 88,151 87,665\nIncome from operations :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=16,384 6,399 46,751 28,944\nInterest and other income (expense), net :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=424 (250) 677 (125)\n\nTABLE:\nCost of revenue :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=7,695 8,336 25,959 25,249\nIncome before provision for income taxes :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=16,808 6,149 47,428 28,819\nProvision for income taxes :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=2,791 1,497 8,330 5,619\nNet income :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=$ 14,017 $ 4,652 $ 39,098 $ 23,200\nBasic :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=$ 5.46 $ 1.76 $ 15.19 $ 8.63\nDiluted :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=$ 5.33 $ 1.76 $ 14.87 $ 8.59\nBasic :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=2,566 2,638 2,574 2,687\nDiluted :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=2,630 2,640 2,629 2,702\n\nTABLE:\nCost of revenue :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=7,695 8,336 25,959 25,249\n| Revenue (Costs and expenses: | $ 40,111 $ 32,165 $ 134,902 $ 116,609 |\n| Cost of revenue | 7,695 8,336 25,959 25,249 |\n| Research and development | 10,517 9,771 38,483 35,338 |\n| Marketing and sales | 3,226 4,574 12,301 15,262 |\n| General and administrative | 2,289 3,085 11,408 11,816 |\n| Total costs and expenses | 23,727 25,766 88,151 87,665 |\n| Income from operations | 16,384 6,399 46,751 28,944 |\n| Interest and other income (expense), net | 424 (250) 677 (125) |\n| Income before provision for income taxes | 16,808 6,149 47,428 28,819 |\n| Provision for income taxes | 2,791 1,497 8,330 5,619 |\n\nTABLE:\nCost of revenue :: $ 40,111 $ 32,165 $ 134,902 $ 116,609=7,695 8,336 25,959 25,249\n| Net income | $ 14,017 $ 4,652 $ 39,098 $ 23,200 |\n| Earnings per share attributable to Class A and Class B common stockholders: |  |\n| Basic | $ 5.46 $ 1.76 $ 15.19 $ 8.63 |\n| Diluted | $ 5.33 $ 1.76 $ 14.87 $ 8.59 |\n| Weighted-average shares used to compute earnings per share attributable to Class A and Class B common stockholders: |  |\n| Basic | 2,566 2,638 2,574 2,687 |\n| Diluted | 2,630 2,640 2,629 2,702 |"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 7,
+   "transcript": "CONDENSED CONSOLIDATED BALANCE SHEETS\n(In millions)\n(Unaudited)\nDecember 31, 2023\nDecember 31, 2022\nAssets\nCurrent assets:\nCash and cash equivalents\n$ \n41,862 $ \n14,681 \nMarketable securities\n \n23,541  \n26,057 \nAccounts receivable, net\n \n16,169  \n13,466 \nPrepaid expenses and other current assets\n \n3,793  \n5,345 \nTotal current assets\n \n85,365  \n59,549 \nNon-marketable equity securities\n \n6,141  \n6,201 \nProperty and equipment, net\n \n96,587  \n79,518 \nOperating lease right-of-use assets\n \n13,294  \n12,673 \nIntangible assets, net\n \n788  \n897 \nGoodwill\n \n20,654  \n20,306 \nOther assets\n \n6,794  \n6,583 \nTotal assets\n$ \n229,623 $ \n185,727\nLiabilities and stockholders' equity\nCurrent liabilities:\n\n6,794  \n6,583 \nTotal assets\n$ \n229,623 $ \n185,727\nLiabilities and stockholders' equity\nCurrent liabilities:\nAccounts payable\n$ \n4,849 $ \n4,990 \nPartners payable\n \n863  \n1,117 \nOperating lease liabilities, current\n \n1,623  \n1,367 \nAccrued expenses and other current liabilities\n \n24,625  \n19,552 \nTotal current liabilities\n \n31,960  \n27,026 \nOperating lease liabilities, non-current\n \n17,226  \n15,301 \nLong-term debt\n \n18,385  \n9,923 \nOther liabilities\n \n8,884  \n7,764 \nTotal liabilities\n \n76,455  \n60,014 \nCommitments and contingencies\nStockholders' equity:\nCommon stock and additional paid-in capital\n \n73,253  \n64,444 \nAccumulated other comprehensive loss\n \n(2,155)  \n(3,530) \nRetained earnings\n\n73,253  \n64,444 \nAccumulated other comprehensive loss\n \n(2,155)  \n(3,530) \nRetained earnings\n \n82,070  \n64,799 \nTotal stockholders' equity\n \n153,168  \n125,713 \nTotal liabilities and stockholders' equity\n$ \n229,623 $ \n185,727\n7"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 8,
+   "transcript": "CONDENSED CONSOLIDATED STATEMENTS OF CASH FLOWS\n(In millions)\n(Unaudited)\nThree Months Ended\nTwelve Months Ended\nDecember 31,\n2023\n2022\n2023\n2022\nCash flows from operating activities\nDecember 31,\nNet income\n$ \n14,017 $ \n4,652 $ \n39,098 $ \n23,200 \nAdjustments to reconcile net income to net cash provided by \noperating activities:\nDepreciation and amortization\n \n3,172  \n2,376  \n11,178  \n8,686 \nShare-based compensation\n \n3,424  \n3,008  \n14,027  \n11,992 \nDeferred income taxes\n \n(1,161)  \n(1,173)  \n131  \n(3,286) \nImpairment charges for facilities consolidation, net\n \n1,091  \n1,805  \n2,432  \n2,218 \nData center assets abandonment\n \n7  \n1,341  \n(224)  \n1,341 \nOther\n \n124  \n572  \n635  \n641\n\n1,805  \n2,432  \n2,218 \nData center assets abandonment\n \n7  \n1,341  \n(224)  \n1,341 \nOther\n \n124  \n572  \n635  \n641 \nChanges in assets and liabilities:\nAccounts receivable\n \n(2,843)  \n(1,698)  \n(2,399)  \n231 \nPrepaid expenses and other current assets\n \n700  \n854  \n559  \n162 \nOther assets\n \n(111)  \n54  \n(80)  \n(106) \nAccounts payable\n \n595  \n876  \n51  \n210 \nPartners payable\n \n76  \n102  \n(271)  \n90 \nAccrued expenses and other current liabilities\n \n(350)  \n1,303  \n5,352  \n4,210 \nOther liabilities\n \n663  \n439  \n624  \n886 \nNet cash provided by operating activities\n \n19,404  \n14,511  \n71,113  \n50,475 \nCash flows from investing activities\nPurchases of property and equipment\n \n(7,665)  \n(9,043)\n\n71,113  \n50,475 \nCash flows from investing activities\nPurchases of property and equipment\n \n(7,665)  \n(9,043)  \n(27,266)  \n(31,431) \nProceeds relating to property and equipment\n \n73  \n55  \n221  \n245 \nPurchases of marketable debt securities\n \n(1,171)  \n(741)  \n(2,982)  \n(9,626) \nSales and maturities of marketable debt securities\n \n2,359  \n2,263  \n6,184  \n13,158 \nAcquisitions of businesses and intangible assets\n \n(64)  \n(62)  \n(629)  \n(1,312) \nOther investing activities\n \n(4)  \n(3)  \n(23)  \n(4) \nNet cash used in investing activities\n \n(6,472)  \n(7,531)  \n(24,495)  \n(28,970) \nCash flows from financing activities\nTaxes paid related to net share settlement of equity awards\n \n(2,223)  \n(656)\n\nCash flows from financing activities\nTaxes paid related to net share settlement of equity awards\n \n(2,223)  \n(656)  \n(7,012)  \n(3,595) \nRepurchases of Class A common stock\n \n(5,942)  \n(6,863)  \n(19,774)  \n(27,956) \nProceeds from issuance of long-term debt, net\n \n—  \n—  \n8,455  \n9,921 \nPrincipal payments on finance leases\n \n(307)  \n(235)  \n(1,058)  \n(850) \nOther financing activities\n \n71  \n695  \n(111)  \n344 \nNet cash used in financing activities\n \n(8,401)  \n(7,059)  \n(19,500)  \n(22,136) \nEffect of exchange rate changes on cash, cash equivalents, and restricted \ncash\n \n396  \n424  \n113  \n(638) \nNet increase (decrease) in cash, cash equivalents, and restricted cash\n \n4,927  \n345  \n27,231\n\n424  \n113  \n(638) \nNet increase (decrease) in cash, cash equivalents, and restricted cash\n \n4,927  \n345  \n27,231  \n(1,269) \nCash, cash equivalents, and restricted cash at beginning of the period\n \n37,900  \n15,251  \n15,596  \n16,865 \nCash, cash equivalents, and restricted cash at end of the period\n$ \n42,827 $ \n15,596 $ \n42,827 $ \n15,596\nReconciliation of cash, cash equivalents, and restricted cash to the \nconsolidated balance sheets\nCash and cash equivalents\n$ \n41,862 $ \n14,681 $ \n41,862 $ \n14,681\nRestricted cash, included in prepaid expenses and other current assets\n \n99  \n294  \n99  \n294 \nRestricted cash, included in other assets\n \n866  \n621  \n866  \n621\n\n99  \n294  \n99  \n294 \nRestricted cash, included in other assets\n \n866  \n621  \n866  \n621 \nTotal cash, cash equivalents, and restricted cash\n$ \n42,827 $ \n15,596 $ \n42,827 $ \n15,596\n8"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 9,
+   "transcript": "CONDENSED CONSOLIDATED STATEMENTS OF CASH FLOWS\n(In millions)\n(Unaudited)\nThree Months Ended\nTwelve Months Ended\nDecember 31,\n2023\n2022\n2023\n2022\nSupplemental cash flow data\nDecember 31,\nCash paid for income taxes, net\n$ \n4,591 $ \n1,760 $ \n6,607 $ \n6,407 \nCash paid for interest, net of amounts capitalized\n$ \n146 $ \n— $ \n448 $ \n— \nNon-cash investing and financing activities:\nProperty and equipment in accounts payable and accrued expenses \nand other current liabilities\n$ \n4,105 $ \n3,319 $ \n4,105 $ \n3,319 \nAcquisition of businesses in accrued expenses and other current \nliabilities and other liabilities\n$ \n119 $ \n291 $ \n119 $ \n291 \nRepurchases of Class A common stock in accrued expenses and\n\n$ \n119 $ \n291 $ \n119 $ \n291 \nRepurchases of Class A common stock in accrued expenses and \nother current liabilities\n$ \n474 $ \n310 $ \n474 $ \n310\n9"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 10,
+   "transcript": "Segment Results\nWe report our financial results for our two reportable segments: Family of Apps (FoA) and Reality Labs (RL). FoA includes \nFacebook, Instagram, Messenger, WhatsApp, and other services. RL includes augmented, mixed, and virtual reality related \nconsumer hardware, software, and content.\nThe following table presents our segment information of revenue and income (loss) from operations:\nSegment Information\n(In millions)\n(Unaudited)\nThree Months Ended December 31,\nTwelve Months Ended December 31,\n2023\n2022\n2023\n2022\nRevenue:\nAdvertising\n$ \n38,706 $ \n31,254 $ \n131,948 $ \n113,642 \nOther revenue\n \n334  \n184  \n1,058  \n808 \nFamily of Apps\n \n39,040  \n31,438  \n133,006  \n114,450\n\n131,948 $ \n113,642 \nOther revenue\n \n334  \n184  \n1,058  \n808 \nFamily of Apps\n \n39,040  \n31,438  \n133,006  \n114,450 \nReality Labs\n \n1,071  \n727  \n1,896  \n2,159 \nTotal revenue\n$ \n40,111 $ \n32,165 $ \n134,902 $ \n116,609\nIncome (loss) from operations:\nFamily of Apps\n$ \n21,030 $ \n10,678 $ \n62,871 $ \n42,661 \nReality Labs\n \n(4,646)  \n(4,279)  \n(16,120)  \n(13,717) \nTotal income from operations\n$ \n16,384 $ \n6,399 $ \n46,751 $ \n28,944\n10\n\nTABLE:\n| Revenue: |  |  |\n| Advertising $ 38,706 $ 31,254 $ 131,948 |  | $ 113,642 |\n| Other revenue 334 184 1,058 808 |  |  |\n| Family of Apps 39,040 31,438 133,006 114,450 |  |  |\n| Reality Labs 1,071 727 1,896 2,159 |  |  |\n| Total revenue $ 40,111 $ 32,165 $ 134,902 $ 116,609 |  |  |\n| Income (loss) from operations: |  |  |\n| Family of Apps $ 21,030 $ 10,678 $ 62,871 $ 42,661 |  |  |\n| Reality Labs (4,646) (4,279) (16,120) (13,717) |  |  |\n| Total income from operations $ 16,384 $ 6,399 $ 46,751 $ 28,944 |  |  |"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "page": 11,
+   "transcript": "Reconciliation of GAAP to Non-GAAP Results\n(In millions, except percentages)\n(Unaudited)\nThree Months Ended\nTwelve Months Ended\nDecember 31,\nDecember 31,\n2023\n2022\n2023\n2022\nGAAP revenue\n$ 40,111 \n$ \n32,165 $ 134,902 \n$ 116,609 \nForeign exchange effect on 2023 revenue using 2022 rates\n \n(816) \n \n(374) \nRevenue excluding foreign exchange effect\n$ 39,295 \n$ 134,528 \nGAAP revenue year-over-year change %\n 25 %\n 16 %\nRevenue excluding foreign exchange effect year-over-year change %\n 22% \n 15% \nGAAP advertising revenue\n$ 38,706 \n$ \n31,254 $ 131,948 \n$ 113,642 \nForeign exchange effect on 2023 advertising revenue using 2022 rates \n(809) \n \n(379) \nAdvertising revenue excluding foreign exchange effect\n\n(809) \n \n(379) \nAdvertising revenue excluding foreign exchange effect\n$ 37,897 \n$ 131,569 \nGAAP advertising revenue year-over-year change %\n 24 %\n 16 %\nAdvertising revenue excluding foreign exchange effect year-over-year \nchange %\n 21% \n 16%\nNet cash provided by operating activities\n$ 19,404 \n$ \n14,511 $ 71,113 \n$ \n50,475 \nPurchases of property and equipment, net\n \n(7,592) \n \n(8,988)  (27,045) \n \n(31,186) \nPrincipal payments on finance leases\n \n(307) \n \n(235)  \n(1,058) \n \n(850) \nFree cash flow\n$ 11,505 \n$ \n5,288 $ 43,010 \n$ \n18,439\n11"
+  }
+ ],
+ "sources": [
+  {
+   "source": "Apple_Q4_2023.pdf",
+   "pdf_sha256": "db786041d2e0f87d77a731323a56a3baa3457750fdfe8c61d88264f1465f4234"
+  },
+  {
+   "source": "Meta_Q4_2023.pdf",
+   "pdf_sha256": "ab92ba0290dd5c1b7f0e0ed7db74a52c03e352f70a1e17d39a90e8a1975b6469"
+  }
+ ],
+ "corpus_epoch": 9,
+ "signature": {
+  "algorithm": "Ed25519",
+  "key_id": "adaptive-rag-attest-1",
+  "public_key": "5GAEHZECAukThqCO0qJB04azEOXtrEb+JMZ/2+QaDnk=",
+  "signature": "YDMQnSgniFb2FI3P9riWPIkhpIO78jy1zCI3zrtDfzLxoi3QDyzr4fdIv53Sy+kXnQqUMWnuGE3TQFJLbHUyAw=="
+ }
+}

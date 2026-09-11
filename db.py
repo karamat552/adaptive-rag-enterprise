@@ -32,6 +32,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 from contextlib import contextmanager
