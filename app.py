@@ -205,7 +205,7 @@ def _render_receipt_explorer(run_id: str, tenant: str,
     attribution = ver.get("attribution") or {}
     contradictions = receipt.get("contradictions_json") or []
 
-    st.markdown(f"**Question:** {receipt.get('question', '—')}")
+    st.markdown(_escape_dollars(f"**Question:** {receipt.get('question', '—')}"))
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Chain verdict", "✅ verified" if ver.get("verified")
               else "❌ BROKEN")
@@ -230,10 +230,11 @@ def _render_receipt_explorer(run_id: str, tenant: str,
         with st.expander(f"⚠️ Contradictions surfaced ({len(contradictions)}) — "
                          "both figures shown, never averaged", expanded=True):
             for c in contradictions:
-                st.markdown(f"- **{c.get('company')} · {c.get('family')}** "
-                            f"({c.get('period') or 'period n/a'}): "
-                            f"conflicting values {c.get('values')} — "
-                            f"gap {round(float(c.get('rel_gap', 0)) * 100, 1)}%")
+                st.markdown(_escape_dollars(
+                    f"- **{c.get('company')} · {c.get('family')}** "
+                    f"({c.get('period') or 'period n/a'}): "
+                    f"conflicting values {c.get('values')} — "
+                    f"gap {round(float(c.get('rel_gap', 0)) * 100, 1)}%"))
 
     st.subheader("🧾 Claims → Evidence → Source bytes")
     for i, claim in enumerate(claims, 1):
@@ -280,6 +281,13 @@ def _render_receipt_explorer(run_id: str, tenant: str,
 
 
 # ============================== RESULT RENDERING ===========================
+def _escape_dollars(text: str) -> str:
+    r"""Streamlit treats $...$ spans as inline LaTeX math and mangles any
+    answer containing two dollar figures ('$67,184M ... $22,314M' renders
+    as scrambled math glyphs). Answers are plain prose — escape every $."""
+    return text.replace("$", r"\$")
+
+
 def _render_result(result: Dict[str, Any], question: str, tenant: str) -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Outcome", result.get("outcome", "?"))
@@ -287,7 +295,7 @@ def _render_result(result: Dict[str, Any], question: str, tenant: str) -> None:
     c3.metric("Latency", f"{result.get('latency_s', '—')}s")
     c4.metric("Tokens", f"{(result.get('usage') or {}).get('total', 0):,}")
 
-    st.markdown(result.get("answer", ""))
+    st.markdown(_escape_dollars(result.get("answer", "")))
     if result.get("cached"):
         st.caption("⚡ Served from the verified semantic cache — evict below to force re-verification.")
 
@@ -300,7 +308,7 @@ def _render_result(result: Dict[str, Any], question: str, tenant: str) -> None:
         for i, src in enumerate(sources, 1):
             header, _, body = str(src).partition("\n")
             with st.expander(f"Evidence [{i}] — {header.replace(' | ', ' · ')}"):
-                st.markdown(body.strip() or header)
+                st.markdown(_escape_dollars(body.strip() or header))
 
     st.divider()
     ac1, ac2, ac3, ac4 = st.columns([1, 1, 1, 2])
