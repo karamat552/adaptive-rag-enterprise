@@ -900,3 +900,30 @@ def test_non_quota_failures_still_trip_circuit():
         with pytest.raises(Exception, match="500"):
             asyncio.run(ar._llm_call(_Always500(), [("h", "q")], "audit"))
     assert ar._circuit.failures == before + 2
+
+
+def test_per_model_usage_tracking():
+    """Token-efficiency telemetry (2026-09-10): _track_model_usage accumulates
+    per-model token usage so every A/B and battery can answer 'where did the
+    budget go?' with measured precision. Tests the tracker directly."""
+    import adaptive_rag as ar
+
+    class _FakeCollector:
+        input_tokens = 5000
+        output_tokens = 700
+        calls = 2
+
+    ar._MODEL_USAGE.clear()
+    ar._track_model_usage("openai/gpt-oss-120b", _FakeCollector())
+    ar._track_model_usage("openai/gpt-oss-120b", _FakeCollector())
+    ar._track_model_usage("qwen/qwen3.8-27b", _FakeCollector())
+
+    mu = ar._MODEL_USAGE
+    assert "openai/gpt-oss-120b" in mu and "qwen/qwen3.8-27b" in mu
+    assert mu["openai/gpt-oss-120b"]["input"] >= 10000
+    assert mu["openai/gpt-oss-120b"]["calls"] >= 2
+    assert mu["qwen/qwen3.8-27b"]["input"] >= 5000
+
+    # Reset behavior
+    ar._MODEL_USAGE.clear()
+    assert ar._MODEL_USAGE == {}

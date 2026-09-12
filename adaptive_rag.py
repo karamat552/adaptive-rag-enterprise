@@ -177,11 +177,12 @@ class UsageCollector(BaseCallbackHandler):
     collector's totals() == (0, 0, 0, 0) — the universal safe stand-in on
     failure paths (works for Google AND OpenAI-compatible providers)."""
 
-    def __init__(self) -> None:
+    def __init__(self, model_name: str = "") -> None:
         self.input_tokens = 0
         self.output_tokens = 0
         self.total_tokens = 0
         self.calls = 0
+        self.model_name = model_name
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         try:
@@ -1063,6 +1064,22 @@ def _with_usage(state: MultiAgentState, totals: Tuple[int, int, int, int],
 # ===========================================================================
 # 6. RESILIENT LLM CALL (circuit + timeout + per-call telemetry + failover)
 # ===========================================================================
+# Per-model token accumulator (token-efficiency telemetry, 2026-09-10).
+# Populated by _llm_call on every successful invocation; reset per
+# arun_query; read by arun_query's result shape. Not thread-safe for
+# concurrent runs — single-worker by design.
+_MODEL_USAGE: Dict[str, Dict[str, int]] = {}
+
+
+def _track_model_usage(model_name: str, collector: Any) -> None:
+    with _engines_lock:
+        entry = _MODEL_USAGE.setdefault(
+            model_name, {"input": 0, "output": 0, "calls": 0})
+        entry["input"] += collector.input_tokens
+        entry["output"] += collector.output_tokens
+        entry["calls"] += collector.calls
+
+
 async def _llm_call(runnable: Any, messages: list, stage: str,
                     allow_failover: bool = False,
                     peer_schema: Any = None) -> Tuple[Any, UsageCollector]:
@@ -1071,6 +1088,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
     stage): pinned to the primary model — a quota wall means fail-closed
     quarantine upstream, NEVER a weaker backup certifying a financial brief."""
     _circuit.check()
+    model_name = _runnable_model_id(runnable)
     if allow_failover and get_failover_endpoints():
         # Failover path: primary attempt + backups handled inside the runner.
         # Consult-fix (fan-out storm): quota failures are OWNED by the cooldown
@@ -1080,6 +1098,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         try:
             result, collector = await _failover_stage_call(runnable, messages, stage)
             _circuit.record_success()
+            _track_model_usage(model_name, collector)
             i, o, _, _ = collector.totals()
             logger.info("[%s] ok (failover-eligible) | tokens in=%d out=%d", stage, i, o)
             return result, collector
@@ -1088,7 +1107,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
                 _circuit.record_failure()
             raise
 
-    collector = UsageCollector()
+    collector = UsageCollector(model_name=model_name)
     t0 = time.perf_counter()
     try:
         result = await asyncio.wait_for(
@@ -1126,6 +1145,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
                 return peer
         raise
     _circuit.record_success()
+    _track_model_usage(model_name, collector)
     i, o, _, _ = collector.totals()
     logger.info("[%s] ok in %.2fs | tokens in=%d out=%d",
                 stage, time.perf_counter() - t0, i, o)
@@ -3195,6 +3215,8 @@ async def arun_query(question: str, *, tenant_id: Optional[str] = None,
     """Primary entry for services: `await arun_query(...)` inside the running loop."""
     t0 = time.perf_counter()
     run_id = run_id or uuid.uuid4().hex[:12]
+    with _engines_lock:
+        _MODEL_USAGE.clear()       # per-question scope (token telemetry)
     async with _get_semaphore():
         final = await get_graph().ainvoke(
             {"original_question": question, "retry_count": 0,
@@ -3212,14 +3234,13 @@ async def arun_query(question: str, *, tenant_id: Optional[str] = None,
         # Cache-replay provenance: the run_id whose receipt proves this
         # answer (differs from run_id when served from the semantic cache).
         "provenance_run_id": final.get("provenance_run_id") or final.get("run_id", run_id),
-        "usage": {"input": final.get("usage_in", 0),
-                  "output": final.get("usage_out", 0),
-                  "total": final.get("usage_total", 0),
-                  "llm_calls": final.get("llm_calls", 0)},
         # Quota-hint surfacing (self-pacing finding, 2026-09-08): the state
         # carried it but the result dict dropped it — coverage_eval's
         # self-pacing could never see the announced window. Thread it out.
         "quota_hint_s": final.get("quota_hint_s"),
+        # Per-model token telemetry (token plan, 2026-09-10): which model
+        # burned what — the answer to 'where did the budget go?'
+        "per_model": {k: dict(v) for k, v in _MODEL_USAGE.items()},
         "latency_s": round(time.perf_counter() - t0, 2),
     }
 
