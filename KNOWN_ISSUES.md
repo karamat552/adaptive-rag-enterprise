@@ -93,6 +93,10 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 
 - `/query` auth: **QUERY_API_KEYS** now enforces tenant identity when set
   (open mode when unset — demo posture) — `99989df`.
-- Failover: primary (Groq) → NIM per-stage, executive PINNED (ADR-008).
+- Failover: primary (Groq) → NIM per-stage, executive PINNED + PEER-RESCUE (ADR-008 amendment: NIM 120b → Gemini 3.5-flash).
 - Quota economics: a full battery fits one 200K window post-ADR-015.
 - ModelScope second backup: **PARKED — external constraint** (2026-09-10). API-Inference requires Alibaba Cloud account binding + real-name verification (KYC); verified live (token lists 46 models, inference 401s until KYC completes). The failover stack is complete without it: Groq primary → NIM 120b (lane 1) → TokenRouter GLM-5.3-free (lane 2), with NIM/gemini-3.5-flash as executive peers. Revisit only if the active lanes prove insufficient.
+- k6 load test: scheduled — 5-10 concurrent users, p95 latency + error rates for the resume baseline
+- Redis Stage 1: trigger-gated on k6 results (p95 degradation or second worker); ADR-016 has the 9-play roadmap ready
+- Incremental PDF diffing: deferred (SHA-256 comparison is correct for 3 filings; page-level diffing is a roadmap item for >20 sources)
+- Suite determinism: live-LLM tests (test_main.py auth, test_answer_accuracy.py) are the known flake class; offline suite is deterministic 297/297
