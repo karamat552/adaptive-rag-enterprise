@@ -3096,13 +3096,45 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
     # terms lack corpus support); preserve it rather than the generic text.
     if state.get("_premise_fast_path"):
         return {"outcome": "verified_refusal"}
-    return {"final_executive_report":
-            "⚠️ I could not verify an answer to this question against the indexed "
-            "Q4 2023 filings after multiple retrieval and verification attempts. "
-            "Rather than risk presenting unsupported figures, I am declining to "
-            "answer. Try narrowing your question to a metric explicitly covered "
-            "in the Apple, Meta, or Tesla filings.",
-            "outcome": "verified_refusal"}
+
+    # REFUSAL AUTOPSY (flaky-refusal finding, 2026-09-13): refusals used to
+    # vanish — no receipt, no cache entry — so every diagnosis needed Render
+    # logs. Persist a verdict='refused' receipt (best-effort, same contract
+    # as certified saves: a storage failure must never block the refusal)
+    # and surface the last audit objection in the refusal text itself.
+    if state.get("quota_aborted"):
+        objection = "provider quota wall (429) aborted the run"
+    elif state.get("echo_reject"):
+        objection = "draft echoed prompt/deliberation markers (echo-guard)"
+    elif state.get("xbrl_issues"):
+        _xi = state["xbrl_issues"][0]
+        objection = ("XBRL crosscheck: claimed %s vs official %s (%s %s)"
+                     % (_xi.get("claimed"), _xi.get("official"),
+                        _xi.get("company"), _xi.get("metric")))
+    else:
+        objection = ("draft failed the grounding audit after %d attempts"
+                     % get_settings().max_retries)
+    text = (
+        "⚠️ I could not verify an answer to this question against the indexed "
+        "Q4 2023 filings after multiple retrieval and verification attempts. "
+        "Rather than risk presenting unsupported figures, I am declining to "
+        "answer. Try narrowing your question to a metric explicitly covered "
+        "in the Apple, Meta, or Tesla filings.\n\n"
+        f"*Audit objection:* {objection}")
+    try:
+        await _db_call(save_verification_receipt,
+                       state.get("run_id", "-"),
+                       state.get("original_question", ""), text,
+                       claims=[],        # nothing certified — nothing claimed
+                       evidence=build_receipt_evidence(
+                           state.get("evidence_records") or []),
+                       audit_verdict="refused",
+                       contradictions=state.get("contradictions") or [],
+                       tenant_id=state.get("tenant_id") or None)
+    except Exception as receipt_err:
+        logger.warning("Refusal receipt save skipped (non-fatal): %s",
+                       receipt_err)
+    return {"final_executive_report": text, "outcome": "verified_refusal"}
 
 
 # ===========================================================================

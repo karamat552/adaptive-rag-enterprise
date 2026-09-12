@@ -660,3 +660,97 @@ def test_premise_fast_path_routes_refusal_fast(monkeypatch):
              "outcome": "verified_refusal", "grounded": False}
     assert ar.route_premise(state) == "verified_refusal"
     # And the flag survives the graph merge (channel-level, covered above).
+
+
+# ==================== refusal-autopsy receipts (2026-09-13) ==================
+def test_verified_refusal_persists_refused_receipt(monkeypatch):
+    """Flaky-refusal finding: refusals used to vanish entirely — no receipt,
+    no cache entry — so diagnosing a verified_refusal required Render logs.
+    The refusal node must persist a verdict='refused' receipt (run recorded,
+    evidence set in play, nothing certified) and surface the audit objection
+    in the refusal text itself."""
+    import asyncio
+    import adaptive_rag as ar
+
+    saved = {}
+
+    async def _spy_db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
+                  contradictions=None, tenant_id=None):
+        saved.update(run_id=run_id, question=question, answer=answer,
+                     claims=claims, evidence=evidence, verdict=audit_verdict,
+                     tenant_id=tenant_id)
+        return True
+
+    monkeypatch.setattr(ar, "_db_call", _spy_db)
+    monkeypatch.setattr(ar, "save_verification_receipt", _spy_save)
+
+    state = {
+        "original_question": "What were Apple's Products revenue versus "
+                             "Services revenue in Q4 2023?",
+        "run_id": "run-refused-1", "tenant_id": "default",
+        "evidence_records": [], "quota_aborted": True,
+        "final_executive_report": "<last rejected draft>"}
+    upd = asyncio.run(ar.verified_refusal(state))
+
+    assert upd["outcome"] == "verified_refusal"
+    assert saved["run_id"] == "run-refused-1"
+    assert saved["verdict"] == "refused"
+    assert saved["claims"] == [], "a refusal certifies nothing — claims must be empty"
+    assert "quota wall" in saved["answer"], "the objection must be named"
+    assert "Audit objection" in upd["final_executive_report"]
+    assert "I could not verify" in upd["final_executive_report"], \
+        "the user-facing refusal must stay fail-closed"
+
+
+def test_verified_refusal_xbrl_objection_named(monkeypatch):
+    """A draft rejected by the deterministic XBRL crosscheck must name the
+    exact claimed-vs-official collision in its refusal — not a generic line."""
+    import asyncio
+    import adaptive_rag as ar
+
+    saved = {}
+
+    async def _spy_db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
+                  contradictions=None, tenant_id=None):
+        saved.update(answer=answer, verdict=audit_verdict, evidence=evidence)
+        return True
+
+    monkeypatch.setattr(ar, "_db_call", _spy_db)
+    monkeypatch.setattr(ar, "save_verification_receipt", _spy_save)
+
+    state = {
+        "original_question": "Q?", "run_id": "run-refused-2",
+        "tenant_id": "default", "evidence_records": [{"chunk_hash": "a" * 64}],
+        "xbrl_issues": [{"metric": "revenue", "company": "Apple",
+                         "claimed": "$40,111M", "official": "$89,498M"}]}
+    upd = asyncio.run(ar.verified_refusal(state))
+    assert saved["verdict"] == "refused"
+    assert "$40,111M" in saved["answer"] and "$89,498M" in saved["answer"]
+    assert len(saved["evidence"]) == 1, "evidence in play must ride the receipt"
+
+
+def test_premise_refusal_saves_no_receipt(monkeypatch):
+    """The premise fast-path writes its own specific refusal and has no
+    evidence in play — it must not overwrite the receipt channel with a
+    generic refused record."""
+    import asyncio
+    import adaptive_rag as ar
+
+    called = {"n": 0}
+
+    async def _spy_db(fn, *args, **kwargs):
+        called["n"] += 1
+        return None
+
+    monkeypatch.setattr(ar, "_db_call", _spy_db)
+    state = {"_premise_fast_path": True, "original_question": "Q?",
+             "run_id": "r", "tenant_id": "default"}
+    upd = asyncio.run(ar.verified_refusal(state))
+    assert upd["outcome"] == "verified_refusal"
+    assert called["n"] == 0, "premise refusals must not save a receipt"

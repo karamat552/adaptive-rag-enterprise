@@ -81,6 +81,7 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 
 | Class | Live case | Fix |
 |---|---|---|
+| Refusal invisibility | Apple Products-vs-Services: certified 3/4 live runs; the 4th refused after cache eviction (65K tokens, 277s) and left NO trail — diagnosis needed Render logs | refusal node persists a `verdict='refused'` receipt and names the audit objection in the refusal text, this commit |
 | Echo-leak certification | receipt e8650748687f: nemotron rule-check deliberation certified grounded | 7 new markers, stripper+guard, `20fd15f` |
 | Self-pacing blindness | 16-min hints announced, 0 pauses fired | quota_hint_s threaded to results, `7782921` |
 | Cross-company XBRL judging | Meta's $40,111M judged vs Apple's $22,956M gold | sentence-named attribution, `28dd632` |
