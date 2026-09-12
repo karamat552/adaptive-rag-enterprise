@@ -1,6 +1,6 @@
 # Known Issues & Honest Limits
 
-**Last updated:** 2026-09-12 · **Suite:** 297/297 offline green · **Invariant:** zero fabricated certified answers across every battery, ever. · **Receipts:** 73 grounded, every one crypto-verified.
+**Last updated:** 2026-09-13 · **Suite:** 311 tests green · **Invariant:** zero fabricated certified answers across every battery, ever. · **Receipts:** 73+ grounded, every one crypto-verified; refusals now receipted too.
 
 This document is the project's own list of its open problems — written by
 its maintainer, with status, evidence, and fixes' commit hashes. If you
@@ -81,7 +81,9 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 
 | Class | Live case | Fix |
 |---|---|---|
-| Refusal invisibility | Apple Products-vs-Services: certified 3/4 live runs; the 4th refused after cache eviction (65K tokens, 277s) and left NO trail — diagnosis needed Render logs | refusal node persists a `verdict='refused'` receipt and names the audit objection in the refusal text, this commit |
+| Cache self-heal deadlock | Products-vs-Services certified 4x live, never cached once: lookup hit a legacy no-provenance entry (miss), but the save path's dedup saw the same row as "equivalent" and skipped every write — 5 full-price runs, then a quota-wall refusal | lookup now EVICTS provenance-less entries so fresh certifications land, this commit |
+| Cache threshold inversion | Measured: cross-intent pair scored sim 0.952 (would replay a Services-only brief for a Products-vs-Services ask) while true paraphrases scored 0.856-0.875 — bge-small clusters by topic, not intent | replay is near-exact only (`cache_similarity` 0.92 → 0.985): identical re-asks hit at dist ~0, everything else pays full price and is never wrong, this commit |
+| Refusal invisibility | Apple Products-vs-Services: certified 3/4 live runs; the 4th refused after cache eviction (65K tokens, 277s) and left NO trail — diagnosis needed Render logs | refusal node persists a `verdict='refused'` receipt and names the audit objection in the refusal text, `50a820d` |
 | Echo-leak certification | receipt e8650748687f: nemotron rule-check deliberation certified grounded | 7 new markers, stripper+guard, `20fd15f` |
 | Self-pacing blindness | 16-min hints announced, 0 pauses fired | quota_hint_s threaded to results, `7782921` |
 | Cross-company XBRL judging | Meta's $40,111M judged vs Apple's $22,956M gold | sentence-named attribution, `28dd632` |

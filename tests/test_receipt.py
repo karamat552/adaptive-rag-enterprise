@@ -582,8 +582,49 @@ def test_legacy_cache_entry_without_provenance_is_miss():
     written before the Gauntlet-4 provenance threading carry NO ids — their
     replays self-pointed (provenance == replay run_id) and /verify 404'd:
     an UNVERIFIABLE certified answer served to users. A provenance-less
-    entry is now a MISS: the pipeline re-runs, certifies, and writes a
-    provenance-carrying entry (legacy self-heal on first ask)."""
+    entry is now a MISS — AND it is EVICTED (self-heal deadlock fix,
+    2026-09-13): the save path's NOT EXISTS dedup sees the legacy row as
+    'an equivalent answer' and silently skips every fresh write, so without
+    eviction the question re-runs at full price forever. Live case: the
+    Products-vs-Services question certified 4x on 2026-09-12/13 and never
+    cached once — five full-price runs, then a quota-wall refusal."""
+    import asyncio
+    import adaptive_rag as ar
+
+    evicted = {}
+
+    def _legacy(*a, **k):
+        return {"answer": "old cached text", "grounded": True,  # NO ids
+                "_cache_entry_id": 4242}
+
+    def _spy_delete(entry_id, tenant_id=None):
+        # sync — mirrors db.delete_semantic_cache_entry (_db_call runs it
+        # in a worker thread, never awaits it)
+        evicted["id"] = entry_id
+        evicted["tenant"] = tenant_id
+        return True
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _legacy), \
+         mock.patch.object(ar, "_db_call", _db), \
+         mock.patch.object(ar, "delete_semantic_cache_entry", _spy_delete):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "fresh-run-1", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is False, \
+        "a provenance-less legacy entry must be treated as a cache miss"
+    assert evicted["id"] == 4242, \
+        "the unverifiable legacy row must be evicted so the fresh " \
+        "certification can write through the dedup clause"
+    assert evicted["tenant"] == "default"
+
+
+def test_legacy_entry_without_row_id_still_misses():
+    """Defensive: a legacy payload with no _cache_entry_id (older checker
+    build) must still miss gracefully — eviction is skipped, never crash."""
     import asyncio
     import adaptive_rag as ar
 
@@ -597,10 +638,9 @@ def test_legacy_cache_entry_without_provenance_is_miss():
     with mock.patch.object(ar, "check_semantic_cache", _legacy), \
          mock.patch.object(ar, "_db_call", _db):
         state = {"original_question": "q?", "retry_count": 0,
-                 "run_id": "fresh-run-1", "tenant_id": "default"}
+                 "run_id": "fresh-run-2", "tenant_id": "default"}
         upd = asyncio.run(ar.check_cache_node(state))
-    assert upd.get("cached_hit") is False, \
-        "a provenance-less legacy entry must be treated as a cache miss"
+    assert upd.get("cached_hit") is False
 
 
 def test_cache_replay_with_provenance_serves_normally():

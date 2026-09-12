@@ -90,7 +90,15 @@ class Settings(BaseSettings):
     statement_timeout_ms: int = 20_000
     hnsw_ef_search: int = 100
 
-    cache_similarity: float = 0.92
+    # SEMANTIC-CACHE THRESHOLD (2026-09-13, measured on bge-small-en-v1.5):
+    # question embeddings cluster by TOPIC, not intent — 'Services revenue'
+    # vs 'Products revenue VERSUS Services revenue' scored sim 0.952 (false
+    # match at 0.92: a Services-only brief replayed for a comparison ask)
+    # while true paraphrases scored 0.856-0.875 (false misses). NO threshold
+    # separates intent with this embedder, so the cache replays NEAR-EXACT
+    # questions only: identical re-asks embed at dist ~0 and hit; anything
+    # else pays full price and is never wrong. Correctness over hit-rate.
+    cache_similarity: float = 0.985
     cache_ttl_days: int = 7
     migrate_batch_size: int = 64
 
@@ -738,7 +746,35 @@ def check_semantic_cache(
         )
     logger.info("⚡ [CACHE HIT] tenant=%s sim=%.3f | scope=%s | orig: '%s'",
                 tid, 1.0 - row["distance"], scope, row["query_text"][:60])
-    return dict(row["cached_response"])
+    out = dict(row["cached_response"])
+    # Row identity for the caller's self-heal: a hit whose payload carries no
+    # provenance is deleted upstream (unverifiable legacy entry) — it cannot
+    # be overwritten through the save path's dedup clause (self-heal deadlock,
+    # live-caught 2026-09-13).
+    out["_cache_entry_id"] = row["id"]
+    return out
+
+
+def delete_semantic_cache_entry(entry_id: int,
+                                tenant_id: Optional[str] = None) -> bool:
+    """Removes one cache row (tenant-scoped, RLS beneath). Used by the
+    graph's legacy-provenance self-heal: an unverifiable entry must be
+    replaced, not merely dodged — the save path's NOT EXISTS dedup would
+    otherwise block the fresh write forever."""
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    try:
+        with get_db_connection(tenant_id=tid) as conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM semantic_cache WHERE id = %s AND tenant_id = %s;",
+                (entry_id, tid))
+            deleted = cur.rowcount
+        if deleted:
+            logger.info("Cache entry %s evicted (legacy self-heal).", entry_id)
+        return bool(deleted)
+    except Exception as exc:
+        logger.warning("Cache entry delete failed (non-fatal): %s", exc)
+        return False
 
 
 def save_to_semantic_cache(

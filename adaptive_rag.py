@@ -59,7 +59,8 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from db import (check_semantic_cache, get_xbrl_facts, pgvector_hybrid_search,
+from db import (check_semantic_cache, delete_semantic_cache_entry,
+                get_xbrl_facts, pgvector_hybrid_search,
                 save_to_semantic_cache, save_verification_receipt)
 
 logger = logging.getLogger("EnterpriseRAG")
@@ -101,7 +102,10 @@ class RagSettings(BaseSettings):
     db_timeout_s: float = 20.0
     max_retries: int = 2
     max_concurrent_runs: int = 8
-    cache_similarity: float = 0.92
+    # Near-exact replay only — see db.Settings.cache_similarity for the
+    # 2026-09-13 measurement that killed the 0.92 default (bge-small
+    # question embeddings cluster by topic, not intent).
+    cache_similarity: float = 0.985
     cb_failure_threshold: int = 5
     cb_cooldown_s: float = 60.0
     rerank_model: Optional[str] = None      # None = flashrank default (logged)
@@ -1511,9 +1515,23 @@ async def check_cache_node(state: MultiAgentState) -> MultiAgentState:
         # proof) holds for replays too.
         provenance_run_id = cached.get("provenance_run_id") or cached.get("run_id")
         if not provenance_run_id:
+            # SELF-HEAL, now actually healing (deadlock live-caught 2026-09-13):
+            # a legacy entry without provenance is an UNVERIFIABLE certified
+            # answer. Treating it as a miss is not enough — the save path's
+            # NOT EXISTS dedup still sees it as "an equivalent answer" and
+            # silently skips every fresh write, so the question re-runs at
+            # full price FOREVER. Evict the legacy row (best-effort) so the
+            # post-certification save can land; next ask replays with proof.
+            _entry_id = cached.get("_cache_entry_id")
             logger.warning("[cache] legacy entry without provenance — "
-                           "treating as MISS (re-run certifies and "
-                           "rewrites with provenance).")
+                           "evicting entry %s and re-running.", _entry_id)
+            if _entry_id:
+                try:
+                    await _db_call(delete_semantic_cache_entry, _entry_id,
+                                   tenant_id=state.get("tenant_id") or None)
+                except Exception as del_err:
+                    logger.warning("Legacy cache eviction skipped "
+                                   "(non-fatal): %s", del_err)
             return {"cached_hit": False,
                     "run_id": state.get("run_id") or uuid.uuid4().hex[:12]}
         # Defense-in-depth: the provenance receipt must EXIST — a pointer

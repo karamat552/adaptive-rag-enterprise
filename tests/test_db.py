@@ -284,3 +284,29 @@ def test_pool_bounded_wait_absorbs_burst(monkeypatch):
     waited = _time.perf_counter() - t0
     assert raised, "a genuinely saturated pool must still fail loudly"
     assert 0.3 <= waited < 2.0, "fail after the bounded window, not instantly, not forever"
+
+
+# ==================== semantic-cache replay threshold (2026-09-13) ==========
+def test_cache_similarity_is_near_exact_only():
+    """CACHE THRESHOLD INVERSION (live-caught 2026-09-13, measured on
+    bge-small-en-v1.5 question embeddings):
+      - 'What was Apple Services revenue in Q4 2023?' vs 'What were Apple's
+        Products revenue VERSUS Services revenue in Q4 2023?' → sim 0.952
+        — DIFFERENT intent, yet ABOVE the old 0.92 threshold: a
+        Services-only brief would replay for a comparison ask.
+      - True paraphrases ('total automotive revenues' vs 'automotive
+        segment revenues ... fiscal quarter') → sim 0.856-0.875 — BELOW
+        0.92: legit replays never fired.
+    The embedder clusters by TOPIC, not intent — no threshold separates
+    them. Replay is therefore NEAR-EXACT ONLY (0.985): identical re-asks
+    embed at dist ~0 and hit; everything else pays full price and is
+    never wrong. This also dissolves the self-heal deadlock: the legacy
+    near-entry (0.952) no longer satisfies the save path's NOT EXISTS
+    dedup, so fresh certifications write through."""
+    import adaptive_rag as ar
+    import db as db_mod
+
+    assert db_mod.get_settings().cache_similarity == 0.985
+    assert ar.get_settings().cache_similarity == 0.985, \
+        "the two Settings objects must agree — check_cache_node passes " \
+        "the adaptive_rag value into db.check_semantic_cache"
