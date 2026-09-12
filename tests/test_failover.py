@@ -927,3 +927,109 @@ def test_per_model_usage_tracking():
     # Reset behavior
     ar._MODEL_USAGE.clear()
     assert ar._MODEL_USAGE == {}
+
+
+# ==================== specialist pruning default (2026-09-13) ================
+def test_specialist_pruning_default_on_with_escape_hatch():
+    """FLEET-COST FIX (live case, 2026-09-13): the Products-vs-Services
+    certification ran THREE specialist extractions for a purely financial
+    question — and the answer's headwinds section still said 'no headwinds
+    noted'. Pruning is now DEFAULT-ON: the router's selection scopes the
+    fleet (fail-open preserved upstream — the router returns all three when
+    unsure), and RAG_SPECIALIST_PRUNING=0 restores the full fleet for A/B."""
+    import os
+    import asyncio
+    import unittest.mock as mock
+    import adaptive_rag as ar
+
+    seen = {}
+
+    seen_k = {}
+
+    async def _spy_specialist(name, prompt, cat, search_q, original_q,
+                              top_k=5):
+        seen[name] = True
+        seen_k[name] = top_k
+        return {"name": name, "report": f"{name} report", "records": [],
+                "degraded": False, "usage": (0, 0, 0, 0)}
+
+    state = {"original_question": "What were Apple's Products revenue "
+                                 "versus Services revenue in Q4 2023?",
+             "search_query": "apple products vs services revenue",
+             "active_specialists": ["financial"],
+             "run_id": "r", "tenant_id": "default"}
+
+    # default (env unset): router selection scopes the fleet
+    with mock.patch.dict(os.environ, {"RAG_SPECIALIST_PRUNING": ""},
+                         clear=False), \
+         mock.patch.object(ar, "_specialist", _spy_specialist):
+        upd = asyncio.run(ar.execute_specialist_fleet(state))
+    assert list(seen) == ["financial"], \
+        "pruning must be default-on: only the selected specialist runs"
+
+    # escape hatch (env explicitly 0): full fleet for A/B comparisons
+    seen.clear()
+    with mock.patch.dict(os.environ, {"RAG_SPECIALIST_PRUNING": "0"},
+                         clear=False), \
+         mock.patch.object(ar, "_specialist", _spy_specialist):
+        asyncio.run(ar.execute_specialist_fleet(state))
+    assert set(seen) == {"financial", "risk", "product"}, \
+        "RAG_SPECIALIST_PRUNING=0 must restore the full fleet"
+
+
+# ==================== structured-failover parity (2026-09-13) ================
+def test_structured_wrapper_carries_schema_for_failover():
+    """LIVE CRASH (2026-09-13, first router quota-failover of the service's
+    life): the primary router engine is schema-bound, but backup engines
+    were raw ChatOpenAI — the failover 'succeeded' with a bare AIMessage,
+    and `decision.destination` raised AttributeError, 500-ing the query.
+    The structured wrapper must carry its schema so the failover runner can
+    re-bind backups, and route_question must fail-closed on any non-schema
+    response regardless."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _FakeBound:
+        async def ainvoke(self, messages, config=None, **kw):
+            raise ValueError("parse path unused here")
+
+        def invoke(self, messages, config=None, **kw):
+            raise ValueError("parse path unused here")
+
+    class _FakeEngine:
+        def with_structured_output(self, schema, include_raw=False):
+            return _FakeBound()
+
+    wrapper = ar._repairing_structured(_FakeEngine(), ar.RouteDecision)
+    assert getattr(wrapper, "_rag_schema", None) is ar.RouteDecision, \
+        "the failover runner discovers the schema via _rag_schema"
+
+    # route_question: a raw AIMessage-like decision must fail-closed, not crash
+    class _FakeAIMessage:
+        content = "**vectorstore**"
+
+    async def _raw_llm(*a, **k):
+        return _FakeAIMessage(), ar.UsageCollector()
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "_llm_call", _raw_llm):
+        upd = asyncio.run(ar.route_question({
+            "original_question": "What was Apple revenue in Q4 2023?"}))
+    assert upd.get("route") == "out_of_domain", \
+        "a non-schema router response must fail-closed to refusal, never crash"
+
+
+def test_backup_engine_rebound_to_primary_schema():
+    """The failover runner must hand backends the SAME schema-bound wrapper
+    the primary used: a structured primary + raw backup = an unparseable
+    AIMessage response. Cached per endpoint+schema so lane warm-up is
+    one-time. (Source-level guard, same pattern as the eviction-radius
+    test: the re-binding lives inside the backup loop.)"""
+    import inspect
+    import adaptive_rag as ar
+
+    assert isinstance(ar._structured_backup_cache, dict)
+    src = inspect.getsource(ar._failover_stage_call)
+    assert "_rag_schema" in src and "_structured_backup_cache" in src, \
+        "the failover backup loop must re-bind raw backups to the " \
+        "primary's schema (_rag_schema) via the structured cache"

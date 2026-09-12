@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/karamat552/adaptive-rag-enterprise/actions/workflows/ci.yml/badge.svg)
 
-**311 tests · 90% recall · 0 fabrications · every certification AND refusal crypto-receipted · 19 regression classes · 4 provider lanes**
+**311 tests · 90% recall · 0 fabrications · every certification AND refusal crypto-receipted · 22 regression classes · 4 provider lanes**
 
 > I built this to answer one question: *can an AI system prove — cryptographically,
 > deterministically, without trust — that every number it outputs came from a
@@ -44,7 +44,7 @@ each one zero-cost, each one born from a live-caught fabrication attempt:
 
 **The invariant: zero fabricated certified answers across every battery, every
 provider, every storm.** Not "we hope it doesn't lie" — *measured, with a
-19-class regression ledger and a tamper-evidence proof artifact committed to
+22-class regression ledger and a tamper-evidence proof artifact committed to
 this repo.*
 
 ---
@@ -125,7 +125,7 @@ returns an unverified answer as if it were verified.
 | Day-5 (post-fixes) | **90%** | 9/10 | **0** | 100% |
 | Day-6 (final, 13 questions) | **80%** | 8/10 | **0** | — |
 
-**19 regression classes** — every bug found by live adversarial testing,
+**22 regression classes** — every bug found by live adversarial testing,
 fixed, and locked with a named test. Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md)
 
 **The white-whale receipt** (Apple-vs-Meta comparison — the hardest question,
@@ -197,7 +197,7 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 | Document | What it contains |
 |---|---|
 | [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | ADRs 005-016: every design decision with evidence and rejected alternatives |
-| [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | 19-class fixed ledger + 5 open problems + epistemic limits + operational posture |
+| [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | 22-class fixed ledger + 5 open problems + epistemic limits + operational posture |
 | [GAP_ANALYSIS.md](GAP_ANALYSIS.md) | Version 2.0 roadmap: 12 prioritized gaps, score projection 63→90+ |
 | [.env.example](.env.example) | Every configuration variable, annotated |
 

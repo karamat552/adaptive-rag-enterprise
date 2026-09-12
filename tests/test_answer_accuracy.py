@@ -49,8 +49,15 @@ GOLD_SET = [
     ("What was Meta's advertising revenue in Q4 2023?",
      ["38,706", "38.7"]),
     # --- Derived metrics ---
+    # GOLD SEMANTICS FIX (2026-09-13): this row demanded BOTH 24.7 AND 25,
+    # but _gold_missing is a conjunction ("all gold values must appear")
+    # and 24.7% is a COMPUTED value — the synthesis mandate forbids
+    # stating any percentage the source table does not carry verbatim
+    # (Meta's % Change column says 25%). The row was unsatisfiable by
+    # design and only passed when a specialist leaked the computed
+    # figure. The mandated verbatim value is the gold.
     ("What was Meta's revenue growth in Q4 2023 compared to Q4 2022?",
-     ["24.7", "25"]),
+     ["25"]),
     ("What was Apple's revenue change in Q4 2023 versus Q4 2022?",
      ["-0.7", "decline", "decreased"]),
     # --- Multi-company comparison ---

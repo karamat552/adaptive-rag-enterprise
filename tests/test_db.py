@@ -55,10 +55,18 @@ def test_cache_key_query_normalization():
 
 def test_eviction_radius_equals_hit_radius():
     """THE v1 bug: hits served at sim>=0.85 but eviction deleted at sim>=0.93 —
-    poison survived its own purge. One shared constant must drive both."""
+    poison survived its own purge. One shared constant must drive both —
+    the lookup radius and the save path's NOT EXISTS dedup radius both
+    derive from cfg.cache_similarity (now near-exact 0.985 per the
+    2026-09-13 threshold-inversion fix)."""
+    import inspect
     from db import get_settings
     cfg = get_settings()
-    assert round(1.0 - cfg.cache_similarity, 4) == 0.08
+    assert round(1.0 - cfg.cache_similarity, 4) == 0.015
+    import db as db_mod
+    assert "cfg.cache_similarity" in inspect.getsource(
+        db_mod.save_to_semantic_cache), \
+        "save-side dedup must derive its radius from cfg.cache_similarity"
 
 
 def test_normalize_filters_drops_empty_values():

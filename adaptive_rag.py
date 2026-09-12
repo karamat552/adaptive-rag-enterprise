@@ -504,6 +504,7 @@ def _build_backup_engine(ep: FailoverEndpoint):
 
 
 _backup_engines: Dict[str, Any] = {}
+_structured_backup_cache: Dict[str, Any] = {}
 _backup_engines_lock = threading.Lock()
 
 
@@ -584,8 +585,23 @@ def _failover_stage_call(runnable: Any, messages: list, stage: str):
             if _endpoint_cooldown.blocked(ep_id):
                 continue
             try:
+                backup = _get_backup_engine(ep)
+                # STRUCTURED-FAILOVER PARITY (live-caught 2026-09-13): the
+                # primary runnable may be a schema-bound wrapper (router /
+                # rewriter). A raw backup engine answers with a bare
+                # AIMessage that the caller cannot parse — the query 500s.
+                # Re-bind the backup to the SAME schema with the SAME
+                # deterministic repair, cached per endpoint+schema.
+                _schema = getattr(runnable, "_rag_schema", None)
+                if _schema is not None:
+                    _ck = f"{ep_id}::{getattr(_schema, '__name__', 'schema')}"
+                    _bound = _structured_backup_cache.get(_ck)
+                    if _bound is None:
+                        _bound = _repairing_structured(backup, _schema)
+                        _structured_backup_cache[_ck] = _bound
+                    backup = _bound
                 result, collector = await _call(
-                    _get_backup_engine(ep), ep.get("timeout_s") or None)
+                    backup, ep.get("timeout_s") or None)
                 _endpoint_cooldown.clear(ep_id)
                 logger.info("[%s] failover SUCCEEDED via %s", stage, ep["base_url"])
                 return result, collector
@@ -764,7 +780,14 @@ def _repairing_structured(engine: Any, schema: Any) -> Any:
                         return schema.model_validate(repaired)
                 raise first_err
 
-    return _Runnable()
+    runnable = _Runnable()
+    # FAILOVER STRUCTURE TAG (2026-09-13, live-caught): the failover
+    # runner must re-bind backup engines to the SAME schema — a raw
+    # ChatOpenAI backup returns an AIMessage, and the caller's
+    # `decision.destination` crashed the whole query (AttributeError) on
+    # the first router quota-failover of the service's life.
+    runnable._rag_schema = schema
+    return runnable
 
 
 def _schema_fields_match(candidate: Dict[str, Any], schema: Any) -> bool:
@@ -1373,7 +1396,8 @@ async def _multi_query_search(search_q: str, *, category: Optional[str],
 # 7. SPECIALIST EXTRACTION (fleet model, quarantine-aware)
 # ===========================================================================
 async def _specialist(name: str, system_prompt: str, category: str,
-                      search_q: str, original_q: str) -> Dict[str, Any]:
+                      search_q: str, original_q: str,
+                      top_k: int = 5) -> Dict[str, Any]:
     out: Dict[str, Any] = {"name": name, "report": "", "records": [],
                            "degraded": False, "usage": (0, 0, 0, 0)}
     try:
@@ -1436,14 +1460,14 @@ async def _specialist(name: str, system_prompt: str, category: str,
         try:
             ranked = await _db_call(_get_reranker().rerank,
                                     RerankRequest(query=search_q, passages=passages))
-            top = [records[int(d["id"])] for d in ranked[:5]
+            top = [records[int(d["id"])] for d in ranked[:top_k]
                    if isinstance(d, dict) and str(d.get("id", "")).isdigit()
                    and int(d["id"]) < len(records)]
         except Exception as e:
             logger.warning("[%s] rerank failed — using first 5 records: %s", name, e)
             top = []
         if not top:
-            top = records[:5]
+            top = records[:top_k]
 
         context_str = "\n\n---\n\n".join(
             f"<evidence>\n{_format_record(r)}\n</evidence>" for r in top)
@@ -1566,11 +1590,15 @@ obscure, unusual, or likely absent from the filings.
 
 For 'vectorstore' routes, also set active_specialists:
 - ['financial'] for single-metric factual queries (revenue, EPS, margins,
-  cash position, net income — anything that asks 'what was X?')
-- ['financial','risk','product'] for comparative questions (X vs Y),
-  multi-domain queries, or qualitative/strategic questions
-If unsure, return all three. The pruning flag controls whether the
-system USES your selection."""
+  cash position, net income — anything that asks 'what was X?') AND for
+  metric-vs-metric comparisons within ONE company and ONE domain (e.g.
+  'Products revenue versus Services revenue' is still purely financial).
+- ['financial','risk','product'] ONLY for cross-company comparisons,
+  multi-domain questions, or qualitative/strategic questions (risks,
+  supply chain, products, AI infrastructure, strategy).
+Each extra specialist is a full extraction pass — prune aggressively,
+but if unsure, return all three (fail-open).
+The pruning flag controls whether the system USES your selection."""
     try:
         decision, usage = await _llm_call(
             _get_router(), [("system", prompt),
@@ -1578,6 +1606,14 @@ system USES your selection."""
             allow_failover=True)
     except Exception as e:
         logger.error("Router unavailable — FAIL-CLOSED to refusal: %s", e)
+        return {"route": "out_of_domain"}
+    if not isinstance(decision, RouteDecision):
+        # Defense-in-depth (live crash 2026-09-13): a non-schema response
+        # (raw AIMessage from an unbound failover lane) must never reach
+        # `decision.destination` — that AttributeError 500'd the query.
+        # Same contract as a router outage: fail-closed to refusal.
+        logger.error("Router returned %s instead of RouteDecision — "
+                     "FAIL-CLOSED to refusal.", type(decision).__name__)
         return {"route": "out_of_domain"}
     logger.info("Routing Destination: %s", decision.destination.upper())
     extras: Dict[str, Any] = {"route": decision.destination}
@@ -1668,11 +1704,14 @@ async def execute_specialist_fleet(state: MultiAgentState) -> MultiAgentState:
         "product": ("Role: Enterprise Technology Strategist. Extract concrete details on AI infrastructure, GPU deployments, autonomous systems, and new product rollouts.", "product"),
     }
 
-    # SPECIALIST PRUNING (token plan, 2026-09-10): the router can scope the
-    # fleet to the relevant specialists for single-metric factual queries —
-    # risk and product agents are noise that creates false-contradiction
-    # groups. Behind RAG_SPECIALIST_PRUNING=1; default = full fleet.
-    if (os.getenv("RAG_SPECIALIST_PRUNING") == "1"
+    # SPECIALIST PRUNING (token plan, 2026-09-10; DEFAULT-ON 2026-09-13):
+    # the router scopes the fleet to the relevant specialists — risk and
+    # product agents are pure waste on single-domain questions (the live
+    # Products-vs-Services certification burned 3 extractions and its
+    # headwinds section still said 'no headwinds noted'). Fail-open is
+    # preserved upstream: the router returns all three when unsure.
+    # RAG_SPECIALIST_PRUNING=0 restores the full fleet (A/B escape hatch).
+    if (os.getenv("RAG_SPECIALIST_PRUNING", "1") != "0"
             and state.get("active_specialists")):
         pruned = {k: v for k, v in specialists.items()
                   if k in state["active_specialists"]}
@@ -1682,8 +1721,15 @@ async def execute_specialist_fleet(state: MultiAgentState) -> MultiAgentState:
                         ", ".join(pruned.keys()))
             specialists = pruned
 
+    # EVIDENCE-POOL PARITY (2026-09-13): pruning must shrink the CALL
+    # count, never the evidence pool — one specialist at top_k=5 left
+    # synthesis a 5-chunk view of the corpus (the full fleet's union is
+    # ~12-15), drafts misattributed figures, and the XBRL gate refused
+    # the run. Scale k so len(pruned) * k ~= the full-fleet budget.
+    per_specialist_k = max(5, 15 // max(1, len(specialists)))
     results = await asyncio.gather(*[
-        _specialist(name, prompt, cat, search_q, original_q)
+        _specialist(name, prompt, cat, search_q, original_q,
+                    top_k=per_specialist_k)
         for name, (prompt, cat) in specialists.items()
     ])
 
