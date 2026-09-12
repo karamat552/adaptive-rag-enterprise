@@ -1639,6 +1639,11 @@ async def cannot_answer(state: MultiAgentState) -> MultiAgentState:
 
 
 async def execute_specialist_fleet(state: MultiAgentState) -> MultiAgentState:
+    logger.info("Spawning specialist agents concurrently (fleet model: %s)...",
+                get_stage_model("fleet"))
+    search_q = state.get("search_query", state["original_question"])
+    original_q = state["original_question"]
+
     specialists = {
         "financial": ("Role: Senior Equity Research Analyst. Extract exact revenue, margins, EBITDA, EPS, and capital allocations. Cite company and metrics strictly.", "financial"),
         "risk": ("Role: Chief Compliance & Risk Auditor. Identify pending lawsuits, regulatory investigations, supply chain bottlenecks, and operational headwinds.", "risk"),
