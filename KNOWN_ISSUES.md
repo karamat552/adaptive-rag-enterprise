@@ -1,6 +1,6 @@
 # Known Issues & Honest Limits
 
-**Last updated:** 2026-09-08 · **Suite:** 253/253 offline green · **Invariant:** zero fabricated certified answers across every battery, ever.
+**Last updated:** 2026-09-12 · **Suite:** 297/297 offline green · **Invariant:** zero fabricated certified answers across every battery, ever. · **Receipts:** 73 grounded, every one crypto-verified.
 
 This document is the project's own list of its open problems — written by
 its maintainer, with status, evidence, and fixes' commit hashes. If you
@@ -88,6 +88,15 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 | Timeout starvation | 429-storm backoff burned the timeout budget silently | type-based timeout cooldown + failover, `a8dd0bf` |
 | Column-counting errors | 2022 column quoted for 2023 questions | COLUMN-KEY narration, `efdb44a` |
 | Per-share/basis collisions | $2.27 GAAP EPS vs $0.71 non-GAAP = "conflict" | unit-space + basis split, `a8dd0bf` |
+| Bullet-claim fidelity | `- Revenue grew [2]\n- EPS rose [3]` merged into ONE claim citing [2,3] | atomic bullet units, `77a78a7` |
+| Injection-echo guard gap | draft echoing "IGNORE ALL PREVIOUS INSTRUCTIONS" passed the echo-guard | 7 injection markers added, `77a78a7` |
+| Unprovable cache replays | legacy provenance-less entries self-pointed, /verify 404'd | provenance-less entries = miss (self-heal), `73c938e` |
+| Graph channel drops | 6 state keys (provenance, quota_hint, echo_reject, xbrl_issues, quota_aborted, _premise_fast_path) silently discarded at merge | all declared in MultiAgentState + channel introspection test, `fc77992` |
+| Synthesis headroom deficit | GLM reasoning burned 9,230 chars before content — 1800-token cap returned empty draft | RAG_REASONING_HEADROOM env floor in cap binder, `0f61ae8` |
+| Instant PoolError on burst | 24 concurrent _db_calls vs pool_max=15 → ~9 immediate failures | bounded-wait checkout (DB_POOL_WAIT_S=5s), `e3d6e8a` |
+| Dead transcript sync | sync_page_transcripts defined but never called — re-ingest left transcripts stale | wired into db.py entry after migrate, `dea6f2c` |
+| Schema-aware peer rescue | peer-rescued audit returned raw text where GroundingCheck object expected | peer_schema threaded + repair validation, `155a69f` |
+| Circuit ownership violation | quota 429s counted toward 5-failure global circuit | quota = cooldown, non-quota = circuit, `155a69f` |
 
 ## Operational posture
 
