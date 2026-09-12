@@ -34,7 +34,14 @@ st.set_page_config(
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+QUERY_API_KEY = os.getenv("QUERY_API_KEY", "")
 DEFAULT_TENANT = os.getenv("RAG_TENANT_ID", "default")
+
+
+def _auth_headers() -> Dict[str, str]:
+    """X-API-Key for the gateway's query-key endpoints (/query/stream,
+    /export). Empty dict in open mode (QUERY_API_KEYS unset server-side)."""
+    return {"X-API-Key": QUERY_API_KEY} if QUERY_API_KEY else {}
 
 SUGGESTED_QUESTIONS = [
     "What were Apple's Products revenue versus Services revenue in Q4 2023?",
@@ -94,10 +101,21 @@ def _stream_query(question: str, tenant: str) -> Iterator[Tuple[str, Dict[str, A
     """Yield (event, payload) from the gateway's SSE endpoint."""
     with _client().stream("GET", "/query/stream",
                           params={"question": question, "tenant_id": tenant},
-                          headers={"Accept": "text/event-stream"}) as resp:
+                          headers={"Accept": "text/event-stream",
+                                   **_auth_headers()}) as resp:
         if resp.status_code != 200:
             resp.read()
-            yield "error", {"detail": f"Gateway returned HTTP {resp.status_code}"}
+            if resp.status_code == 401 and not QUERY_API_KEY:
+                yield "error", {"detail": (
+                    "Gateway rejected the query: HTTP 401 — query auth is "
+                    "enforced but this app has no QUERY_API_KEY secret. "
+                    "Add it in Streamlit Cloud → App → Settings → Secrets.")}
+            elif resp.status_code in (401, 403):
+                yield "error", {"detail": (
+                    f"Gateway rejected the query: HTTP {resp.status_code} — "
+                    f"{resp.text[:200]} (check QUERY_API_KEY / tenant scope)")}
+            else:
+                yield "error", {"detail": f"Gateway returned HTTP {resp.status_code}"}
             return
         event: Optional[str] = None
         for raw in resp.iter_lines():
@@ -500,7 +518,8 @@ with st.expander("🔏 Receipt Explorer — verify any run (zero LLM tokens)",
                                    "proof without this API.")
     if do_export and len(rid.strip()) >= 3:
         try:
-            r = _client().get(f"/export/{rid.strip()}")
+            r = _client().get(f"/export/{rid.strip()}",
+                              headers=_auth_headers())
             if r.status_code == 200:
                 st.download_button(
                     "⬇ Save audit_bundle zip", data=r.content,
