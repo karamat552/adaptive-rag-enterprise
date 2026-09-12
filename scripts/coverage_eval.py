@@ -152,7 +152,57 @@ def _apply_provider(provider: str) -> None:
 
 
 def _gold_hit(answer: str, gold: List[str]) -> bool:
-    return any(g in answer for g in gold)
+    """Multi-format scorer (2026-09-10): the old exact-string match missed
+    format variance ('$40.1 billion' vs '40,111'). Now tries:
+      1. Exact string match (backward compat)
+      2. Numeric equivalence: parse both sides, compare values within 0.5%
+         (handles comma grouping, decimal/word scales, $ prefix)"""
+    if any(g in answer for g in gold):
+        return True
+
+    # Numeric normalization: extract all money-scaled values from the answer
+    ans_nums = set()
+    for m in re.finditer(
+        r"\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(billion|million|thousand|b|m|k)?",
+        answer, re.IGNORECASE,
+    ):
+        raw = float(m.group(1).replace(",", ""))
+        suffix = (m.group(2) or "").lower()
+        scale = {"billion": 1e9, "b": 1e9, "million": 1e6, "m": 1e6,
+                 "thousand": 1e3, "k": 1e3}.get(suffix, 1.0)
+        ans_nums.add(raw * scale)
+    # Also bare numbers (handles comma-grouped and bare 5+ digit)
+    for m in re.finditer(r"\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?)\b", answer):
+        ans_nums.add(float(m.group(1).replace(",", "")))
+    for m in re.finditer(r"\b(\d{5,})\b", answer):
+        ans_nums.add(float(m.group(1)))
+
+    if not ans_nums:
+        return False
+
+    for g in gold:
+        g_clean = g.replace(",", "").replace("$", "").strip()
+        try:
+            g_val = float(g_clean)
+        except ValueError:
+            continue
+        # Cross-scale matching: try every power-of-1000 ratio between the
+        # gold value and each answer value. Handles '21,563' (millions) vs
+        # '$21.6 billion' (1e9) — a 0.03% rounding, not a scale mismatch.
+        for a_val in ans_nums:
+            if a_val <= 0 or g_val <= 0:
+                continue
+            ratio = a_val / g_val
+            # Check if the ratio is close to a power of 1000 (within 0.5%)
+            import math
+            exp = round(math.log10(ratio) / 3)
+            expected = 1000 ** exp
+            if expected > 0 and abs(ratio - expected) / expected <= 0.005:
+                return True
+            # Also check exact ratio match (same scale)
+            if abs(ratio - 1.0) <= 0.005:
+                return True
+    return False
 
 
 # A fabrication = the refuted premise AFFIRMED as a figure ('the quarterly
