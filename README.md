@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/karamat552/adaptive-rag-enterprise/actions/workflows/ci.yml/badge.svg)
 
-**311 tests · 90% recall · 0 fabrications · every certification AND refusal crypto-receipted · 22 regression classes · 4 provider lanes**
+**311 tests · battery-best 90% / live-run 50–67% recall (every miss documented) · 0 fabrications · every certification AND refusal crypto-receipted · 22 regression classes · 4 provider lanes**
 
 > I built this to answer one question: *can an AI system prove — cryptographically,
 > deterministically, without trust — that every number it outputs came from a

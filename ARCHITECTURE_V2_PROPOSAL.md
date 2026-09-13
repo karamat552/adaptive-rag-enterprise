@@ -409,3 +409,120 @@ worker state is intentional, with ADR-016 as the scale-out path.
 pro-forma / "as previously reported" / restatement-marked tables from
 fact_rows (F2's verbatim-from-wrong-context class), and the shadow-phase
 corrupted-claim injections must include at least one pro-forma variant.
+
+
+---
+
+# APPENDIX B — THIRD-REVIEW DISPOSITION (Claude, adversarial pass, 2026-09-13)
+
+The third independent reviewer was explicitly invited to disagree. It found
+what the first two missed. Full disposition below; where Appendix B and
+earlier appendices conflict, **B wins** (it is the latest, most conservative
+word).
+
+## B.1 ACCEPTED — spec changes (binding for Phase 0)
+
+**B.1.1 No-XBRL-counterpart default must be FAIL-CLOSED (Rev of A.1-4).**
+A fact row whose metric has NO xbrl_facts counterpart is
+`unreconciled_fact` — blocked from Path A permanently. Absence of
+contradiction is NEVER treated as reconciliation. Consequence, accepted
+explicitly: **Path A's initial coverage is consolidated metrics only**
+(~3 per company: revenue, net income, EPS) — the only metrics where TWO
+independent sources (PDF span + SEC XBRL) agree. Segment/comparative
+metrics (e.g. Products revenue) stay on Path B until segment-dimension
+XBRL facts are ingested (V3). Coverage shrinks; safety is total. The
+fast path serves ONLY what two independent sources confirm.
+
+**B.1.2 The 0.95 router gate becomes deterministic + calibrated.**
+`path_hint="fact"` is honored only when: (a) the parsed (entity, metric,
+period) triple maps EXACTLY to a canonical fact_rows key after
+deterministic dictionary canonicalization, AND (b) embedding similarity
+to that key clears a MEASURED threshold pinned by a geometry-style test
+over the battery distribution (never an LLM self-report). Both checks pass
+or the query demotes. The threshold's calibration lands in the Phase-1
+shadow data before Path A goes live.
+
+**B.1.3 Ingestion context-marker exclusions.** Chunks carrying pro-forma /
+as-previously-reported / restatement / sensitivity-table markers are
+excluded from fact_rows extraction entirely. TABLE-INTEGRITY-FLAGged
+windows (rows that don't sum) are likewise excluded. The mistagged-row
+hole (verbatim from the WRONG context) is attacked at write time.
+
+**B.1.4 Receipts record per-claim verifier class.** Every receipt carries,
+per claim, whether it was Python-certified (deterministic) or
+LLM-audited (adversarial). The proof itself gets provenance. A compliance
+reader can see exactly which guarantee backs each sentence.
+
+**B.1.5 Q4-derivation is confirmed ground truth or declines authority.**
+`xbrl.py` facts gain a `derived=true` provenance flag. Gate 4 reconciles
+against a derived fact ONLY after a THREE-WAY check: derived-Q4 (10-K
+minus 9-month 10-Q) must agree within 0.5% with the Q4 column of the
+PDF's own comparative income statement (our corpus has it). Disagreement
+(flags a restatement/reclassification between filings) marks the fact
+`derived_unconfirmed` — Gate 4 then declines authority for it (judges
+nothing rather than certifying against possibly-corrupt truth). Derived
+ground truth inherits false confidence otherwise; this removes that class.
+
+**B.1.6 'Certified' strength is tiered in all public docs.** The badge is
+materially stronger for figures (deterministic gates + independent SEC
+reconciliation + byte spans) than for qualitative claims (adversarial
+same-family LLM cross-examination only). README, Master Design, and the
+bundle README now state this distinction loudly. Model-diverse checking
+remains the known V3 item.
+
+## B.2 ACCEPTED — documentation-integrity fixes (both verified true)
+
+**B.2.1 README gate-4 contradiction — CONFIRMED, FIXED (9c3a6c1).** The
+README's five-gates table listed 'structured-output repair' (a parsing
+mechanism, not a gate) as gate 4. Real bug; the table now lists XBRL
+reconciliation, with an errata note crediting the third review.
+
+**B.2.2 Recall number presentation — CONFIRMED, FIXED (this commit).**
+README headline showed only battery-best 90% while KNOWN_ISSUES reports
+the live-run range 50-67%. Both are true and measure different things
+(best post-fix battery vs. all-runs-including-quota-starved), but the
+README must not optimize the number a skimmer sees. Headline and
+limitations now present the range with both definitions.
+
+## B.3 ACCEPTED — posture statements (recorded, some actioned)
+
+**B.3.1 Open-mode auth default:** kept for local dev, but the gateway now
+logs a loud boot-time warning when QUERY_API_KEYS is unset, and the README
+states plainly: production MUST set QUERY_API_KEYS; fail-open is a demo
+posture a Tier-1 review would correctly reject.
+**B.3.2 Ed25519 custody honesty:** the claim 'verify without trusting our
+server' is corrected to what the signature actually proves: the bundle
+was produced by THIS deployment identity and is unchanged since —
+tamper-evidence + deployment binding, not trustlessness. Key custody
+(env-stored, no HSM/rotation) is stated as a known limit with HSM on the
+V3 list.
+**B.3.3 Render free tier + keep-alive:** documented as what it is — a
+portfolio deployment that has never run under an SLA. No SLA claims made
+anywhere.
+**B.3.4 In-process rate limiting:** already documented; ADR-016 Redis
+remains the horizontal-scale path. No change.
+**B.3.5 Retrieval blind spot (#8) reweighted:** receipts limit exposure
+and enable forensics AFTER delivery; they do not prevent a bad answer
+BEFORE it reaches a decision-maker. The README limitations now say
+exactly this.
+
+## B.4 REJECTED — none outright; two reframed
+
+- 'Rate limiting not horizontally scalable' — known, documented, gated on
+  ADR-016; reframed as a stated single-worker design decision (metrics and
+  buckets are in-process state BY design), not an oversight.
+- 'Keep-alive on free tier' — reframed in docs (B.3.3) rather than
+  architecture-changed; the alternative (paid tier) is a $7/month decision
+  deferred until interview season ends.
+
+## B.5 Net effect on Phase 0
+
+Phase 0 scope grows by: context-marker exclusions (B.1.3), the
+derived-fact provenance flag + three-way Q4 confirmation (B.1.5), the
+fail-closed no-XBRL default (B.1.1), and per-claim verifier class in
+receipts (B.1.4). Phase 2 coverage is now honestly SMALLER (consolidated
+metrics first) — the correct institutional trade: the deterministic path
+serves only what two independent sources confirm.
+
+**ADR-017 stands, amended by this appendix. Three-review consensus closed.
+Phase 0 execution begins with B.1.1/B.1.3/B.1.5 inside the first commit.**
