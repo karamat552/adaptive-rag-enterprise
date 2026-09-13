@@ -39,8 +39,13 @@ each one zero-cost, each one born from a live-caught fabrication attempt:
 | Citation bounds | Fabricated footnotes pointing to non-existent evidence | [8]-vector tamper suite |
 | Unit/scale assertion | "$500M" when the table says "$433M" | Live catch: GLM approximation |
 | Growth direction | "Revenue grew" when it declined | XBRL crosscheck vs SEC facts |
-| Structured-output | Markdown-decorated output that breaks JSON parsing | GLM-5.3-free reasoning model |
+| XBRL reconciliation | Claims contradicting official SEC ground truth, with figure-level metric ownership | Live catch: metric-noun swap $40,111M |
 | Echo/injection guard | Prompt-injection echo, deliberation leakage | NEM reasoning model + adversarial probe |
+
+*(The structured-output JSON-repair backstop — markdown-decorated output from
+reasoning models — is a parsing-recovery mechanism in the engine path, not a
+verification gate; listed here previously by mistake. Third-review finding,
+2026-09-13.)*
 
 **The invariant: zero fabricated certified answers across every battery, every
 provider, every storm.** Not "we hope it doesn't lie" — *measured, with a
