@@ -110,8 +110,12 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
   (open mode when unset — demo posture) — `99989df`.
 - Failover: primary (Groq) → NIM per-stage, executive PINNED + PEER-RESCUE (ADR-008 amendment: NIM 120b → Gemini 3.5-flash).
 - Quota economics: a full battery fits one 200K window post-ADR-015.
+- Specialist pruning: **DEFAULT-ON** with evidence-pool parity (one specialist at top_k≈15, not 5 — calls shrink, evidence never does). `RAG_SPECIALIST_PRUNING=0` restores the full fleet — `df5cca6`.
+- Semantic cache: **near-exact replay only** (`cache_similarity` 0.985) — identical re-asks replay at ~0 distance; paraphrases and cross-intent questions pay full price and can never be served a wrong cached answer — `7037ccd`. Legacy provenance-less entries are evicted on lookup (self-heal deadlock fix).
+- Nightly canary: **LIVE** (actions secrets provisioned 2026-09-13). 12-question battery, 00:30 UTC fresh Groq window, failover lanes mirror production, capacity-vs-logic drift classified, report artifact kept 90 days. First dispatched run: 34749896271.
+- Keep-alive: `/health` pinged every 10 min by the `keep-alive` Actions workflow — Render free tier never sleeps, cold starts eliminated (`a0e33c3`).
 - ModelScope second backup: **PARKED — external constraint** (2026-09-10). API-Inference requires Alibaba Cloud account binding + real-name verification (KYC); verified live (token lists 46 models, inference 401s until KYC completes). The failover stack is complete without it: Groq primary → NIM 120b (lane 1) → TokenRouter GLM-5.3-free (lane 2), with NIM/gemini-3.5-flash as executive peers. Revisit only if the active lanes prove insufficient.
 - k6 load test: scheduled — 5-10 concurrent users, p95 latency + error rates for the resume baseline
 - Redis Stage 1: trigger-gated on k6 results (p95 degradation or second worker); ADR-016 has the 9-play roadmap ready
 - Incremental PDF diffing: deferred (SHA-256 comparison is correct for 3 filings; page-level diffing is a roadmap item for >20 sources)
-- Suite determinism: live-LLM tests (test_main.py auth, test_answer_accuracy.py) are the known flake class; offline suite is deterministic 297/297
+- Suite determinism: live-LLM tests (test_main.py auth, test_answer_accuracy.py) are the known flake class; offline suite is deterministic (311 tests, 3 live skipped in bare environments)
