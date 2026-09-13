@@ -218,3 +218,94 @@ answers — measured nightly, not assumed.**
 5. Anything in this plan that a Tier-1 financial platform (Bloomberg/
    FactSet/Citadel-grade review) would reject, and what would they demand
    instead?
+
+---
+
+# APPENDIX A — EXTERNAL REVIEW SYNTHESIS (ADR-017, LOCKED 2026-09-13)
+
+**Reviewer verdict received:** APPROVED WITH 4 MANDATORY AMENDMENTS.
+**Build-agent synthesis:** all 4 amendments ACCEPTED (2 with corrections),
+the Q3 measurement critique accepted in simplified form, and 2 reviewer
+positions REJECTED with reasons. This appendix is the binding spec —
+where it and Sections 1-6 disagree, this appendix wins.
+
+## A.1 The Four Amendments — accepted, as they will be implemented
+
+**Amendment 1 — Subject-noun semantic binding (ACCEPTED, generalized
+from existing armor).** Every Path-A-certified claim must satisfy a
+4th triage condition: the sentence's metric noun must resolve to the
+canonical `metric_key` of the cited span. Implementation note: V1
+ALREADY has this discipline for the 3 XBRL-metrics via
+`_figure_metric_owner` (nearest-anchor figure ownership — Gemini's own
+"operating income $40,111M" example is caught by it today and declined
+to the LLM audit). The amendment's real work is generalizing this
+binding to ALL ~20 fact_rows metrics at lookup time, not just the 3.
+
+**Amendment 2 — Exact-match routing strictness (ACCEPTED as proposed).**
+Path A is honored ONLY when the router's parsed (entity, metric,
+period) triple maps to an exact canonical `fact_rows` key at high
+confidence (≥0.95). Any ambiguity ("ad revenue" vs "total revenue")
+demotes the ENTIRE query to Path B before any template is built.
+
+**Amendment 3 — Atomic multi-entity demotion (ACCEPTED as proposed).**
+Comparative queries require ALL N (entity, metric, period) triples in
+fact_rows; any single miss demotes the whole query. No split-brain
+answers mixing template and fleet output.
+
+**Amendment 4 — Dual-key ingest reconciler (ACCEPTED, tolerance
+corrected).** Every consolidated-metric fact row is reconciled against
+`xbrl_facts` at ingest. Match = exact OR within 0.5% cross-scale
+tolerance (the proven rounding-slack rule: $91.7B vs $91,650M is a
+match; the reviewer's strict equality would false-flag legitimate
+rounding — our own ledger documents this class). Disagreements are
+flagged `unreconciled_fact` and blocked from Path A; only the fleet
+may serve them, where the discrepancy surfaces through the
+contradiction engine.
+
+## A.2 Evaluation gate (Q3) — simplified instrument, same rigor
+
+14 static-battery nights are replaced by:
+- **≥40-question permuted battery** (expanding the existing 12-question
+  gold set; new questions pre-registered before the phase starts).
+- **15 corrupted-claim injections per phase** (swapped metric nouns,
+  inverted growth direction, wrong periods — reusing the fuzz/tamper
+  operator machinery). The triage must catch **15/15 across the
+  phase**; any false-pass certification resets the clock.
+- **≥98% agreement with the V1 pipeline** on the shadow stream.
+- **Minimum 7 consecutive nights** satisfying all of the above.
+- Zero fabricated certified answers — invariant, non-negotiable.
+
+## A.3 Rejected reviewer positions (recorded with reasons)
+
+1. **XBRL-primary ingestion ("PDF-primary is backwards"):** rejected —
+   it contradicts the reviewer's own Q1 verdict that span-anchoring
+   wins for our byte-level receipt moat. Our design (PDF-primary,
+   XBRL reconcile-at-ingest) IS the reviewer's Amendment 4. The valid
+   sub-point — dimensional hypercubes flatten badly in PDF parsing —
+   is absorbed as a COVERAGE RULE, not an architecture change: segment
+   data without clean single-table support is out of Path A coverage,
+   and Amendment 3's atomic demotion routes those questions to the
+   fleet.
+2. **Bi-temporal point-in-time timestamps:** deferred to Version 3,
+   not rejected on merit. For a 3-company current-epoch corpus it is
+   scope expansion; the honest middle adopted NOW: fact_rows carries
+   `filing_date` (valid time) and `ingested_at` (transaction time) as
+   plain columns, and the epoch-partitioning already provides
+   as-of-corpus semantics. Full bi-temporal query support (as-of-T
+   replay across filings) is a Version 3 roadmap item.
+3. **Template stiffness:** accepted as a design constraint — Path A
+   templates render context-aware comparatives (prior-year value, the
+   table's own verbatim % Change), not bare single-slot fill-ins.
+
+## A.4 Phase gate updates
+
+Phase 1's exit criterion is now the A.2 gate (replacing "14 nights of
+the static battery"). Phase 0 additionally ships: the dual-key
+reconciler, the exact-match router guard (A.1-2), and the
+atomic-demotion rule (A.1-3) as regression tests BEFORE the extractor
+goes live. The feature flag `RAG_FACT_FASTPATH` remains the single
+kill-switch.
+
+**STATUS: ADR-017 LOCKED — both reviewers in agreement. Execution
+authorized for Phase 0: the span-anchored fact extractor + fact_rows
+schema + dual-key reconciler.**
