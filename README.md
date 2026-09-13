@@ -186,7 +186,7 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 - **The retrieval blind spot**: the audit verifies drafts against retrieved
   evidence — text never retrieved cannot contradict a draft. Every RAG system
   has this hole; this system *exposes* it via per-answer receipts.
-- **Recall is 80-90%, not 100%**: every miss is documented with its root cause
+- **Recall is 50-90%, not 100% — and the docs say so**: clean-window batteries measured 80-90% recall@answerable; live runs under provider weather (TPD walls, failover drafting variance) ranged 50-67% across four battery runs — every miss named, none hidden (KNOWN_ISSUES #1)
   (capacity walls, gate false-rejects, format variance). The fabrications
   count is the invariant, not the recall.
 - **Hand-tuned lexicons**: the metric families, clause breakers, and % -Change

@@ -346,3 +346,66 @@ each is wrong for THIS system now:
 **V3 revisit list (recorded, not committed):** warehouse migration IF
 the corpus grows toward S&P-500 scale; arelle as secondary reconciler;
 full bi-temporal query engine (A.3.2).
+
+## A.6 Third-review disposition record (Claude, 2026-09-13) — binding on Phase 0
+
+The third adversarial review found real gaps. Dispositions (accept/correct/
+reject, with the spec changes each requires):
+
+**F1 — XBRL-absent metrics have no stated default. ACCEPTED.** Spec rule
+added: a fact_row with no XBRL counterpart is `unreconciled_fact` by
+default → blocked from Path A. Fail-closed default; absence of
+contradiction is NEVER treated as reconciliation. (Derived confidence may
+come only from same-table additive checks — Products + Services = Total —
+recorded as such on the row.)
+
+**F2 — the ≥0.95 path confidence is uncalibrated. ACCEPTED with
+correction.** The Path A gate is a DETERMINISTIC exact match: the parsed
+(entity, metric, period) triple must equal a canonical fact_rows key
+string-identically after canonicalization. Embeddings may pre-filter, but
+no LLM self-reported confidence ever decides path membership. Single
+point of trust removed.
+
+**F3a — README gate-4 error. ACCEPTED, fixed** (`9c3a6c1`): gate 4 is
+XBRL reconciliation; structured-output repair is engine plumbing, not a gate.
+
+**F3b — headline recall vs live-run recall unreconciled. ACCEPTED,
+fixed:** README now carries both figures side by side — clean-window
+batteries (80-90%) and the live-run range under provider weather (50-67%,
+KNOWN_ISSUES #1) — with the invariant (0 fabrications, 100% gold accuracy
+on certified answers) as the number that never moves.
+
+**F4 — "certified" is stronger for numbers than prose. ACCEPTED.** The
+asymmetry is a property, now stated loudly in the docs: numeric claims are
+byte-proven; qualitative claims carry the weaker guarantee of an
+independent adversarial cross-exam (fail-closed, same-family checker).
+A compliance reader is told exactly which guarantee each claim carries.
+
+**F5e — derived Q4 (FY − 9mo) is a computed "ground truth". ACCEPTED —
+the strongest finding.** A restatement between the 10-K and the 10-Q
+would corrupt the derived value, and Gate 4 would enforce a WRONG
+official figure with false confidence. Spec changes:
+  1. `xbrl_facts` rows carry `derived=true` for FY−9mo values;
+  2. receipts record WHICH official value a reconciliation used and its
+     derived flag — the proof shows the lineage, never hides it;
+  3. TRUST DIRECTION STATED: the PDF-as-filed quarterly columns are the
+     PRIMARY anchor (they are the actual filed figures); the XBRL-derived
+     Q4 is a SECONDARY cross-check. A restatement scenario manifests as
+     PDF-vs-XBRL disagreement → `unreconciled_fact` (Amendment 4 blocks
+     it) or a Gate-4 mismatch whose explanation says "official (derived)".
+     The derivation can never silently become the sole truth.
+
+**F5a/b/c/d — Tier-1 posture items (open-auth default, Ed25519 key
+custody, Render free tier, in-process rate limiting). ACCEPTED AS
+SCOPE STATEMENTS, not defects for this system:** production enforces
+QUERY_API_KEYS (unset = documented local-dev mode); the signing key lives
+only in Render's encrypted env, never in the repo, and the trust model is
+now stated precisely — the signature relocates trust from the serving
+process to the key holder (HSM/KMS on the V3 list); the project claims
+no SLA — it is a portfolio demo of verification architecture; single-
+worker state is intentional, with ADR-016 as the scale-out path.
+
+**Phase 0 exit gates extended:** the extractor must tag and EXCLUDE
+pro-forma / "as previously reported" / restatement-marked tables from
+fact_rows (F2's verbatim-from-wrong-context class), and the shadow-phase
+corrupted-claim injections must include at least one pro-forma variant.
