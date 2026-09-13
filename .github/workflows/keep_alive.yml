@@ -1,0 +1,38 @@
+# KEEP-ALIVE — Render free-tier anti-spin-down
+# Pings /health every 10 minutes so the free Render instance never idles out
+# (the free tier sleeps a service after ~15 minutes without traffic; the next
+# real visitor would pay a 30-60s cold start). Wakes Neon compute too.
+#
+# Replaces the in-chat cron automation (2026-09-15): keep-alive belongs in
+# infrastructure, not a chat session — this survives without any agent and
+# surfaces failures as red workflow runs.
+# NOTE: GitHub disables scheduled workflows after 60 days of repo inactivity —
+# regular commits (or the canary) keep this alive.
+
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 min; Render idles out at ~15
+  workflow_dispatch: {}       # manual trigger for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake Render + Neon
+        run: |
+          for attempt in 1 2; do
+            code=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+                    --max-time 60 \
+                    https://adaptive-rag-enterprise.onrender.com/health) || code="curl-failed"
+            if [ "$code" = "200" ]; then
+              echo "healthy: $(cat /tmp/health.json | head -c 200)"
+              exit 0
+            fi
+            echo "attempt $attempt got: $code"
+            [ $attempt -lt 2 ] && sleep 30
+          done
+          echo "::error::Deployment down — /health returned $code after retry"
+          exit 1
