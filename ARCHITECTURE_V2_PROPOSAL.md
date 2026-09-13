@@ -309,3 +309,40 @@ kill-switch.
 **STATUS: ADR-017 LOCKED — both reviewers in agreement. Execution
 authorized for Phase 0: the span-anchored fact extractor + fact_rows
 schema + dual-key reconciler.**
+
+## A.5 Phase 0 tooling plan — the reuse ledger (locked with ADR-017)
+
+**Principle (the ledger's first lesson):** every new dependency is a new
+failure class. Institutional builders reuse canonical infrastructure and
+add tools only when the reuse path is measurably inadequate. Phase 0
+adds **zero new runtime dependencies** — one new pure-Python module and
+one new table.
+
+| Component | Tool | Status | Why this and not the alternative |
+|---|---|---|---|
+| Fact extraction | Pure Python over the EXISTING `page_transcripts` (reusing `_MONEY_RE`, scale/unit/basis normalization, COLUMN-KEY + TABLE-INTEGRITY machinery) | Reuse — new module `fact_extract.py`, ~0 new deps | A second extraction layer (camelot / pdfplumber / LlamaParse / ABBYY) would FORK provenance: receipts must anchor to exactly one extraction — the construction-exact one we already byte-verify on all 223 chunks |
+| Canonical metric map | Extend the existing `scripts/xbrl.py` us-gaap concept map to the ~20 battery metrics | Reuse | It already maps XBRL tags → our metric keys; curated dictionaries ARE the institutional pattern (Bloomberg's ticker/security master is exactly this) |
+| Fact storage | Existing PostgreSQL/Neon — new `fact_rows` table via the existing `schema_migrations` pattern | Reuse | Fundamentals are small relational data; Postgres is the institutional choice at this scale. kdb+/ClickHouse/DolphinDB solve tick-store workloads we don't have |
+| Dual-key reconciler (A.1-4) | Port the `_gold_hit` cross-scale power-of-1000 matcher from `coverage_eval.py` | Reuse | The 0.5% rounding-slack rule is proven and regression-tested — no new numeric code |
+| Intent routing (A.1-2) | The existing structured router call gains `path_hint`; the local ONNX bge-small embedder supplies the ≥0.95 confidence check | Reuse | No new model, no new API; the embedder is already pinned by the embedding-geometry test |
+| Answer templates | Pure-Python f-strings in reviewed code | Deliberate no-tool | A template ENGINE (Jinja2 etc.) is a new dependency and a new audit surface; explicit code is auditable by the same reviewer process |
+| Amendment tests | Existing pytest + the fuzz-operator pattern (new operators: metric-noun swap, period swap, entity swap, scale swap) | Reuse | The 1,000-mutation harness pattern extends to fact_rows directly |
+| Shadow measurement (A.2) | The existing canary workflow + battery writer + fuzz/tamper machinery | Reuse | The instrument A.2 specifies already exists as deployed infrastructure |
+
+**Explicit non-adoptions** — what Tier-1 platforms run at scale, and why
+each is wrong for THIS system now:
+
+- **kdb+/ClickHouse/Snowflake/Databricks** — tick-store and warehouse
+  scale; 3 companies × ~20 metrics is thousands of rows. Postgres with
+  RLS and epochs already does the job with zero new ops surface.
+- **arelle / native-XBRL-first ingestion** — rejected in A.3.1; it
+  contradicts the span-anchored receipt moat. Revisited only as a
+  SECONDARY reconciler in V3.
+- **Commercial/LLM table extractors** — provenance fork (above).
+- **NLI models in the audit path** — removed by design in V2.
+- **Redis (ADR-016)** — unchanged: trigger-gated on k6 load results,
+  independent of this refactor.
+
+**V3 revisit list (recorded, not committed):** warehouse migration IF
+the corpus grows toward S&P-500 scale; arelle as secondary reconciler;
+full bi-temporal query engine (A.3.2).
