@@ -39,6 +39,14 @@ jobs:
           RAG_DISABLE_CACHE_READ: "1"
           RAG_DISABLE_CACHE_WRITE: "1"
           COVERAGE_HINT_WAIT_CAP_S: "1200"
+          # PRODUCTION PARITY (2026-09-13): without the failover lanes the
+          # battery runs failover-blind — a mid-battery Groq wall cascades
+          # into capacity refusals and the run fails like the 2026-09-12
+          # attempt did. Mirror the live service's lanes exactly.
+          RAG_FAILOVER_ENDPOINTS: '[{"base_url":"https://integrate.api.nvidia.com/v1","api_key_env":"NIM_API_KEY","model":"nvidia/nemotron-3-super-120b-a12b"},{"base_url":"https://api.tokenrouter.com/v1","api_key_env":"TOKENROUTER_API_KEY","model":"z-ai/glm-5.3-free","timeout_s":150,"max_tokens":6000}]'
+          # Pruning + near-exact cache thresholds are default-on in code
+          # since df5cca6/7037ccd — the battery measures the same pipeline
+          # the live service runs.
         run: python scripts/coverage_eval.py --provider groq --report coverage_report_canary.json
 
       - name: Upload coverage report (every run, pass or fail)

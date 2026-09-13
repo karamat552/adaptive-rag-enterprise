@@ -318,3 +318,58 @@ def test_cache_similarity_is_near_exact_only():
     assert ar.get_settings().cache_similarity == 0.985, \
         "the two Settings objects must agree — check_cache_node passes " \
         "the adaptive_rag value into db.check_semantic_cache"
+
+
+# ==================== embedding-geometry pin (2026-09-13) ===================
+# The threshold-inversion class made UNREPEATABLE: assert the MEASURED
+# geometry that justified cache_similarity=0.985, using the local ONNX
+# embedder (zero API, zero DB). If the embedder model, its query prefix,
+# or the threshold ever drifts, this test pins which side of the line the
+# real pairs sit on — before any live query can replay a wrong answer.
+def test_embedding_geometry_supports_near_exact_replay():
+    """MEASURED CLAIM (bge-small-en-v1.5, 'Represent this sentence...'
+    prefix): question embeddings cluster by TOPIC, not intent —
+      identical questions        -> cosine dist ~0.00x (must HIT)
+      same-topic DIFFERENT ask   -> dist ~0.03-0.16 (must MISS)
+      true paraphrases           -> dist ~0.12-0.15 (must MISS: the
+                                    correct price of never-wrong replay)
+    If any assertion flips after a model/prefix/threshold change, the
+    replay contract has silently broken: fix the threshold BEFORE a live
+    query replays a Services-only brief for a Products-vs-Services ask."""
+    import numpy as np
+    from db import embed_query, get_settings
+
+    cfg = get_settings()
+    threshold = cfg.cache_similarity          # 0.985
+    radius = 1.0 - threshold                   # 0.015
+
+    def dist(a, b):
+        va, vb = np.asarray(embed_query(a)), np.asarray(embed_query(b))
+        return float(1 - np.dot(va, vb) / (np.linalg.norm(va) * np.linalg.norm(vb)))
+
+    # 1. IDENTICAL re-asks must hit (dist ~0 — the cache replay contract)
+    assert dist("What was Apple's total net sales in Q4 2023?",
+                "What was Apple's total net sales in Q4 2023?") <= radius
+
+    # 2. Near-identical (typo) re-asks must still hit — that is the point
+    assert dist("What was Apple's total net sales in Q4 2023?",
+                "What was Apple's total net sales in Q4 2023") <= radius
+
+    # 3. The LIVE cross-intent pair (threshold-inversion live case): a
+    #    Services-only cached answer must NEVER replay for the comparison
+    assert dist("What was Apple Services revenue in Q4 2023?",
+                "What were Apple's Products revenue versus Services "
+                "revenue in Q4 2023?") > radius
+
+    # 4. Different metric, same company/topic — must miss
+    assert dist("What was Apple's total net sales in Q4 2023?",
+                "What was Apple Services revenue in Q4 2023?") > radius
+
+    # 5. Paraphrase of a DIFFERENT question: same intent, different words
+    #    (Tesla automotive paraphrase from the 2026-09-13 measurement) —
+    #    must ALSO miss at 0.985: correctness (never-wrong replay) costs
+    #    full price on paraphrases. If a future embedder/prefix clusters
+    #    paraphrases inside ~0.015, reconsider — with MEASUREMENTS.
+    assert dist("What was Tesla's total automotive revenues in Q4 2023?",
+                "What did Tesla book in automotive segment revenues for "
+                "the fiscal quarter ended December 31, 2023?") > radius
