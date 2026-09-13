@@ -78,6 +78,11 @@ class FakeGraph:
 def _clean_state(monkeypatch):
     main._buckets.clear()
     monkeypatch.setattr(main, "METRICS", main._Metrics())   # isolated counters
+    # OPEN-MODE OPT-IN (third-review B.3.1 close-out, 2026-09-13): the
+    # gateway now fails CLOSED when QUERY_API_KEYS is unset. Tests that
+    # exercise the pipeline without exercising AUTH explicitly opt in here;
+    # the auth tests below manage their own env.
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
     yield
     main._buckets.clear()
 

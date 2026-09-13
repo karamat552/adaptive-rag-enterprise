@@ -526,3 +526,34 @@ serves only what two independent sources confirm.
 
 **ADR-017 stands, amended by this appendix. Three-review consensus closed.
 Phase 0 execution begins with B.1.1/B.1.3/B.1.5 inside the first commit.**
+
+
+## B.6 CONFIRMATION PASS (Claude verification, 2026-09-13) — REVIEW CYCLE CLOSED
+
+The third reviewer confirmed all dispositions accurate. Two refinements
+from its verification pass are now BINDING:
+
+**B.6.1 Residual-risk wording (B.1.3 refinement).** The context-marker
+exclusions remove the KNOWN mistagging categories — they do not eliminate
+the class. Receipts for Path-A answers carry the wording:
+`deterministic_certification: known-context-exclusions-applied` — never
+language implying the mistagging class is fully eliminated. Docs must
+say "excluded," never "eliminated."
+
+**B.6.2 B.3.1 is now ENFORCED, not just documented.** The gateway fails
+CLOSED when QUERY_API_KEYS is unset (503 config error). Open mode requires
+an explicit ALLOW_OPEN_MODE=true — the unsafe state demands an affirmative
+act, never an omission. Implemented in require_query_key with regression
+tests (fail-closed default + explicit opt-in).
+
+**B.6.3 V3 backlog addition (reviewer's own pointer):** cross-filing
+corroboration — a metric restated across two genuinely separate filings
+(the prior-year comparative column vs the original filing) is closer to
+real independence than anything derivable from one filing. Ranked AHEAD
+of segment-dimension XBRL on the V3 list because it needs no new SEC
+tagging granularity, only multi-year corpus coverage.
+
+**FINAL STATE: three reviews (2 external models + build agent), every
+finding implemented, corrected, or dispositioned with reasons; ADR-017
+with Appendices A+B is the document of record; Phase 0 begins with
+B.1.1/B.1.3/B.1.4/B.1.5 + B.6 enforcement inside the first commit.**

@@ -257,10 +257,27 @@ def require_query_key(x_api_key: Optional[str] = Header(default=None),
     is NOT visible to a dependency (FastAPI resolves this signature's
     tenant_id as a query param) — the ENDPOINT enforces the mismatch rule
     after this returns: the key IS the identity; a declared tenant that
-    disagrees with the key's binding is impersonation and is rejected."""
+    disagrees with the key's binding is impersonation and is rejected.
+
+    OPEN-MODE HARDENING (third-review B.3.1 close-out, 2026-09-13): open
+    mode is now an AFFIRMATIVE opt-in. An unset QUERY_API_KEYS fails
+    CLOSED unless ALLOW_OPEN_MODE=true is explicitly set — the unsafe
+    state requires a deliberate act, never an omission. Local dev and CI
+    set ALLOW_OPEN_MODE=true in their env/test fixtures."""
     keys = _query_api_keys()
     if not keys:
-        return None                    # open mode — no QUERY_API_KEYS configured
+        if os.getenv("ALLOW_OPEN_MODE", "").lower() in ("", "0", "false", "no"):
+            METRICS.inc("auth_rejected_total")
+            raise HTTPException(
+                status_code=503,
+                detail="Server misconfiguration: QUERY_API_KEYS is unset "
+                      "and ALLOW_OPEN_MODE is not enabled — query auth is "
+                      "fail-closed. Set QUERY_API_KEYS (production) or "
+                      "ALLOW_OPEN_MODE=true (local dev only).")
+        logger.warning("OPEN MODE active: QUERY_API_KEYS unset, "
+                       "ALLOW_OPEN_MODE=true — every caller is the default "
+                       "tenant. NEVER run production in this posture.")
+        return None                    # explicit opt-in open mode
     METRICS.inc("auth_checked_total")
     if not x_api_key:
         METRICS.inc("auth_rejected_total")
