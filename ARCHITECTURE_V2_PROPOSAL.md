@@ -345,9 +345,11 @@ each is wrong for THIS system now:
 - **Redis (ADR-016)** — unchanged: trigger-gated on k6 load results,
   independent of this refactor.
 
-**V3 revisit list (recorded, not committed):** warehouse migration IF
-the corpus grows toward S&P-500 scale; arelle as secondary reconciler;
-full bi-temporal query engine (A.3.2).
+**V3 revisit list (recorded, not committed — now superseded by
+[V3_ROADMAP.md](V3_ROADMAP.md), the CRO-reviewed and sequenced
+horizon):** warehouse migration IF the corpus grows toward S&P-500
+scale; arelle as secondary reconciler; full bi-temporal query engine
+(A.3.2) — scoped deterministic-layer-first by the fourth review.
 
 ## A.6 Third-review disposition record (Claude, 2026-09-13) — binding on Phase 0
 

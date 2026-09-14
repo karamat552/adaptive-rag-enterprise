@@ -235,6 +235,7 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 |---|---|
 | [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | ADRs 005-016: every design decision with evidence and rejected alternatives |
 | [ARCHITECTURE_V2_PROPOSAL.md](ARCHITECTURE_V2_PROPOSAL.md) | ADR-017: the V2 deterministic-first refactor — spec of record (Appendices A+B), Phase 0 shipped |
+| [V3_ROADMAP.md](V3_ROADMAP.md) | The capped horizon: CRO-review dispositions (Figure-DAG checker-only, tiered cross-filing diff, bi-temporal deterministic-layer-first) + sequenced V3 items |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | 22-class fixed ledger + 5 open problems + epistemic limits + operational posture |
 | [GAP_ANALYSIS.md](GAP_ANALYSIS.md) | Version 2.0 roadmap: 12 prioritized gaps, score projection 63→90+ |
 | [.env.example](.env.example) | Every configuration variable, annotated |
