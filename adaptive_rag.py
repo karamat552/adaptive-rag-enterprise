@@ -2278,8 +2278,19 @@ def check_xbrl_figures(draft: str, evidence: List[Dict[str, Any]],
     if not facts:
         return []
     # Index facts by (company, metric).
-    fact_ix: Dict[Tuple[str, str], Dict[str, Any]] = {
-        (f["company"].lower(), f["metric"]): f for f in facts}
+    # B.1.5 (ADR-017): a fact the three-way PDF reconciliation
+    # DISCONFIRMED (confirmed_by_pdf=False — the fact-store sync ran and
+    # found no agreeing PDF span) carries no reconciliation authority —
+    # Gate 4 declines to judge against it (fail-closed: a possibly-
+    # corrupt value must never be the reason a correct draft is
+    # rejected). NULL (reconciler not yet run) keeps the legacy
+    # behavior. The predicate is the FLAG, not the derivation label —
+    # 'FY_minus_9mo' is the derived class in production vocabulary.
+    fact_ix: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for f in facts:
+        if f.get("confirmed_by_pdf") is False:
+            continue
+        fact_ix[(f["company"].lower(), f["metric"])] = f
     issues: List[Dict[str, Any]] = []
     sentences = re.split(r"(?<=[.!?])\s+", draft)
     for sent in sentences:
@@ -3007,7 +3018,8 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
         # receipt-storage failure must never block the certified answer.
         try:
             records = state.get("evidence_records", [])
-            claims = extract_claims(draft, len(docs))
+            claims = [dict(c, verifier="llm_audit")   # B.1.4: per-claim
+                       for c in extract_claims(draft, len(docs))]
             await _db_call(save_verification_receipt,
                            state.get("run_id", "-"),
                            state["original_question"], draft,

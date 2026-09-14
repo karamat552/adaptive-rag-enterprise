@@ -120,6 +120,38 @@ this repo.*
 any stage degrades — the system *refuses* rather than certifies. It never
 returns an unverified answer as if it were verified.
 
+### V2 Phase 0 shipped — the span-anchored fact store (ADR-017)
+
+The V2 refactor ([ARCHITECTURE_V2_PROPOSAL.md](ARCHITECTURE_V2_PROPOSAL.md))
+inverts the pipeline: numbers are **looked up, not generated**. Phase 0 — the
+foundation — is live:
+
+- **`fact_rows`** (migration 006): every number anchored to exact PDF byte
+  spans (`char_start/char_end` slicing `page_transcripts` byte-exactly) with
+  company·metric·period bound **at write time** — a lookup cannot misbind.
+- **Dual-key reconciliation** (Amendment 4): each consolidated fact row is
+  checked against SEC-published XBRL at ingest (exact or ≤0.5% cross-scale).
+  Agreement between the PDF span and the derived Q4 XBRL value also stamps
+  `xbrl_facts.confirmed_by_pdf` — the B.1.5 three-way check. Gate 4 now
+  *declines authority* over disconfirmed facts (fail-closed).
+- **Fail-closed coverage** (B.1.1): Path A initially serves ONLY what two
+  independent sources (PDF span + SEC XBRL) confirm — currently
+  revenue + net income for Q4-2023 across all three companies. Everything
+  else (EPS, segments, subtotals) is stored `unreconciled_fact` and served
+  by the fleet only. Absence of contradiction is NEVER reconciliation.
+- **Context exclusions** (B.1.3): pro-forma / as-previously-reported /
+  restatement / GAAP-to-non-GAAP reconciliation pages and
+  arithmetic-flagged chunks are excluded from extraction — the known
+  mistagging categories are *excluded*, not eliminated (B.6.1 wording).
+- **Routing guard** (A.4/B.1.2, pure functions + fuzz-tested): exact-match
+  (entity, metric, period) resolution with atomic multi-entity demotion —
+  any miss, ambiguity, or segment qualifier demotes the whole query to the
+  fleet. Path A goes live only after the Phase-1 shadow gate.
+
+Live state at epoch 9: 251 candidates extracted → 234 rows written,
+8 reconciled (6 XBRL facts confirmed three-way), **0 span mismatches**,
+verification pass 234/234 byte-exact. Re-run: `python db.py` (idempotent).
+
 ---
 
 ## Measured Results (5 batteries · 3 providers · 30+ runs)
@@ -202,6 +234,7 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 | Document | What it contains |
 |---|---|
 | [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | ADRs 005-016: every design decision with evidence and rejected alternatives |
+| [ARCHITECTURE_V2_PROPOSAL.md](ARCHITECTURE_V2_PROPOSAL.md) | ADR-017: the V2 deterministic-first refactor — spec of record (Appendices A+B), Phase 0 shipped |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | 22-class fixed ledger + 5 open problems + epistemic limits + operational posture |
 | [GAP_ANALYSIS.md](GAP_ANALYSIS.md) | Version 2.0 roadmap: 12 prioritized gaps, score projection 63→90+ |
 | [.env.example](.env.example) | Every configuration variable, annotated |
@@ -212,11 +245,12 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 
 ```bash
 pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.py
-# → 311 passed (offline, deterministic, CI-safe)
+# → 348 passed (offline + DB-integration when reachable; deterministic, CI-safe)
 ```
 
 | Suite | Tests | What it proves |
 |---|---|---|
+| test_fact_extract.py | 44 | Phase-0 fact store: span-anchored extraction (real Apple/Meta/Tesla corpus fixtures), fail-closed column binding, B.1.1/B.1.3/B.1.5 dispositions, exact-match routing guard + fuzz operators, live end-to-end sync+verify (integration-marked) |
 | test_tamper.py | 17 | Receipt chain survives span shifts, hash forgeries, relabeling, OOB |
 | test_failover.py | 37 | Quota cooldowns, peer rescue, timeout handling, circuit ownership |
 | test_contradictions.py | 36 | Scale normalization, GAAP/non-GAAP basis, period binding |

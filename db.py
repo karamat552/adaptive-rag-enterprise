@@ -613,6 +613,45 @@ MIGRATIONS: Tuple[Migration, ...] = (
                WITH CHECK (current_setting('app.rls_bypass', true) = 'on'
                            OR tenant_id = current_setting('app.tenant_id', true));""",
     )),
+    Migration("006", "ADR-017 fact store: fact_rows (span-anchored, dual-key reconciled) + xbrl confirmation flag", (
+        """CREATE TABLE IF NOT EXISTS fact_rows (
+            id BIGSERIAL PRIMARY KEY,
+            company VARCHAR(100) NOT NULL,
+            metric_key VARCHAR(64) NOT NULL,
+            label VARCHAR(200) NOT NULL,
+            period VARCHAR(16) NOT NULL,
+            value_raw NUMERIC(20, 4) NOT NULL,
+            scale VARCHAR(16) NOT NULL,
+            value_usd NUMERIC(24, 4) NOT NULL,
+            basis VARCHAR(32) NOT NULL DEFAULT 'GAAP',
+            chunk_hash VARCHAR(64) NOT NULL,
+            char_start INT NOT NULL,
+            char_end INT NOT NULL,
+            filing_date DATE,
+            ingested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            reconciled BOOLEAN NOT NULL DEFAULT FALSE,
+            verifier_class VARCHAR(64) NOT NULL,
+            corpus_epoch BIGINT NOT NULL,
+            tenant_id VARCHAR(50) NOT NULL DEFAULT 'default',
+            created_at TIMESTAMPTZ DEFAULT now()
+        );""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_fact_row "
+        "ON fact_rows (tenant_id, company, metric_key, period, corpus_epoch, chunk_hash);",
+        "CREATE INDEX IF NOT EXISTS idx_fact_rows_lookup "
+        "ON fact_rows (tenant_id, corpus_epoch, company, metric_key, period) "
+        "WHERE reconciled = TRUE;",
+        "ALTER TABLE fact_rows ENABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE fact_rows FORCE ROW LEVEL SECURITY;",
+        "DROP POLICY IF EXISTS tenant_isolation ON fact_rows;",
+        """CREATE POLICY tenant_isolation ON fact_rows
+               USING      (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = COALESCE(current_setting('app.tenant_id', true), '__unbound__'))
+               WITH CHECK (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = current_setting('app.tenant_id', true));""",
+        # B.1.5: derived facts (Q4 = FY - 9mo) carry PDF confirmation — Gate 4
+        # declines authority for derived facts the three-way check disconfirmed.
+        "ALTER TABLE xbrl_facts ADD COLUMN IF NOT EXISTS confirmed_by_pdf BOOLEAN;",
+    )),
 )
 
 
@@ -1120,6 +1159,230 @@ def pgvector_hybrid_search(
 
 
 # ===========================================================================
+# 6a-bis. ADR-017 FACT STORE (span-anchored, dual-key reconciled)
+# ===========================================================================
+def sync_fact_rows(tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    """ADR-017 Phase 0: sweep the current epoch's ops-statement chunks,
+    extract span-anchored fact rows, re-verify every span against the
+    STORED page transcript (the Phase-0 exit gate), reconcile dual-key
+    against xbrl_facts (exact or <=0.5% cross-scale), DELETE+INSERT per
+    (tenant, epoch) — mirroring migrate semantics. Admin identity: this
+    is an ingest-time job, not a runtime query. The extraction core is
+    pure (fact_extract.py) — this wrapper owns I/O only."""
+    from fact_extract import (extract_facts_from_page,  # pure functions
+                              reconcile_rows)
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+
+    # 1. current-epoch chunks (epoch scope lives on source_registry —
+    #    multi_agent_chunks has no epoch column), grouped by page.
+    #    Each (source, page) is one extraction unit: a table split
+    #    across chunks is ONE logical table.
+    with admin_connection() as conn, \
+            conn.cursor(cursor_factory=extras.DictCursor) as cur:
+        cur.execute("""
+            SELECT c.chunk_hash, c.content, c.company, c.source, c.page,
+                   c.char_start, c.char_end, c.contains_table, c.arithmetic_ok
+            FROM multi_agent_chunks c
+            JOIN source_registry r ON r.source = c.source
+            WHERE r.corpus_epoch =
+                  (SELECT epoch FROM corpus_state WHERE id = 1)
+              AND c.tenant_id = %s
+            ORDER BY c.source, c.page, c.char_start;
+        """, (tid,))
+        chunks = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT epoch FROM corpus_state WHERE id=1")
+        epoch = cur.fetchone()[0]
+        # stored transcripts — the span re-verification truth source
+        cur.execute(
+            "SELECT source, page, transcript FROM page_transcripts "
+            "WHERE corpus_epoch = %s AND tenant_id = %s;", (epoch, tid))
+        transcripts = {(r["source"], r["page"]): r["transcript"]
+                       for r in cur.fetchall()}
+
+    # 2. extract candidates per statement page (pure functions)
+    pages: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+    for ch in chunks:
+        pages.setdefault((ch["source"], ch["page"]), []).append(ch)
+    candidates: List[Dict[str, Any]] = []
+    excluded = 0
+    for (source, page), page_chunks in pages.items():
+        company = page_chunks[0]["company"] or source
+        cands, n_exc = extract_facts_from_page(
+            company, page, page_chunks)
+        candidates.extend(cands)
+        excluded += n_exc
+
+    # 3. THE EXIT GATE: every candidate must slice its OWN stored
+    #    transcript byte-exactly before it may be written. A row whose
+    #    span disagrees with page_transcripts is dropped (span_mismatch),
+    #    never stored — the receipt chain must never inherit a bad span.
+    verified: List[Dict[str, Any]] = []
+    span_mismatches = 0
+    for c in candidates:
+        tr = transcripts.get((c["source"], c["page"]))
+        if not tr or tr[c["char_start"]:c["char_end"]] != (c["row_text"]
+                                                           or ""):
+            span_mismatches += 1
+            continue
+        verified.append(c)
+
+    # 4. reconcile dual-key against CURRENT-epoch XBRL facts (pure fn)
+    facts = [f for f in get_xbrl_facts(tenant_id=tid)
+             if f.get("corpus_epoch") == epoch]
+    for c in verified:
+        c["reconciled"], c["verifier_class"] = reconcile_rows(c, facts)
+    reconciled = sum(1 for c in verified if c["reconciled"])
+
+    # 5. write: DELETE+INSERT (admin identity), epoch-scoped
+    with admin_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM fact_rows WHERE tenant_id=%s AND corpus_epoch=%s",
+            (tid, epoch))
+        for c in verified:
+            cur.execute("""
+                INSERT INTO fact_rows
+                  (company, metric_key, label, period, value_raw, scale,
+                   value_usd, basis, chunk_hash, char_start, char_end,
+                   filing_date, reconciled, verifier_class,
+                   corpus_epoch, tenant_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (tenant_id, company, metric_key, period,
+                             corpus_epoch, chunk_hash) DO UPDATE SET
+                  label=EXCLUDED.label, value_raw=EXCLUDED.value_raw,
+                  scale=EXCLUDED.scale, value_usd=EXCLUDED.value_usd,
+                  reconciled=EXCLUDED.reconciled,
+                  verifier_class=EXCLUDED.verifier_class,
+                  filing_date=EXCLUDED.filing_date
+            """, (c["company"], c["metric_key"], c["label"], c["period"],
+                  c["value_raw"], c["scale"], c["value_usd"],
+                  c.get("basis", "GAAP"), c["chunk_hash"], c["char_start"],
+                  c["char_end"], c.get("filing_date"), c["reconciled"],
+                  c["verifier_class"], epoch, tid))
+        # B.1.5: stamp the three-way confirmation BOTH ways — a fact
+        # with no agreeing PDF row is explicitly FALSE (disconfirmed:
+        # Gate 4 declines its authority), never left NULL-ambiguous.
+        # Unreconciled_fact rows (tracked segments etc.) never speak.
+        cur.execute("""
+            UPDATE xbrl_facts f SET confirmed_by_pdf = TRUE
+            WHERE f.tenant_id=%s AND f.corpus_epoch=%s
+              AND EXISTS (SELECT 1 FROM fact_rows r
+                          WHERE r.tenant_id=f.tenant_id
+                            AND r.corpus_epoch=f.corpus_epoch
+                            AND lower(r.company)=lower(f.company)
+                            AND r.metric_key=f.metric
+                            AND r.period=f.period
+                            AND r.verifier_class='span_xbrl_reconciled')
+        """, (tid, epoch))
+        cur.execute("""
+            UPDATE xbrl_facts f SET confirmed_by_pdf = FALSE
+            WHERE f.tenant_id=%s AND f.corpus_epoch=%s
+              AND f.confirmed_by_pdf IS NULL
+              AND NOT EXISTS (SELECT 1 FROM fact_rows r
+                          WHERE r.tenant_id=f.tenant_id
+                            AND r.corpus_epoch=f.corpus_epoch
+                            AND lower(r.company)=lower(f.company)
+                            AND r.metric_key=f.metric
+                            AND r.period=f.period
+                            AND r.verifier_class='span_xbrl_reconciled')
+        """, (tid, epoch))
+    logger.info("Fact store synced: %d rows written, %d reconciled, "
+                "%d span-mismatched (dropped), %d excluded by "
+                "context/integrity rules, epoch %d.",
+                len(verified), reconciled, span_mismatches, excluded,
+                epoch)
+    return {"rows": len(verified), "reconciled": reconciled,
+            "span_mismatches": span_mismatches, "excluded": excluded,
+            "epoch": epoch}
+
+
+def verify_fact_rows(tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    """ADR-017 Phase-0 exit gate (re-verification pass): every stored
+    fact row must (a) slice its owning chunk's content byte-exactly in
+    chunk-relative coordinates AND (b) slice the page transcript
+    byte-exactly in absolute coordinates, with both slices EQUAL —
+    custody to source bytes proven twice, exactly as receipts will.
+    A row failing either indicates corpus/ledger drift — reported,
+    never silently served."""
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    with admin_connection() as conn, \
+            conn.cursor(cursor_factory=extras.DictCursor) as cur:
+        cur.execute("SELECT epoch FROM corpus_state WHERE id=1")
+        epoch = cur.fetchone()[0]
+        cur.execute("""
+            SELECT f.company, f.metric_key, f.period, f.value_usd,
+                   f.chunk_hash, f.char_start, f.char_end, f.reconciled,
+                   f.verifier_class, c.content AS chunk_content,
+                   c.char_start AS chunk_start, c.char_end AS chunk_end,
+                   t.transcript
+            FROM fact_rows f
+            JOIN multi_agent_chunks c ON c.chunk_hash = f.chunk_hash
+            LEFT JOIN page_transcripts t
+              ON t.source = c.source AND t.page = c.page
+             AND t.corpus_epoch = f.corpus_epoch
+             AND t.tenant_id = f.tenant_id
+            WHERE f.tenant_id=%s AND f.corpus_epoch=%s
+            ORDER BY f.company, f.metric_key, f.period;
+        """, (tid, epoch))
+        rows = [dict(r) for r in cur.fetchall()]
+    ok = 0
+    bad_spans: List[Dict[str, Any]] = []
+    for r in rows:
+        rel_s = r["char_start"] - r["chunk_start"]
+        rel_e = r["char_end"] - r["chunk_start"]
+        chunk_slice = (r.get("chunk_content") or "")[rel_s:rel_e]
+        tr = r.get("transcript")
+        transcript_slice = (tr or "")[r["char_start"]:r["char_end"]] \
+            if tr else None
+        if (chunk_slice and chunk_slice == transcript_slice):
+            ok += 1
+        else:
+            bad_spans.append({k: r[k] for k in
+                              ("company", "metric_key", "period",
+                               "char_start", "char_end", "chunk_hash")})
+    report = {"rows": len(rows), "span_verified": ok,
+              "span_failures": len(bad_spans),
+              "failures": bad_spans[:20], "epoch": epoch}
+    if bad_spans:
+        logger.error("fact_rows verification FAILED: %d/%d rows have "
+                     "non-slicing spans.", len(bad_spans), len(rows))
+    else:
+        logger.info("fact_rows verification: all %d rows slice their "
+                     "chunks AND transcripts byte-exactly.", len(rows))
+    return report
+
+
+def get_fact_rows(company: Optional[str] = None,
+                  metric_key: Optional[str] = None,
+                  period: Optional[str] = None,
+                  reconciled_only: bool = True,
+                  tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Exact-match Path-A lookup (Amendment 2): canonical keys only — the
+    caller passes canonical metric/period values resolved from a
+    dictionary; there is NO fuzzy matching here by design. Reconciled-only
+    by default: unreconciled rows are never Path-A eligible (B.1.1)."""
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    sql = ("SELECT company, metric_key, label, period, value_raw, scale, "
+           "value_usd, basis, chunk_hash, char_start, char_end, "
+           "verifier_class, corpus_epoch FROM fact_rows "
+           "WHERE tenant_id=%s AND corpus_epoch="
+           "(SELECT epoch FROM corpus_state WHERE id=1) AND reconciled=%s")
+    params: List[Any] = [tid, reconciled_only]
+    if company:
+        sql += " AND company=%s"; params.append(company)
+    if metric_key:
+        sql += " AND metric_key=%s"; params.append(metric_key)
+    if period:
+        sql += " AND period=%s"; params.append(period)
+    sql += " ORDER BY company, metric_key, period;"
+    with get_db_connection(tenant_id=tid) as conn,             conn.cursor(cursor_factory=extras.DictCursor) as cur:
+        cur.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+# ===========================================================================
 # 6b. VERIFICATION RECEIPTS (claim -> chunk -> transcript -> hash chain)
 # ===========================================================================
 def sync_page_transcripts(
@@ -1548,7 +1811,8 @@ def get_xbrl_facts(company: Optional[str] = None,
     cfg = get_settings()
     tid = tenant_id or cfg.default_tenant
     sql = ("SELECT company, metric, period, value, unit, derivation, "
-           "derived_from, payload_sha256, source_form, corpus_epoch "
+           "derived_from, payload_sha256, source_form, corpus_epoch, "
+           "confirmed_by_pdf "
            "FROM xbrl_facts WHERE tenant_id = %s")
     params: List[Any] = [tid]
     if company:
@@ -1622,6 +1886,16 @@ if __name__ == "__main__":
         n_pages = sync_page_transcripts()
         logger.info("Transcript ledger synced: %d pages for the new epoch.",
                      n_pages)
+    # ADR-017 Phase 0: fact store sync — extract span-anchored rows from
+    # the current epoch and reconcile them dual-key against xbrl_facts
+    # (idempotent DELETE+INSERT; sets xbrl confirmed_by_pdf per B.1.5).
+    try:
+        stats = sync_fact_rows()
+        logger.info("Fact store synced: %s", stats)
+        vstats = verify_fact_rows()
+        logger.info("Fact store verified: %s", vstats)
+    except Exception as exc:
+        logger.warning("Fact store sync failed (non-fatal): %s", exc)
     logger.info("Health: %s", health_check())
 
     logger.info("Sanity search: 'Tesla vehicle delivery numbers'...")

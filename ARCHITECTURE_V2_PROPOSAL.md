@@ -1,7 +1,9 @@
 # ARCHITECTURE V2 — The Deterministic-First Refactor (Proposal for External Review)
 
 **Author:** IX Alpha (the build agent with full repo access)
-**Status:** PROPOSAL — awaiting second-opinion review before execution
+**Status:** ADR-017 LOCKED · **Phase 0 EXECUTED (2026-09-14)** — the span-anchored
+fact extractor + fact_rows schema + dual-key reconciler + B.1/B.6 enforcement
+are live (see README "V2 Phase 0 shipped"); Phase 1 shadow mode not yet started
 **Baseline:** Adaptive-RAG-Enterprise, main @ 2a7175b · 311 tests green · live on Render + Streamlit
 **Reviewer instructions are at the bottom of this document.**
 
@@ -557,3 +559,26 @@ tagging granularity, only multi-year corpus coverage.
 finding implemented, corrected, or dispositioned with reasons; ADR-017
 with Appendices A+B is the document of record; Phase 0 begins with
 B.1.1/B.1.3/B.1.4/B.1.5 + B.6 enforcement inside the first commit.**
+
+---
+
+## B.7 PHASE 0 EXECUTION RECORD (2026-09-14) — COMPLETE
+
+Exit gate met and measured on the live corpus (epoch 9, 223 chunks,
+3 companies):
+
+| Gate (spec) | Result |
+|---|---|
+| Extractor re-verifies every row against its own span | 251 candidates extracted; **234 written, 0 span mismatches**; post-sync `verify_fact_rows`: **234/234 slice chunks AND transcripts byte-exactly** |
+| Dual-key reconciler (Amd. 4 / B.1.1) | 8 rows reconciled — exactly the 6 XBRL-confirmed Q4-2023 facts (revenue+net_income × 3 companies) + 2 duplicate-span Apple revenue rows; everything else honestly `unreconciled_fact`. EPS stays unreconciled: the current `xbrl_facts` table holds no EPS facts, and absence is never agreement (B.1.1) |
+| B.1.1 fail-closed | Enforced at THREE layers: metric allow-list in the reconciler, `reconciled=false` in storage, `get_fact_rows(reconciled_only=True)` lookup |
+| B.1.3 exclusions | 51 chunks excluded (pro-forma/restatement markers, GAAP-to-non-GAAP reconciliation pages incl. Tesla's letter-spaced p28-30, arithmetic-flagged windows). Known categories EXCLUDED, not eliminated (B.6.1) |
+| B.1.4 per-claim verifier class | Receipt claims stamped `verifier=llm_audit`; fact_rows carry `verifier_class` per row |
+| B.1.5 three-way confirmation | All 6 derived Q4 XBRL facts stamped `confirmed_by_pdf=true` via PDF-span agreement; Gate 4 declines any `confirmed_by_pdf=false` fact (predicate fixed from the dead `derivation=="derived"` check to the live flag) |
+| A.4 regression tests BEFORE extractor live | Exact-match guard + atomic multi-entity demotion + 4 fuzz operators shipped as pure functions with 44-test suite (real-corpus fixtures: Apple p1, Meta p6, Tesla p4/p25/p28) |
+| Live misbinding classes found & closed during execution | (a) Tesla cash-flow "Net income" (7,943, incl. NCI) sits within the 0.5% tolerance of the attributable XBRL 7,928 — untitled pages now admitted ONLY via ALL-CAPS income-statement section lines; (b) chunk-boundary bleed: chunks re-state table heads, so a trailing label + next chunk's re-stated values misbound — rows must complete within one chunk; (c) Tesla bare NET INCOME renamed `net_income_total` when an attributable row exists on the page |
+
+Phase 1 (shadow mode) NOT started: requires the ≥40-question permuted
+battery, 15 corrupted-claim injections/phase, ≥98% V1 agreement, 7
+consecutive green nights (A.2). `RAG_FACT_FASTPATH` remains unset — the
+kill-switch posture is unchanged.
