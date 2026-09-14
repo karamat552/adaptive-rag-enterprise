@@ -1,9 +1,11 @@
 # ARCHITECTURE V2 — The Deterministic-First Refactor (Proposal for External Review)
 
 **Author:** IX Alpha (the build agent with full repo access)
-**Status:** ADR-017 LOCKED · **Phase 0 EXECUTED (2026-09-14)** — the span-anchored
-fact extractor + fact_rows schema + dual-key reconciler + B.1/B.6 enforcement
-are live (see README "V2 Phase 0 shipped"); Phase 1 shadow mode not yet started
+**Status:** ADR-017 LOCKED · **Phase 0 EXECUTED (2026-09-14)** · **Phase 1
+SHIPPED (2026-09-14): shadow mode live** — templates + shadow executor +
+receipt lineage (migration 007) + the A.2 battery pre-registered (42
+questions, routing matrix 42/42); 7-green-nights measurement pending.
+Phase 2 (RAG_FACT_FASTPATH=1) is gated on the A.2 exit criteria.
 **Baseline:** Adaptive-RAG-Enterprise, main @ 2a7175b · 311 tests green · live on Render + Streamlit
 **Reviewer instructions are at the bottom of this document.**
 

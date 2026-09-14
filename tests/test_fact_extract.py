@@ -1093,6 +1093,37 @@ def test_path_a_bare_quarter_demotes():
     assert d["reason"] == "no_period_resolved"
 
 
+def test_path_a_interpretive_stem_demotes():
+    """Battery finding D05 (2026-09-14): 'What drove Tesla's Q4 2023
+    net income growth?' NAMES a covered triple but asks an
+    interpretive question — serving the value would answer a DIFFERENT
+    question with a true figure (§2.4 class). Interpretive stems
+    demote BEFORE triple resolution."""
+    d = path_a_decision("What drove Tesla's Q4 2023 net income growth?",
+                        FACT_KEYS)
+    assert d["path"] == "fleet"
+    assert d["reason"] == "interpretive_question"
+    d = path_a_decision("Why was Meta's Q4 2023 revenue so high?",
+                        FACT_KEYS)
+    assert d["path"] == "fleet"
+    # fact stems are NOT interpretive
+    d = path_a_decision("What was Tesla's net income in Q4 2023?",
+                        FACT_KEYS)
+    assert d["path"] == "fact"
+    d = path_a_decision("How much net income did Meta report in Q4 2023?",
+                        FACT_KEYS)
+    assert d["path"] == "fact"
+
+
+def test_path_a_earn_per_share_phrase_resolves():
+    """Battery finding A16: 'how much did Tesla earn per share' — the
+    colloquial EPS phrasing must resolve to eps_diluted."""
+    d = path_a_decision("How much did Tesla earn per share in Q4 2023?",
+                        FACT_KEYS)
+    assert d["path"] == "fact"
+    assert d["resolved"] == [("Tesla", "eps_diluted", "Q4-2023")]
+
+
 # ===========================================================================
 # A.5 — FUZZ OPERATORS over the routing guard
 # ===========================================================================

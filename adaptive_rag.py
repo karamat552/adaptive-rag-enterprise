@@ -2797,6 +2797,30 @@ def extract_claims(draft: str, doc_count: int) -> List[Dict[str, Any]]:
     return claims
 
 
+def _receipt_model_id(state: MultiAgentState) -> Optional[str]:
+    """The model family that produced this answer (synthesis lane; the
+    audit lane is recorded per-claim via B.1.4's verifier field)."""
+    try:
+        return get_stage_model("executive")
+    except Exception:
+        return None
+
+
+def _receipt_prompt_sha() -> Optional[str]:
+    """Stable digest of the pipeline's prompt version: the module's own
+    source (prompts are code constants here) hashed at import-cheap
+    cost. Changes to any prompt constant change the digest — the
+    attribution V3_ROADMAP §3 requires."""
+    try:
+        import hashlib
+        import inspect
+        src = inspect.getsource(
+            __import__("sys").modules[__name__]).encode("utf-8")
+        return hashlib.sha256(src).hexdigest()[:64]
+    except Exception:
+        return None
+
+
 def build_receipt_evidence(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Projects retrieved records into the receipt's evidence chain: only the
     lineage fields /verify needs — span, hash, source, page, company — plus
@@ -3020,6 +3044,9 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
             records = state.get("evidence_records", [])
             claims = [dict(c, verifier="llm_audit")   # B.1.4: per-claim
                        for c in extract_claims(draft, len(docs))]
+            # Receipt lineage (Phase 1 / V3-roadmap item 0): name the
+            # producing model + prompt version — attribution, not
+            # weight-freezing. Fail-open: unknown ids record as None.
             await _db_call(save_verification_receipt,
                            state.get("run_id", "-"),
                            state["original_question"], draft,
@@ -3027,7 +3054,9 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
                            evidence=build_receipt_evidence(records),
                            audit_verdict="grounded",
                            contradictions=state.get("contradictions") or [],
-                           tenant_id=state.get("tenant_id") or None)
+                           tenant_id=state.get("tenant_id") or None,
+                           model_id=_receipt_model_id(state),
+                           prompt_sha256=_receipt_prompt_sha())
         except Exception as receipt_err:
             logger.warning("Receipt save skipped (non-fatal): %s", receipt_err)
 
@@ -3276,6 +3305,13 @@ def build_graph():
     wf.add_node("rewrite", transform_query)
     wf.add_node("abandon", global_knowledge_deployment)
     wf.add_node("verified_refusal", verified_refusal)
+    # ADR-017 Phase 1: the SHADOW executor — builds Path-A candidates
+    # for every query, runs the guard+template+gates, records the V1-
+    # vs-V2 disagreement ledger, NEVER serves (fact_shadow.py's
+    # isolation contract). Both terminal paths pass through it so
+    # certified answers AND verified refusals are compared.
+    from fact_shadow import shadow_fact_path
+    wf.add_node("shadow_fact", shadow_fact_path)
 
     wf.set_entry_point("cache_check")
     wf.add_conditional_edges("cache_check", route_cache_check,
@@ -3293,7 +3329,7 @@ def build_graph():
     wf.add_edge("sharpen", "exec_db")
     wf.add_edge("csuite_synth", "validate")
     wf.add_conditional_edges("validate", evaluate_retry_thresholds,
-                             {END: END, "rewrite": "rewrite",
+                             {END: "shadow_fact", "rewrite": "rewrite",
                               "refuse": "verified_refusal"})
     # ABORT-ON-HINT routing (token plan, 2026-09-07): a quota-aborted run
     # must skip the doomed fleet re-run — 'rewrite -> exec_db' is otherwise
@@ -3302,8 +3338,9 @@ def build_graph():
     wf.add_conditional_edges("rewrite", route_after_rewrite,
                              {"exec_db": "exec_db",
                               "verified_refusal": "verified_refusal"})
-    wf.add_edge("verified_refusal", END)
+    wf.add_edge("verified_refusal", "shadow_fact")
     wf.add_edge("abandon", END)
+    wf.add_edge("shadow_fact", END)
     return wf.compile()
 
 

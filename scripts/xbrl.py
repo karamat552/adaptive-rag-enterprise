@@ -130,6 +130,14 @@ def _pick_latest(facts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return max(facts, key=lambda u: u.get("filed", ""))
 
 
+def _days(start: str, end: str) -> int:
+    from datetime import date
+    try:
+        return (date.fromisoformat(end) - date.fromisoformat(start)).days
+    except ValueError:
+        return 9999      # malformed dates can never pass a duration filter
+
+
 def derive_facts() -> (List[Dict[str, Any]], Dict[str, Dict[str, Any]]):
     """Fetches concepts per company and derives fiscal-Q4-2023 figures:
     Q4 = FY(end=FY-end-date) − 9mo(end=Q3-end-date), both durations sharing
@@ -157,28 +165,70 @@ def derive_facts() -> (List[Dict[str, Any]], Dict[str, Dict[str, Any]]):
                 if data is None:
                     rep["concepts"][tag] = "not-filed"
                     continue
-                units = data.get("units", {}).get("USD", [])
                 if metric == "eps_diluted":
-                    # EPS is a per-share instant-context fact: take the Q4
-                    # frame the earnings 8-K reports, else derive FY-9mo.
-                    q4 = [u for u in units
-                          if u.get("frame") == "CY2023Q4" or (
-                              u.get("start", "").endswith("-10-01")
-                              and u.get("end", "").endswith("-12-31")
-                              and "2023" in str(u.get("start", "")))]
-                    fact = _pick_latest(q4) if q4 else None
-                    if fact:
-                        rows.append({
-                            "company": name, "metric": "eps_diluted",
-                            "period": "Q4-2023", "value": fact["val"],
-                            "unit": "USD/share",
-                            "derivation": "reported",
-                            "derived_from": None,
-                            "payload_sha256": _sha256_payload(fact),
-                            "source_form": fact.get("form", "?"),
-                        })
-                        rep["concepts"][tag] = f"reported Q4"
+                    # EPS fix (2026-09-14, Phase 1 prep). TWO data-source
+                    # realities discovered while running this:
+                    #   (1) per-share facts live under "USD/shares" — the
+                    #       old code read "USD", so EPS never synced at all;
+                    #   (2) EDGAR has NO primary Q4 EPS duration fact for
+                    #       calendar-year companies (10-Qs cover Q1-Q3; the
+                    #       10-K carries FY only). Q4 EPS must be DERIVED:
+                    #       FY - (Q1+Q2+Q3) — the same derivation class as
+                    #       revenue's FY_minus_9mo, flagged and reconciled
+                    #       the same way (B.1.5: the PDF's own Q4 column is
+                    #       the primary anchor; this is the cross-check).
+                    # Per-share cents rounding makes the 0.5% rule wrong
+                    # here (2.27 +/- 0.5% = +/- 1.1 cents > a cent of
+                    # rounding across four quarters), so EPS reconciles
+                    # within +/- $0.01 — a PRINCIPLED tolerance for
+                    # cent-rounded arithmetic, not a loosened one.
+                    if comp["fiscal"] != "calendar":
+                        rep["concepts"][tag] = (
+                            "skipped: fiscal-calendar EPS out of Phase-1 "
+                            "scope (fail-closed; Apple Q4 = calendar Q3)")
+                        continue
+                    units = data.get("units", {}).get("USD/shares", [])
+                    fy = [u for u in units
+                          if u.get("start") == f"{fy_start}"
+                          and u.get("end") == f"{fy_end}"
+                          and u.get("form") == "10-K"]
+                    fy = _pick_latest(fy)
+                    quarters = []
+                    for q_end in ("2023-03-31", "2023-06-30", "2023-09-30"):
+                        q = [u for u in units
+                             if u.get("end") == q_end
+                             and str(u.get("start", "")).startswith("2023")
+                             and u.get("form") == "10-Q"
+                             and (u.get("end", "")
+                                  and u.get("start", "")
+                                  and _days(u["start"], q_end) <= 100)]
+                        q = _pick_latest(q)
+                        if q is None:
+                            break
+                        quarters.append(q)
+                    if fy is None or len(quarters) != 3:
+                        rep["concepts"][tag] = "no FY/quarterly facts"
+                        continue
+                    # round to cents at derivation time: 10-K/10-Q facts
+                    # are cent-rounded, so the difference is cent-exact;
+                    # the raw float subtraction can carry representation
+                    # noise (5.299999...) that would poison NUMERIC(20,4)
+                    q4_eps = round(fy["val"] - sum(q["val"] for q in quarters), 2)
+                    rows.append({
+                        "company": name, "metric": "eps_diluted",
+                        "period": "Q4-2023", "value": q4_eps,
+                        "unit": "USD/share",
+                        "derivation": "FY_minus_9mo",
+                        "derived_from": _sha256_payload(
+                            {"fy": fy, "quarters": quarters}),
+                        "source_form": f"FY:{fy.get('form')} "
+                                       f"9mo:10-Q x3",
+                        "payload_sha256": _sha256_payload(
+                            {"fy": fy, "quarters": quarters}),
+                    })
+                    rep["concepts"][tag] = f"derived {q4_eps:.2f}"
                     continue
+                units = data.get("units", {}).get("USD", [])
                 # Flow metrics: FY and 9mo durations share the fiscal start.
                 fy = _pick_latest(_duration_facts(units, fy_start, fy_end,
                                                    90, 380, "10-K"))

@@ -270,7 +270,8 @@ def test_guard_saves_receipt_on_certified(monkeypatch):
         return _Audit(), ar.UsageCollector()
 
     def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
-                  contradictions=None, tenant_id=None):
+                  contradictions=None, tenant_id=None, model_id=None,
+                  prompt_sha256=None):
         saved.update(run_id=run_id, claims=claims, evidence=evidence,
                      verdict=audit_verdict, contradictions=contradictions)
         return True
@@ -718,7 +719,8 @@ def test_verified_refusal_persists_refused_receipt(monkeypatch):
         return fn(*args, **kwargs)
 
     def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
-                  contradictions=None, tenant_id=None):
+                  contradictions=None, tenant_id=None, model_id=None,
+                  prompt_sha256=None):
         saved.update(run_id=run_id, question=question, answer=answer,
                      claims=claims, evidence=evidence, verdict=audit_verdict,
                      tenant_id=tenant_id)
@@ -757,7 +759,8 @@ def test_verified_refusal_xbrl_objection_named(monkeypatch):
         return fn(*args, **kwargs)
 
     def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
-                  contradictions=None, tenant_id=None):
+                  contradictions=None, tenant_id=None, model_id=None,
+                  prompt_sha256=None):
         saved.update(answer=answer, verdict=audit_verdict, evidence=evidence)
         return True
 

@@ -493,15 +493,21 @@ def _owner_index(offsets: List[Tuple[int, int, Dict[str, Any]]],
 # RECONCILIATION — dual-key, exact or <=0.5% cross-scale (Amendment 4)
 # ===========================================================================
 _TOLERANCE = Decimal("0.5")     # percent
+# Per-share EPS: four quarters each rounded to cents make the 0.5% rule
+# wrong (2.27 ± 0.5% = ±1.1¢ > one cent of accumulated rounding), so EPS
+# reconciles within ±$0.01 — a PRINCIPLED tolerance for cent-rounded
+# arithmetic, recorded here and in scripts/xbrl.py's derivation comment.
+_EPS_TOLERANCE = Decimal("0.01")   # absolute USD/share
 
 
 def reconcile_rows(candidate: Dict[str, Any],
                    xbrl_facts: List[Dict[str, Any]]) -> Tuple[bool, str]:
     """B.1.1: no XBRL counterpart -> unreconciled (fail-closed; absence
     of contradiction is NEVER agreement). Agreement (exact or within
-    0.5% — the proven rounding-slack rule, e.g. $91.7B vs $91,650M)
-    flips the row to 'span_xbrl_reconciled', which is also the B.1.5
-    three-way confirmation that grants a derived Q4 fact authority."""
+    0.5% — the proven rounding-slack rule, e.g. $91.7B vs $91,650M;
+    ±$0.01 for per-share EPS) flips the row to 'span_xbrl_reconciled',
+    which is also the B.1.5 three-way confirmation that grants a
+    derived Q4 fact authority."""
     key_metric = candidate["metric_key"]
     if key_metric not in PATH_A_METRICS:
         return False, "unreconciled_fact"
@@ -516,6 +522,10 @@ def reconcile_rows(candidate: Dict[str, Any],
         a = Decimal(str(candidate["value_usd"]))
         b = Decimal(str(fact["value"]))
     except Exception:
+        return False, "unreconciled_fact"
+    if key_metric == "eps_diluted":
+        if abs(a - b) <= _EPS_TOLERANCE:
+            return True, "span_xbrl_reconciled"
         return False, "unreconciled_fact"
     if b == 0:
         return False, "unreconciled_fact"
@@ -539,6 +549,8 @@ _ENTITY_ALIASES: Dict[str, str] = {
 # metric phrases, longest-first so "total net sales" beats "net sales"
 _METRIC_PHRASES: List[Tuple[str, str]] = [
     ("earnings per share", "eps_diluted"),
+    ("earn per share", "eps_diluted"),
+    ("earned per share", "eps_diluted"),
     ("diluted eps", "eps_diluted"),
     ("total net sales", "revenue"),
     ("total revenues", "revenue"),
@@ -554,6 +566,18 @@ _METRIC_PHRASES: List[Tuple[str, str]] = [
     ("gross profit", "gross_margin"),
     ("operating income", "operating_income"),
 ]
+
+# INTERPRETIVE-CLAUSE DEMOTION (battery finding D05, 2026-09-14): a
+# question can NAME a covered metric yet ask something interpretive
+# about it ("what drove Tesla's Q4 2023 net income growth?"). Serving
+# the value would answer a DIFFERENT question with a true figure —
+# the §2.4 class. Interpretive stems demote to the fleet BEFORE any
+# triple resolution. "how much/many" and "what was/is" are fact stems
+# and deliberately do not match.
+_INTERPRETIVE_RE = re.compile(
+    r"\bwhy\b|\bwhat\s+(?:drove|drives|caused|causes|explains|explained|"
+    r"led\s+to|is\s+behind)\b|\bhow\s+(?:did|does|do|can|would|could)\b",
+    re.IGNORECASE)
 
 # A qualifier immediately before a metric noun makes it a SEGMENT /
 # derived metric, not the consolidated one ("ad revenue", "iPhone
@@ -645,7 +669,12 @@ def path_a_decision(query: str,
     (entity, metric, period) triple maps EXACTLY to a reconciled
     fact_rows key. Any ambiguity, any missing triple (comparatives
     demote ATOMICALLY — no split-brain answers), any segment metric:
-    demote the whole query to the fleet."""
+    demote the whole query to the fleet. Interpretive stems demote
+    FIRST (§2.4 — a 'what drove X' question must never be answered
+    with X's value)."""
+    if _INTERPRETIVE_RE.search(query):
+        return {"path": "fleet", "reason": "interpretive_question",
+                "resolved": []}
     entities = canonical_entities(query)
     kind, metric = canonical_metric(query)
     periods = canonical_periods(query)

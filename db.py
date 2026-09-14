@@ -652,6 +652,42 @@ MIGRATIONS: Tuple[Migration, ...] = (
         # declines authority for derived facts the three-way check disconfirmed.
         "ALTER TABLE xbrl_facts ADD COLUMN IF NOT EXISTS confirmed_by_pdf BOOLEAN;",
     )),
+    Migration("007", "ADR-017 Phase 1: shadow disagreement ledger + receipt lineage (model id, prompt hash)", (
+        """CREATE TABLE IF NOT EXISTS shadow_disagreements (
+            id BIGSERIAL PRIMARY KEY,
+            question TEXT NOT NULL,
+            route_reason VARCHAR(64),
+            v1_answer TEXT,
+            v2_answer TEXT,
+            agreement_class VARCHAR(32) NOT NULL,
+            agreement_detail TEXT,
+            resolved_triples JSONB,
+            corpus_epoch BIGINT NOT NULL,
+            tenant_id VARCHAR(50) NOT NULL DEFAULT 'default',
+            run_id VARCHAR(64) NOT NULL DEFAULT '-',
+            created_at TIMESTAMPTZ DEFAULT now()
+        );""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_shadow_disagreement "
+        "ON shadow_disagreements (tenant_id, question, corpus_epoch, run_id);",
+        "CREATE INDEX IF NOT EXISTS idx_shadow_epoch "
+        "ON shadow_disagreements (tenant_id, corpus_epoch, agreement_class);",
+        "ALTER TABLE shadow_disagreements ENABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE shadow_disagreements FORCE ROW LEVEL SECURITY;",
+        "DROP POLICY IF EXISTS tenant_isolation ON shadow_disagreements;",
+        """CREATE POLICY tenant_isolation ON shadow_disagreements
+               USING      (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = COALESCE(current_setting('app.tenant_id', true), '__unbound__'))
+               WITH CHECK (current_setting('app.rls_bypass', true) = 'on'
+                           OR tenant_id = current_setting('app.tenant_id', true));""",
+        # V3-roadmap item 0, pulled into Phase 1 (B.7): receipt lineage.
+        # The shadow study needs to name WHICH model disagreed; every
+        # receipt gains the lineage triple (model id, prompt hash,
+        # corpus epoch) — attribution, NOT weight-freezing (V3_ROADMAP §3).
+        "ALTER TABLE verification_receipts "
+        "ADD COLUMN IF NOT EXISTS model_id VARCHAR(64);",
+        "ALTER TABLE verification_receipts "
+        "ADD COLUMN IF NOT EXISTS prompt_sha256 VARCHAR(64);",
+    )),
 )
 
 
@@ -1366,7 +1402,17 @@ def get_fact_rows(company: Optional[str] = None,
     tid = tenant_id or cfg.default_tenant
     sql = ("SELECT company, metric_key, label, period, value_raw, scale, "
            "value_usd, basis, chunk_hash, char_start, char_end, "
-           "verifier_class, corpus_epoch FROM fact_rows "
+           "verifier_class, reconciled, corpus_epoch, "
+           "(SELECT c.source FROM multi_agent_chunks c "
+           " WHERE c.chunk_hash = fact_rows.chunk_hash LIMIT 1) AS source, "
+           "(SELECT c.page FROM multi_agent_chunks c "
+           " WHERE c.chunk_hash = fact_rows.chunk_hash LIMIT 1) AS page, "
+           "(SELECT substring(c.content from "
+           "        fact_rows.char_start - c.char_start + 1 "
+           "        for fact_rows.char_end - fact_rows.char_start) "
+           "  FROM multi_agent_chunks c "
+           " WHERE c.chunk_hash = fact_rows.chunk_hash LIMIT 1) AS row_text "
+           "FROM fact_rows "
            "WHERE tenant_id=%s AND corpus_epoch="
            "(SELECT epoch FROM corpus_state WHERE id=1) AND reconciled=%s")
     params: List[Any] = [tid, reconciled_only]
@@ -1438,20 +1484,27 @@ def save_verification_receipt(
     audit_verdict: str,
     contradictions: Optional[List[Dict[str, Any]]] = None,
     tenant_id: Optional[str] = None,
+    model_id: Optional[str] = None,
+    prompt_sha256: Optional[str] = None,
 ) -> bool:
     """Persists the receipt for one run (runtime identity, tenant-scoped).
-    Idempotent on run_id — a re-run (retry loop) overwrites in place."""
+    Idempotent on run_id — a re-run (retry loop) overwrites in place.
+    Receipt lineage (Phase 1 / V3-roadmap item 0): model_id + prompt_
+    sha256 record WHICH model family and WHICH prompt version produced
+    the answer — attribution, never weight-freezing (V3_ROADMAP §3);
+    a shadow-study disagreement must name its models."""
     cfg = get_settings()
     tid = tenant_id or cfg.default_tenant
     sql = """
         INSERT INTO verification_receipts (
             run_id, question, answer, claims_json, evidence_json,
             n_claims, n_evidence, audit_verdict, contradictions_json,
-            corpus_epoch, tenant_id)
+            corpus_epoch, tenant_id, model_id, prompt_sha256)
         VALUES (%(run_id)s, %(question)s, %(answer)s, %(claims)s::jsonb,
                 %(evidence)s::jsonb, %(n_claims)s, %(n_evidence)s,
                 %(verdict)s, %(contradictions)s::jsonb,
-                (SELECT epoch FROM corpus_state WHERE id = 1), %(tenant)s)
+                (SELECT epoch FROM corpus_state WHERE id = 1), %(tenant)s,
+                %(model_id)s, %(prompt_sha256)s)
         ON CONFLICT (run_id) DO UPDATE SET
             question = EXCLUDED.question,
             answer = EXCLUDED.answer,
@@ -1462,6 +1515,8 @@ def save_verification_receipt(
             audit_verdict = EXCLUDED.audit_verdict,
             contradictions_json = EXCLUDED.contradictions_json,
             corpus_epoch = EXCLUDED.corpus_epoch,
+            model_id = EXCLUDED.model_id,
+            prompt_sha256 = EXCLUDED.prompt_sha256,
             created_at = now();
     """
     params = {
@@ -1471,6 +1526,8 @@ def save_verification_receipt(
         "verdict": audit_verdict,
         "contradictions": json.dumps(contradictions or []),
         "tenant": tid,
+        "model_id": model_id,
+        "prompt_sha256": prompt_sha256,
     }
     try:
         with get_db_connection(tenant_id=tid) as conn, conn.cursor() as cur:

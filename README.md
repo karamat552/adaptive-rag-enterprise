@@ -152,6 +152,48 @@ Live state at epoch 9: 251 candidates extracted → 234 rows written,
 8 reconciled (6 XBRL facts confirmed three-way), **0 span mismatches**,
 verification pass 234/234 byte-exact. Re-run: `python db.py` (idempotent).
 
+### V2 Phase 1 shipped — shadow mode (ADR-017)
+
+Path A answers are now **built but never served**; every query is
+measured against V1 in the disagreement ledger until the A.2 gate clears:
+
+- **`fact_templates.py`** (A.5 ruling — pure f-strings, no engine): 3
+  executive-grade shapes (single metric, prior-year comparative with
+  computed YoY, multi-entity comparative). Every figure is re-matched
+  inside the row's own span text — NUMERIC padding (`2.2700`) can never
+  reach the answer; the page's own rendering (`2.27`) always does.
+  Citations are bound to the row's own span, so the citation-bounds
+  gate passes by construction. B.6.1 wording on every Path-A receipt:
+  `deterministic_certification: known-context-exclusions-applied`.
+- **`fact_shadow.py`** (the isolation contract): a post-audit graph node
+  that builds the Path-A candidate, runs the deterministic gates over
+  it, classifies V1-vs-V2 agreement (`agree_numeric / agree_partial /
+  agree_refusal / disagree_value / disagree_shape`), and records the
+  ledger — never raising, never mutating state, never serving. Both
+  terminal paths (certified answer AND verified refusal) pass through it.
+- **EPS dual-key coverage** (Phase-1 prep, live): EDGAR publishes no
+  primary Q4 EPS fact (10-Qs cover Q1-Q3; the 10-K carries FY only), so
+  Q4 EPS is derived FY−9mo exactly like revenue — reconciled within
+  ±$0.01, a principled tolerance for cent-rounded arithmetic. **Tesla
+  EPS (2.27 vs 2.26) reconciled; Meta EPS (5.33 vs 5.30) was
+  DISCONFIRMED at 3 cents and stays off Path A** — the B.1.5 three-way
+  check's first live catch. Apple EPS is honestly out of scope: its
+  fiscal Q4 is calendar Q3, and the calendar-frame rule would misbind.
+- **Receipt lineage** (migration 007, V3 item 0 pulled forward): every
+  receipt records (model id, prompt hash) — attribution, never
+  weight-freezing. Shadow forensics can name which model disagreed.
+- **A.2 battery pre-registered** ([battery JSON](tests/battery_phase1_preregistered.json)):
+  42 questions (14 exact, 8 alias, 4 multi-entity, 8 out-of-coverage,
+  6 wrong-period/entity, 6 qualitative) + 15 corrupted-claim injections
+  (incl. the mandated pro-forma variant). The deterministic routing
+  matrix passes 42/42 zero-token. Nightly: `python scripts/battery_phase1.py --shadow`.
+  The matrix already caught the interpretive-stem class live ("what
+  drove Tesla's Q4 2023 net income growth?" now demotes — §2.4).
+
+**Phase 1 exit gate (A.2, unchanged):** ≥98% agreement on covered
+questions, 15/15 corrupted-claim catches, zero fabricated certified
+answers, 7 consecutive green nights. `RAG_FACT_FASTPATH` stays unset.
+
 ---
 
 ## Measured Results (5 batteries · 3 providers · 30+ runs)
@@ -246,12 +288,13 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 
 ```bash
 pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.py
-# → 348 passed (offline + DB-integration when reachable; deterministic, CI-safe)
+# → 363 passed (offline + DB-integration when reachable; deterministic, CI-safe)
 ```
 
 | Suite | Tests | What it proves |
 |---|---|---|
-| test_fact_extract.py | 44 | Phase-0 fact store: span-anchored extraction (real Apple/Meta/Tesla corpus fixtures), fail-closed column binding, B.1.1/B.1.3/B.1.5 dispositions, exact-match routing guard + fuzz operators, live end-to-end sync+verify (integration-marked) |
+| test_fact_extract.py | 47 | Phase-0 fact store: span-anchored extraction (real Apple/Meta/Tesla corpus fixtures), fail-closed column binding, B.1.1/B.1.3/B.1.5 dispositions, exact-match routing guard + interpretive-stem demotion + fuzz operators, live end-to-end sync+verify (integration-marked) |
+| test_fact_templates.py | 13 | Phase-1 templates (span-verbatim figures, NUMERIC-padding guard), shadow executor isolation contract, agreement classifier, receipt lineage, live ledger round-trip (integration-marked) |
 | test_tamper.py | 17 | Receipt chain survives span shifts, hash forgeries, relabeling, OOB |
 | test_failover.py | 37 | Quota cooldowns, peer rescue, timeout handling, circuit ownership |
 | test_contradictions.py | 36 | Scale normalization, GAAP/non-GAAP basis, period binding |
