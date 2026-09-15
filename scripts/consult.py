@@ -1,13 +1,18 @@
 """Multi-model consultation tool — adversarial design reviews at crossroads.
 
 Usage:
-  python scripts/consult.py --prompt-file PATH [--model gemini-3.7-flash]
-  python scripts/consult.py --prompt-file PATH --all       # every reachable model
-  cat brief.md | python scripts/consult.py                  # stdin
+  python scripts/consult.py --prompt-file PATH [--models "gemini-3.7-flash,claude"]
+  python scripts/consult.py --prompt-file PATH --all       # every reachable lane
+  cat brief.md | python scripts/consult.py                  # stdin (default, no flag)
 
-Config: GEMINI_API_KEY (Generative Language API). Additional providers can be
-added to _PROVIDERS as they're configured (Groq is skipped automatically
-while its daily token quota is exhausted, with the reason printed).
+Lanes — fail-soft: a lane whose key is unset or quota-exhausted prints
+[UNAVAILABLE — reason] and the rest still run (exit 1 only if EVERY lane
+fails):
+  gemini-<model>     GEMINI_API_KEY     Generative Language API
+  groq               GROQ_API_KEY       model pinned (openai/gpt-oss-20b)
+  nim                NIM_API_KEY        nemotron-120b — reasoning model, slow
+  claude[:<model>]   ANTHROPIC_API_KEY  default claude-3-7-sonnet-latest (paid)
+  openai[:<model>]   OPENAI_API_KEY     default gpt-4o (paid)
 
 This standing practice follows the project convention established in
 ARCHITECTURE_DECISIONS.md (ADR-006): independent model opinions at design
@@ -28,6 +33,14 @@ _GEMINI_MODELS = [
     "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash",
     "gemini-3.1-flash-lite",
 ]
+
+_CLAUDE_DEFAULT_MODEL = "claude-3-7-sonnet-latest"
+_OPENAI_DEFAULT_MODEL = "gpt-4o"
+
+# Script default stays on the free lanes; the paid lanes (claude/openai) are
+# named explicitly via --models or the /consult workspace command.
+DEFAULT_PANEL = ["gemini-3.7-flash", "groq"]
+ALL_LANES = ["gemini-3.7-flash", "groq", "nim", "claude", "openai:gpt-4o"]
 
 
 def _ask_gemini(model: str, prompt: str, timeout: int = 120) -> str:
@@ -95,10 +108,50 @@ def _ask_nim(prompt: str, timeout: int = 180) -> str:
     return text
 
 
+def _ask_claude(model: str, prompt: str, timeout: int = 120) -> str:
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    payload = json.dumps({
+        "model": model,
+        "max_tokens": 4096, "temperature": 0.4,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages", data=payload,
+        headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                 "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.load(resp)
+    text = "\n".join(b.get("text", "") for b in data.get("content", [])
+                     if b.get("type") == "text")
+    if not text.strip():
+        raise RuntimeError(f"empty response from {model}")
+    return text.strip()
+
+
+def _ask_openai(model: str, prompt: str, timeout: int = 120) -> str:
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+    payload = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.4, "max_tokens": 4096,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions", data=payload,
+        headers={"Authorization": f"Bearer {key}",
+                 "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.load(resp)
+    return data["choices"][0]["message"]["content"].strip()
+
+
 def consult(prompt: str, models=None):
     """Returns [(model_name, text | None, error | None)] for each target."""
     out = []
-    targets = models or ["gemini-3.7-flash", "groq:llama-3.1-8b-instant"]
+    targets = models or DEFAULT_PANEL
     for t in targets:
         try:
             if t.startswith("gemini"):
@@ -107,6 +160,12 @@ def consult(prompt: str, models=None):
                 out.append((t, _ask_groq(prompt), None))
             elif t.startswith("nim"):
                 out.append((t, _ask_nim(prompt), None))
+            elif t.startswith("claude"):
+                model = t.split(":", 1)[1] if ":" in t else _CLAUDE_DEFAULT_MODEL
+                out.append((t, _ask_claude(model, prompt), None))
+            elif t.startswith("openai"):
+                model = t.split(":", 1)[1] if ":" in t else _OPENAI_DEFAULT_MODEL
+                out.append((t, _ask_openai(model, prompt), None))
             else:
                 out.append((t, None, f"unknown provider: {t}"))
         except urllib.error.HTTPError as e:
@@ -118,16 +177,25 @@ def consult(prompt: str, models=None):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Multi-model adversarial consult")
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--prompt-file", help="path to a markdown/text brief")
-    g.add_argument("--stdin", action="store_true", help="read prompt from stdin")
-    ap.add_argument("--models", default="gemini-3.7-flash,groq:llama-3.1-8b-instant",
-                    help="comma list: gemini-<model> | groq:<model>")
+    ap.add_argument("--prompt-file", help="path to a markdown/text brief")
+    ap.add_argument("--stdin", action="store_true",
+                    help="read prompt from stdin (default when no --prompt-file)")
+    ap.add_argument("--all", action="store_true",
+                    help="consult every reachable lane (overrides --models)")
+    ap.add_argument("--models", default=",".join(DEFAULT_PANEL),
+                    help="comma list: gemini-<model> | groq | nim | "
+                         "claude[:<model>] | openai[:<model>]")
     args = ap.parse_args()
 
     prompt = (open(args.prompt_file, encoding="utf-8").read()
               if args.prompt_file else sys.stdin.read()).strip()
-    results = consult(prompt, [m.strip() for m in args.models.split(",") if m.strip()])
+    if not prompt:
+        print("empty prompt (no --prompt-file and stdin was empty)",
+              file=sys.stderr)
+        return 2
+    targets = (ALL_LANES if args.all else
+               [m.strip() for m in args.models.split(",") if m.strip()])
+    results = consult(prompt, targets)
 
     failed = 0
     for name, text, err in results:
