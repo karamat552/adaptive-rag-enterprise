@@ -713,8 +713,22 @@ def op_entity_swap(query: str) -> str:
         return query
     other = pool[0].lower()
     low = query.lower()
-    i = low.find(ents[0].lower())
-    return query[:i] + other + query[i + len(ents[0]):]
+    # Replace an ALIAS ACTUALLY PRESENT, not the canonical name: an
+    # alias-phrased query ('AAPL', 'Facebook') doesn't contain 'apple'
+    # — find() returned -1 and spliced garbage that still resolved to
+    # the ORIGINAL triple, a direct A.5 contract violation (stress-
+    # harness finding, 2026-09-16). Longest alias first so 'apple inc'
+    # wins over bare 'apple'.
+    target = None
+    for alias, canon in sorted(_ENTITY_ALIASES.items(),
+                               key=lambda kv: -len(kv[0])):
+        if canon == ents[0] and alias in low:
+            target = alias
+            break
+    if target is None:
+        return query                  # no alias text found — decline
+    i = low.find(target)
+    return query[:i] + other + query[i + len(target):]
 
 
 def op_metric_noun_swap(query: str) -> str:

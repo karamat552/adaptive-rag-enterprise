@@ -1141,6 +1141,22 @@ def test_fuzz_entity_swap_changes_or_demotes():
         f"entity swap must not silently keep the original triple: {mutated}"
 
 
+def test_fuzz_entity_swap_handles_alias_phrasings():
+    """Stress-harness live catch (2026-09-16): on alias-phrased queries
+    ('AAPL', 'Facebook') the operator searched for the CANONICAL name,
+    find() returned -1, and the splice left the original alias intact —
+    the mutation resolved to the ORIGINAL triple, a direct A.5 contract
+    violation. The operator must replace an alias ACTUALLY present."""
+    for q, original in (
+            ("What was AAPL's total net sales in Q4 2023?", _ORIGINAL),
+            ("What was Facebook's revenue in Q4 2023?",
+             ("Meta", "revenue", "Q4-2023"))):
+        mutated = op_entity_swap(q)
+        d = path_a_decision(mutated, FACT_KEYS)
+        assert original not in d["resolved"], \
+            f"alias swap must not keep the original triple: {mutated}"
+
+
 def test_fuzz_period_swap_changes_resolution():
     q = "What was Apple's total net sales in Q4 2023?"
     mutated = op_period_swap(q)
