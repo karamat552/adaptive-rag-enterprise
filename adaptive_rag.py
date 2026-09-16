@@ -3007,34 +3007,68 @@ Cross-examine the DRAFT REPORT against the SOURCE DOCUMENTS.
 Verify every numerical metric, claim, and factual statement is directly substantiated.
 Return grounded=True only if 100% verified.
 NOTE: percentages quoted from the source table's '% Change' column are VERBATIM quotes, not computed values — accept them as grounded when the cited evidence contains the matching percentage."""
-    try:
-        audit, usage = await _llm_call(
-            _get_checker(),
-            [("system", sys_prompt),
-             ("human", f"[SOURCE DOCUMENTS]\n{docs_str}\n\n[DRAFT REPORT]\n{draft}")],
-            "audit",
-            # peer_schema: a peer-rescued audit must deliver the SAME
-            # GroundingCheck object the primary produces (deep-dive fix
-            # 2026-09-10) — raw text would AttributeError at audit.grounded.
-            peer_schema=GroundingCheck)
-        is_safe = audit.grounded
-    except Exception as e:
-        # v3.1 FIX preserved: empty collector, not a raw tuple — .totals() stays safe
-        logger.warning("Auditor failure (%s) — defaulting UNGROUNDED (fail-closed).", e)
-        is_safe, usage = False, UsageCollector()
-        audit_reason = "auditor-failed: %s" % e
-        # TECHNICAL-vs-LOGIC refusal naming (live-caught 2026-09-16): a
-        # timeout/error means the auditor never judged the draft — the
-        # run still fails CLOSED, but the refusal must not claim the
-        # draft "failed the grounding audit" it never sat for.
-        audit_technical = True
-        # QUOTA-HINT THREADING (A/B run 2 finding, 2026-09-07): the abort
-        # machinery only heard synthesis 429s — audit-stage 429s ('try again
-        # in 16m43.104s') died silently here and the optimizer burned a
-        # full doomed re-run. Same threading as csuite_synth.
-        _hint = parse_retry_hint(e)
-        if _hint and _hint > 0:
-            audit_quota_hint = _hint
+    human_msg = (f"[SOURCE DOCUMENTS]\n{docs_str}\n\n"
+                 f"[DRAFT REPORT]\n{draft}")
+    # SEGMENTED AUDIT (ADR-017 §2.4, Phase 3) — flag-gated, DEFAULT OFF:
+    # triage the draft's claims; the LLM (if needed at all) sees ONLY the
+    # flagged clauses + their cited chunks. The five gates above already
+    # vetted every figure deterministically; receipts stamp per-claim
+    # verifier class (B.1.4) so the bypass itself is auditable. Ships
+    # with its own shadow discipline — do not enable mid-A.2-gate.
+    segmented = os.getenv("RAG_SEGMENTED_AUDIT") == "1"
+    triage = None
+    skip_llm = False
+    if segmented:
+        from segmented_audit import build_small_context, triage_claims
+        triage = triage_claims(extract_claims(draft, len(docs)), docs)
+        n_py = len(triage["python_certified"])
+        n_llm = len(triage["llm_needed"])
+        if n_llm == 0 and n_py > 0:
+            # every claim span-verbatim, hedge-free, connective-free —
+            # the gates + triage certified the whole draft: ZERO audit
+            # tokens. B.1.4 receipts name the class per claim.
+            skip_llm = True
+            is_safe, usage = True, UsageCollector()
+            audit_reason = f"segmented: {n_py} claims python_certified"
+            logger.info("[audit] SEGMENTED: all %d claims Python-"
+                        "certified — LLM audit SKIPPED (0 tokens).", n_py)
+        else:
+            payload = build_small_context(triage, docs)
+            sys_prompt = sys_prompt + "\n" + payload["scope"]
+            human_msg = (f"[SOURCE DOCUMENTS]\n{payload['docs_str']}\n\n"
+                         f"[FLAGGED CLAIMS TO VERIFY]\n{payload['flagged']}")
+            logger.info("[audit] SEGMENTED: %d/%d claims flagged for the "
+                        "LLM; %d Python-certified.", n_llm, n_llm + n_py,
+                        n_py)
+    if not skip_llm:
+        try:
+            audit, usage = await _llm_call(
+                _get_checker(),
+                [("system", sys_prompt),
+                 ("human", human_msg)],
+                "audit",
+                # peer_schema: a peer-rescued audit must deliver the SAME
+                # GroundingCheck object the primary produces (deep-dive fix
+                # 2026-09-10) — raw text would AttributeError at audit.grounded.
+                peer_schema=GroundingCheck)
+            is_safe = audit.grounded
+        except Exception as e:
+            # v3.1 FIX preserved: empty collector, not a raw tuple — .totals() stays safe
+            logger.warning("Auditor failure (%s) — defaulting UNGROUNDED (fail-closed).", e)
+            is_safe, usage = False, UsageCollector()
+            audit_reason = "auditor-failed: %s" % e
+            # TECHNICAL-vs-LOGIC refusal naming (live-caught 2026-09-16): a
+            # timeout/error means the auditor never judged the draft — the
+            # run still fails CLOSED, but the refusal must not claim the
+            # draft "failed the grounding audit" it never sat for.
+            audit_technical = True
+            # QUOTA-HINT THREADING (A/B run 2 finding, 2026-09-07): the abort
+            # machinery only heard synthesis 429s — audit-stage 429s ('try again
+            # in 16m43.104s') died silently here and the optimizer burned a
+            # full doomed re-run. Same threading as csuite_synth.
+            _hint = parse_retry_hint(e)
+            if _hint and _hint > 0:
+                audit_quota_hint = _hint
 
     if is_safe:
         logger.info("Compliance Status: CERTIFIED GROUNDED")
@@ -3063,8 +3097,18 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
         # receipt-storage failure must never block the certified answer.
         try:
             records = state.get("evidence_records", [])
-            claims = [dict(c, verifier="llm_audit")   # B.1.4: per-claim
-                       for c in extract_claims(draft, len(docs))]
+            all_claims = extract_claims(draft, len(docs))
+            if triage is not None:
+                # B.1.4 per-claim verifier class under segmented audit:
+                # the receipt names WHICH guarantee backs each sentence.
+                py_texts = {c["claim"] for c in triage["python_certified"]}
+                claims = [dict(c, verifier=("python_certified"
+                                           if c["claim"] in py_texts
+                                           else "llm_audit"))
+                          for c in all_claims]
+            else:
+                claims = [dict(c, verifier="llm_audit")   # B.1.4: per-claim
+                          for c in all_claims]
             # Receipt lineage (Phase 1 / V3-roadmap item 0): name the
             # producing model + prompt version — attribution, not
             # weight-freezing. Fail-open: unknown ids record as None.
