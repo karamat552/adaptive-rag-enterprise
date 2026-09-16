@@ -1,0 +1,61 @@
+# SHADOW BATTERY — ADR-017 Phase-1 A.2 gate instrument (nightly)
+# The Phase-1 exit gate needs 7 consecutive GREEN nights: >=98% V1-vs-V2
+# agreement on covered questions, 15/15 corrupted-claim catches, zero
+# fabrications. This workflow runs the pre-registered 42-question battery:
+#   1. deterministic routing matrix (zero tokens, 42/42 required)
+#   2. corrupted-claim gate X01-X15 (zero tokens, 15/15 required)
+#   3. live shadow pass — full V1 pipeline per question, ledger per run
+# Capacity shortfalls (quota walls on every failover lane) mark the night
+# INCOMPLETE (exit 2): the green-nights clock does not advance and is not
+# falsely reset — the same capacity-vs-logic discipline as the canary.
+name: shadow-battery
+
+on:
+  schedule:
+    - cron: "0 1 * * *"   # 01:00 UTC — same fresh Groq window as the canary
+  workflow_dispatch: {}     # manual trigger (ad-hoc A.2 measurement)
+
+jobs:
+  a2-battery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: A.2 battery — matrix + corrupted + shadow
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+          TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DB_DATABASE_URL: ${{ secrets.DB_DATABASE_URL }}
+          DB_ADMIN_DATABASE_URL: ${{ secrets.DB_ADMIN_DATABASE_URL }}
+          RAG_EXEC_PEER_FAILOVER: "1"
+          # Fresh measurement, like the canary: no cache replays — every
+          # question pays the full pipeline so agreement is measured, not
+          # replayed. Shadow ledger rows are keyed by run_id (never deduped).
+          RAG_DISABLE_CACHE_READ: "1"
+          RAG_DISABLE_CACHE_WRITE: "1"
+          COVERAGE_HINT_WAIT_CAP_S: "1200"
+          # PRODUCTION PARITY: mirror the live service's failover lanes
+          # exactly — a mid-battery Groq wall must degrade to lane 1/2,
+          # not cascade into capacity refusals (the 2026-09-12 lesson).
+          RAG_FAILOVER_ENDPOINTS: '[{"base_url":"https://integrate.api.nvidia.com/v1","api_key_env":"NIM_API_KEY","model":"nvidia/nemotron-3-super-120b-a12b"},{"base_url":"https://api.tokenrouter.com/v1","api_key_env":"TOKENROUTER_API_KEY","model":"z-ai/glm-5.3-free","timeout_s":150,"max_tokens":6000}]'
+        run: |
+          python scripts/battery_phase1.py --shadow --corrupted \
+            --report shadow_battery_report.json
+
+      - name: Upload A.2 report (every run, pass or fail)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-battery-${{ github.run_id }}
+          path: shadow_battery_report.json
+          retention-days: 90
