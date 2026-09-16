@@ -1009,3 +1009,76 @@ benchmark-passed, equal-or-better models:
 (NOT the tiny 20/day 3.6-flash), benchmark-passed on the live pipeline.
 
 32 failover-suite tests green including the four new invariants.
+
+---
+
+## ADR-018: Figure-DAG — Checker-Only Financial Math Trees — DRAFT
+
+**Status:** DRAFT (staged on v3-staging; binding before any DAG code
+lands, per V3_ROADMAP §1) · **Date:** 2026-09-16 · **Context:**
+V3_ROADMAP §1 (CRO-review disposition, all three critiques accepted)
+
+**Context.** The LLM computes derived ratios (margins, growth %) inline;
+the auditor can verify verbatim quotes but not arithmetic, and the
+% -Change verbatim mandate (ADR-015 rule 8) is a patch, not a solution.
+
+**Decision (the scope ruling, binding):** the DAG ships as a CHECKER,
+never a GENERATOR. Pure Python over `fact_rows`:
+- **Edge validation** — an operand edge is legal only when `basis`,
+  `period` (no Q4/FY mixing), and `company` all match — the existing
+  Gate-4 `_NON_GAAP_RE` + per-row basis/period columns generalized from
+  claims to edges.
+- **Taint propagation** — a derived node's `verifier_class` = the WORST
+  of its operands; `unreconciled_fact` poisons everything downstream;
+  only `span_xbrl_reconciled` operands may produce a reconciled
+  derivative.
+- **Output is certify/decline, never a served number.** It verifies that
+  a claim's arithmetic reconstructs from a basis-compatible, untainted
+  operand set — the same posture as all five V1 gates: the machinery
+  judges, it does not author. A DAG that computes and serves derived
+  answers re-creates V1's extraction risk with better arithmetic.
+
+**Operand misbinding is the live failure class** (Tesla's NCI-inclusive
+7,943 within 0.5% of the attributable 7,928; GAAP/non-GAAP five values
+apart on one page) — Phase 0 already proved binding-at-write-time is the
+defense; the DAG inherits that discipline on its edges.
+
+**Entry condition:** V2 Phases 1–2 passed the A.2 gate. **Prerequisite
+for meaningful coverage:** Path-A coverage growth (more reconciled
+operand metrics — you cannot check Revenue − COGS = Gross Profit while
+COGS is unreconciled).
+
+---
+
+## ADR-019: Segment-Dimension XBRL Ingestion — DRAFT
+
+**Status:** DRAFT (staged on v3-staging) · **Date:** 2026-09-16 ·
+**Context:** V3_ROADMAP item 5 + live-caught KNOWN_ISSUES #8
+
+**Context.** The segment-soup class (2026-09-16, live twice): on "total
+X" questions the geographic-segment table rows (period-less, qualifier-
+less in prose) group with consolidated revenue in the contradiction
+detector, fire the sharpen retry, and push synthesis into segment mode
+— one certified answer listed segments plus a disclaimed derived sum
+while the consolidated total never surfaced.
+
+**Decision.**
+1. **Ingest dimensional XBRL facts** (us-gaap segment/dimension members
+   via the company-concept API) as a SECOND key, reconciled at ingest
+   against the segment-table PDF spans — PDF stays PRIMARY (A.3.1
+   ruling); dimensional facts never become the primary source
+   (hypercube flattening is exactly the tag-anchoring trap ADR-017
+   rejected).
+2. **Path A coverage grows to segment questions** (Products/Services,
+   regional) — the B.1.1 rule extends: a segment triple serves from
+   fact_rows only with BOTH keys agreeing; today's `segment_*` tracked
+   rows (unreconciled by design) begin reconciling as their XBRL twins
+   land.
+3. **Contradiction-detector dimension-awareness** — an ADR-007
+   amendment (separate change, own tests): report-figure groups gain
+   structured-dimension bindings so a segment figure can never vote in
+   a consolidated group.
+4. **Sequencing trap (binding):** new reconciled rows land only AFTER
+   the A.2 gate — the pre-registered battery expects B-class segment
+   questions to demote; landing rows mid-measurement flips them
+   fact and voids the nights. Then re-register an expanded battery.
