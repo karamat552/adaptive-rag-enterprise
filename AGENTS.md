@@ -8,19 +8,13 @@ least-privilege runtime role + separate admin identity). Architecture ledger:
 ground. ADR-017 shadow mode (`fact_shadow.py`, `fact_templates.py`) is live:
 Path A (V2) answers are built and compared, never served.
 
-## Multi-model review convention (ADR-006 / ADR-013)
+## Review convention
 
-The session model is the primary reviewer. Before committing non-trivial
-code, new tests, or architecture changes, cross-check with independent
-models via the `/consult` command, or directly:
-
-    python scripts/consult.py --prompt-file BRIEF.md --models "<lanes>"
-
-Lanes: `gemini-<model>`, `groq`, `nim`, `claude[:<model>]`,
-`openai[:<model>]` (paid lanes default to claude-3-7-sonnet-latest / gpt-4o).
-Fail-soft: an unset key prints `[UNAVAILABLE]` and never blocks other lanes.
-Consult lanes are review-only — never assign them to RAG stages (the 16-point
-benchmark rule, ADR-008).
+Multi-model consults (ADR-006/ADR-013, `scripts/consult.py`) are RETIRED
+from the active workflow by owner decision (2026-09-16): the session model
+is the sole reviewer. The script and its ADR history stay for the record;
+do not wire consult lanes into pipelines or gates (the ADR-008 rule —
+review models never serve RAG stages — still stands).
 
 ## Hard rules
 

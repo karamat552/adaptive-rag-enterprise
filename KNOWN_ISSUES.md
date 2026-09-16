@@ -1,6 +1,6 @@
 # Known Issues & Honest Limits
 
-**Last updated:** 2026-09-13 · **Suite:** 311 tests green · **Invariant:** zero fabricated certified answers across every battery, ever. · **Receipts:** 73+ grounded, every one crypto-verified; refusals now receipted too.
+**Last updated:** 2026-09-16 · **Suite:** 311 tests green · **Invariant:** zero fabricated certified answers across every battery, ever. · **Receipts:** 73+ grounded, every one crypto-verified; refusals now receipted too.
 
 This document is the project's own list of its open problems — written by
 its maintainer, with status, evidence, and fixes' commit hashes. If you
@@ -56,6 +56,28 @@ re-derived per domain by design.
 Groq rotated two models mid-project. The boot smoke test now names dead
 models at startup — but it runs at service start, not at import time.
 
+### 8. Segment-soup answers on "total X" questions (live, 2026-09-16, named)
+The ADR-007 documented segment-vs-consolidated class, live again: on
+"What was Apple's total net sales in Q4 2023?" the geographic-segment
+table rows (Americas 40,115 · Japan 5,505 · Asia-Pacific 6,331 — all
+period-less) grouped with consolidated revenue in the contradiction
+detector, fired the sharpen retry, and pushed synthesis into segment
+mode; the certified answer listed segments + a disclaimed derived
+segment-sum ($94,930M — the corpus holds no such figure and the draft
+said so) while the actual consolidated total (89,498) never surfaced.
+Root remedy unchanged (structured extraction / V3 XBRL); the A.2 shadow
+ledger + capacity-vs-logic naming now keep this class from poisoning
+the Phase-1 gate clock. Path A answers the same question correctly from
+`fact_rows` in zero tokens — the Phase-2 exit is the real fix.
+
+### 9. Groq TPD exhaustion by mid-morning local time (live, 2026-09-16)
+The executive model hit 196K/200K TPD before noon IST under live
+testing; audit/synthesis leaned on exec peer rescue (NIM nemotron) as
+designed. Live sessions should budget the 200K window or accept
+peer-lane latency; the nightly shadow battery (shadow_battery.yml)
+starts at 01:00 UTC inside the fresh window and classifies residual
+capacity shortfalls INCOMPLETE, never as logic drift.
+
 ---
 
 ## Epistemic limits (never "solved" — narrowed and exposed)
@@ -81,6 +103,10 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 
 | Class | Live case | Fix |
 |---|---|---|
+| Cache replays skipped the shadow study | three battery questions replayed from cache left NO ledger rows — the documented "both terminal paths" contract missed its third terminal | `cache_check → shadow_fact` edge; replays now measured, this commit |
+| Template ALL-CAPS label casing | live ledger row (2026-09-15) rendered "Tesla reported nET INCOME ATTRIBUTABLE TO COMMON STOCKHOLDERS of $7,928M" — first-char-only lowering of an all-caps row label | all-caps labels sentence-cased WHOLE in `_metric_phrase`, this commit |
+| Technical refusals named as logic failures | audit-stage LLM timeouts under a 429 storm produced refusals reading "draft failed the grounding audit" — a draft the auditor never judged; the A.2 battery would count them as V1-vs-V2 disagreements | `audit_unavailable` state marker + truthful refusal objection ("audit stage unavailable") + battery classifies them capacity-class (INCOMPLETE), this commit |
+| A.2 battery had no corrupted-claim runner | X01-X15 pre-registered with no instrument; nightly CI ran only the V1 canary — the 7-green-nights clock could never start | `fact_claims.py` claim verifier + `--corrupted` gate (15/15 live) + `shadow_battery.yml` nightly with per-night GREEN/RED/INCOMPLETE verdict, this commit |
 | Pruning shrank the evidence pool | pruning default-on sent ONE specialist at top_k=5: pool fell 15→5 chunks, the income-statement chunk dropped out, drafts claimed net income as revenue, and the XBRL gate refused every accuracy run | fleet scales per-specialist top_k to keep pool parity (len × k ≈ 15) — calls shrink, evidence never does, this commit |
 | Structured-failover crash | first router quota-failover of the service's life: backup engines are raw ChatOpenAI, the failover "succeeded" with a bare AIMessage, and `decision.destination` AttributeError 500'd the query | wrapper tags its schema; failover re-binds backups via a structured cache; route_question fails closed on non-schema responses, this commit |
 | Gold-set over-constraint | the Meta growth row demanded computed 24.7% AND verbatim 25% — the synthesis mandate forbids computed values, so the row was unsatisfiable by design | gold fixed to the mandated verbatim value, this commit |
