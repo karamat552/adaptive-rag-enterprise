@@ -686,7 +686,13 @@ def test_graph_channels_complete():
     ks = set(channels.keys())
     for key in ("provenance_run_id", "quota_hint_s", "echo_reject",
                 "xbrl_issues", "quota_aborted", "_premise_fast_path",
-                "cached_hit", "run_id", "grounded", "outcome"):
+                "cached_hit", "run_id", "grounded", "outcome",
+                # 2026-09-16 live-caught additions: audit_unavailable
+                # separates technical refusals from logic rejections;
+                # shadow_coverage_miss is fact_shadow's coverage note.
+                "audit_unavailable", "shadow_coverage_miss",
+                # Phase-2 fast path (fact_fastpath node) channels.
+                "fastpath_served", "served_path", "fastpath_reason"):
         assert key in ks, (
             f"state key '{key}' used by nodes but NOT declared in "
             f"MultiAgentState — LangGraph silently drops it at merge")

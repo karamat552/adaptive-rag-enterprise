@@ -88,6 +88,12 @@ def _metric_phrase(row: Dict[str, Any]) -> str:
     label = re.sub(r"\s*\(1\)\s*$", "", label)
     if not label:
         return _METRIC_NOUNS.get(row["metric_key"], row["metric_key"])
+    # ALL-CAPS table-row labels (Tesla prints 'NET INCOME ATTRIBUTABLE
+    # TO COMMON STOCKHOLDERS') must be sentence-cased WHOLE — the old
+    # first-char-only rule rendered 'nET INCOME...' in a live ledger row
+    # (2026-09-15). Lower the entire label when every letter is caps.
+    if label.isupper():
+        label = label.lower()
     return label[0].lower() + label[1:] if label[0].isupper() else label
 
 

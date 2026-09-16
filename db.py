@@ -1428,6 +1428,31 @@ def get_fact_rows(company: Optional[str] = None,
         return [dict(r) for r in cur.fetchall()]
 
 
+def get_chunk_records(chunk_hashes: List[str],
+                      tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """ADR-017 Phase 2 — receipt-ready FULL-CHUNK records for Path-A
+    evidence, keyed by hash, current epoch only (source_registry join —
+    a stale-epoch hash is a miss, never served). The /verify chain hashes
+    the WHOLE chunk (sha256(company<source<page<transcript slice) ==
+    chunk_hash), so evidence must be the chunk that CONTAINS the fact
+    row — a row-level span would break the chain by construction. The
+    claim's span-verbatim figure is provably inside the chunk."""
+    if not chunk_hashes:
+        return []
+    cfg = get_settings()
+    tid = tenant_id or cfg.default_tenant
+    sql = ("SELECT c.chunk_hash, c.company, c.source, c.page, c.content, "
+           "c.char_start, c.char_end, c.transcript_version, "
+           "c.contains_table, c.arithmetic_ok "
+           "FROM multi_agent_chunks c "
+           "JOIN source_registry r ON r.source = c.source "
+           "WHERE r.corpus_epoch = (SELECT epoch FROM corpus_state WHERE id=1) "
+           "AND c.tenant_id = %s AND c.chunk_hash = ANY(%s)")
+    with get_db_connection(tenant_id=tid) as conn,             conn.cursor(cursor_factory=extras.DictCursor) as cur:
+        cur.execute(sql, (tid, list(set(chunk_hashes))))
+        return [dict(r) for r in cur.fetchall()]
+
+
 # ===========================================================================
 # 6b. VERIFICATION RECEIPTS (claim -> chunk -> transcript -> hash chain)
 # ===========================================================================

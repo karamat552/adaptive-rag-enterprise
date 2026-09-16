@@ -1078,6 +1078,20 @@ class MultiAgentState(TypedDict, total=False):
     usage_total: int
     llm_calls: int
     active_specialists: List[str]
+    # Live-caught 2026-09-16 (shadow smoke): an audit-stage LLM timeout/
+    # error was recorded as "draft failed the grounding audit" — a draft
+    # the auditor never JUDGED is a technical refusal, not a logic one.
+    # The A.2 battery counts audit_unavailable refusals as capacity-class
+    # (INCOMPLETE), never as V1-vs-V2 disagreements.
+    audit_unavailable: bool
+    # fact_shadow's coverage-miss note (informational; undeclared keys are
+    # dropped at merge — the fc77992 class).
+    shadow_coverage_miss: str
+    # ADR-017 Phase 2 fast path (fact_fastpath node): served flag, the
+    # observable serving tier, and the demotion reason on V1 fallback.
+    fastpath_served: bool
+    served_path: str
+    fastpath_reason: str
 
 
 def _with_usage(state: MultiAgentState, totals: Tuple[int, int, int, int],
@@ -2985,6 +2999,8 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
     docs_str = "\n---\n".join(f"<evidence>\n{d}\n</evidence>" for d in audit_docs)
     audit = None   # may remain unbound if the auditor call fails
     audit_quota_hint: Optional[float] = None   # audit-stage 429 threading (2026-09-07)
+    audit_technical = False   # the auditor never JUDGED (timeout/error)
+    audit_reason: Optional[str] = None
     sys_prompt = f"""You are a strict SEC Compliance Auditor.
 Cross-examine the DRAFT REPORT against the SOURCE DOCUMENTS.
 {_UNTRUSTED_NOTE}
@@ -3007,6 +3023,11 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
         logger.warning("Auditor failure (%s) — defaulting UNGROUNDED (fail-closed).", e)
         is_safe, usage = False, UsageCollector()
         audit_reason = "auditor-failed: %s" % e
+        # TECHNICAL-vs-LOGIC refusal naming (live-caught 2026-09-16): a
+        # timeout/error means the auditor never judged the draft — the
+        # run still fails CLOSED, but the refusal must not claim the
+        # draft "failed the grounding audit" it never sat for.
+        audit_technical = True
         # QUOTA-HINT THREADING (A/B run 2 finding, 2026-09-07): the abort
         # machinery only heard synthesis 429s — audit-stage 429s ('try again
         # in 16m43.104s') died silently here and the optimizer burned a
@@ -3062,9 +3083,12 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
 
         return _with_usage(state, usage.totals(),
                            {"grounded": True, "outcome": "vectorstore"})
-    audit_reason = getattr(audit, "explanation", None) or "no-explanation-provided"
+    audit_reason = getattr(audit, "explanation", None) or audit_reason \
+        or "no-explanation-provided"
     logger.warning("AUDIT REJECT: %s", audit_reason)
     extra = {"grounded": False, "outcome": "unverified_system"}
+    if audit_technical:
+        extra["audit_unavailable"] = True
     if audit_quota_hint:
         extra["quota_hint_s"] = audit_quota_hint
     return _with_usage(state, usage.totals(), extra)
@@ -3209,6 +3233,13 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
     # and surface the last audit objection in the refusal text itself.
     if state.get("quota_aborted"):
         objection = "provider quota wall (429) aborted the run"
+    elif state.get("audit_unavailable"):
+        # Technical refusal (live-caught 2026-09-16): the auditor never
+        # JUDGED — LLM timeout/error under provider weather. The refusal
+        # stands (fail-closed); the NAME tells the truth so capacity-
+        # class refusals can be separated from logic refusals.
+        objection = ("audit stage unavailable (LLM timeout/error) — the "
+                     "draft was never judged; certification impossible")
     elif state.get("echo_reject"):
         objection = "draft echoed prompt/deliberation markers (echo-guard)"
     elif state.get("xbrl_issues"):
@@ -3246,7 +3277,130 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
 # 9. ROUTING & FACTORY
 # ===========================================================================
 def route_cache_check(state: MultiAgentState) -> str:
-    return END if state.get("cached_hit") else "gateway"
+    return END if state.get("cached_hit") else "fact_fastpath"
+
+
+def route_fact_fastpath(state: MultiAgentState) -> str:
+    return "served" if state.get("fastpath_served") else "fallback"
+
+
+async def fact_fastpath(state: MultiAgentState) -> MultiAgentState:
+    """ADR-017 Phase 2 — the deterministic serving path
+    (RAG_FACT_FASTPATH=1, default OFF).
+
+    FRONT-DOOR position (cache_check -> HERE -> gateway): a qualifying
+    query is answered from the span-anchored fact store with ZERO LLM
+    calls — no router token, no specialist fleet, no synthesis, no LLM
+    audit. The deterministic certification contract:
+      - eligibility: path_a_decision's exact-match triage (Amendments
+        1-3; interpretive stems, segment qualifiers, missing triples all
+        demote) — the same guard the shadow study measured 42/42;
+      - every figure in the answer is span-verbatim from RECONCILED
+        fact_rows (two independent sources: PDF span + SEC XBRL, B.1.1);
+      - claims are stamped verifier='deterministic' (B.1.4 — the proof
+        gets its own provenance class) and the receipt carries
+        deterministic_certification: known-context-exclusions-applied
+        — 'excluded', never 'eliminated' (B.6.1);
+      - receipt evidence is the FULL CHUNK containing each fact row
+        (get_chunk_records): /verify hashes the whole chunk, so a
+        row-level span would break the chain by construction;
+      - no semantic-cache write: deterministic re-derivation is already
+        the cheapest path; cache rows would only add staleness surface.
+
+    ISOLATION: flag-off or ANY exception -> {} -> the normal V1
+    pipeline (fail-open to the audited path — a broken fast path must
+    never break serving, the shadow node's contract in serving form).
+
+    ROLLOUT DISCIPLINE (ADR-017 §3): the flag stays UNSET in production
+    until the A.2 exit gate (>=98% agreement, 15/15 corrupted catches,
+    7 consecutive green nights) clears; this node is dormant code until
+    then, and unset-flag is the one-env-var kill-switch. B.1.2's
+    embedding pre-filter (measured threshold from the shadow
+    distribution) is calibrated during those nights and wires in here
+    before any production rollout.
+    """
+    if os.getenv("RAG_FACT_FASTPATH") != "1":
+        return {}
+    try:
+        question = state.get("original_question") or ""
+        if not question:
+            return {}
+        from fact_extract import path_a_decision
+        from fact_templates import (DETERMINISTIC_CERTIFICATION,
+                                    build_path_a_answer)
+        from db import get_chunk_records, get_fact_rows
+
+        rows = await asyncio.to_thread(
+            get_fact_rows,
+            tenant_id=state.get("tenant_id") or None)
+        keys = {(r["company"], r["metric_key"], r["period"]) for r in rows}
+        decision = path_a_decision(question, keys)
+        if decision["path"] != "fact":
+            return {"fastpath_reason": decision["reason"]}
+        candidate = build_path_a_answer(question, decision, rows)
+        if candidate is None:
+            # exact match said fact, the builder declined — a coverage
+            # lie; V1 re-derives from retrieval, never a guessed serve
+            return {"fastpath_reason": "builder_declined_after_exact_match"}
+
+        # The one gate every served draft faces: citation bounds. The
+        # scale/growth/XBRL gates hold BY CONSTRUCTION here — figures are
+        # span-verbatim from reconciled, dual-key-confirmed rows.
+        bad = citation_pre_audit(candidate["answer"],
+                                 len(candidate["evidence_records"]))
+        if bad:
+            return {"fastpath_reason": f"citation_bounds:{bad}"}
+
+        chunk_rows = await asyncio.to_thread(
+            get_chunk_records,
+            [r["chunk_hash"] for r in candidate["evidence_records"]],
+            state.get("tenant_id") or None)
+        by_hash = {r["chunk_hash"]: r for r in chunk_rows}
+        # citation indices in the answer address the CANDIDATE's
+        # evidence order — preserve it exactly (a re-ordered fetch would
+        # rebind every [n] to the wrong chunk). build_receipt_evidence
+        # returns a LIST per call — unwrap so evidence is a flat list of
+        # dicts, the exact shape save_verification_receipt + /verify
+        # expect.
+        evidence = [build_receipt_evidence([by_hash[r["chunk_hash"]]])[0]
+                    for r in candidate["evidence_records"]
+                    if r["chunk_hash"] in by_hash]
+        if len(evidence) != len(candidate["evidence_records"]):
+            # a fact row's chunk vanished at the current epoch — never
+            # serve an unverifiable answer; V1 re-derives from retrieval
+            return {"fastpath_reason": "chunk_evidence_missing"}
+
+        claims = [dict(c, verifier="deterministic",
+                       deterministic_certification=DETERMINISTIC_CERTIFICATION)
+                 for c in extract_claims(candidate["answer"], len(evidence))]
+        try:    # best-effort, same contract as V1: a receipt failure
+            await _db_call(save_verification_receipt,   # never blocks a
+                           state.get("run_id", "-"),    # certified answer
+                           question, candidate["answer"],
+                           claims=claims,
+                           evidence=evidence,
+                           audit_verdict="grounded",
+                           contradictions=[],
+                           tenant_id=state.get("tenant_id") or None,
+                           model_id=None, prompt_sha256=None)
+        except Exception as receipt_err:
+            logger.warning("FASTPATH receipt save skipped (non-fatal): %s",
+                           receipt_err)
+        logger.info("FASTPATH SERVED (0 LLM tokens): %r", question[:80])
+        return {
+            "final_executive_report": candidate["answer"],
+            "grounded": True,
+            "outcome": "vectorstore",
+            "served_path": "fact",
+            "fastpath_served": True,
+            "fastpath_reason": "exact_match",
+            "evidence_records": evidence,
+            "documents": [d["content"] for d in evidence],
+        }
+    except Exception as exc:
+        logger.warning("FACT FASTPATH failed (non-fatal, V1 fallback): %s",
+                       exc)
+        return {}
 
 
 def pathing_triage(state: MultiAgentState) -> str:
@@ -3312,10 +3466,25 @@ def build_graph():
     # certified answers AND verified refusals are compared.
     from fact_shadow import shadow_fact_path
     wf.add_node("shadow_fact", shadow_fact_path)
+    # ADR-017 Phase 2: the deterministic serving node — dormant unless
+    # RAG_FACT_FASTPATH=1 (default OFF; A.2 gate governs production).
+    wf.add_node("fact_fastpath", fact_fastpath)
 
     wf.set_entry_point("cache_check")
+    # Cache replays pass through the shadow node too (live-caught
+    # 2026-09-16: the documented contract says BOTH terminal paths —
+    # certified AND refusal — are compared; cache hits were the missing
+    # third terminal, so the shadow study lost every replayed answer.
+    # shadow_fact is fail-open and never mutates serving state.
+    # Phase-2 order: cache first (0-token replay), then the FAST PATH
+    # (0-LLM deterministic lookup), then the router — the front door.
     wf.add_conditional_edges("cache_check", route_cache_check,
-                             {END: END, "gateway": "gateway"})
+                             {END: "shadow_fact",
+                              "fact_fastpath": "fact_fastpath"})
+    # Fast path: served -> END (no shadow comparison needed — the V2
+    # candidate IS the served answer); any miss/exception -> V1 router.
+    wf.add_conditional_edges("fact_fastpath", route_fact_fastpath,
+                             {"served": END, "fallback": "gateway"})
     wf.add_conditional_edges("gateway", pathing_triage,
                              {"exec_db": "premise", "abandon": "abandon",
                               "bad_req": "bad_req"})
