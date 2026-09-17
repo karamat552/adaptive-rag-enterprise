@@ -35,11 +35,48 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Failover chain assembled from present secrets (same pattern as
+      # shadow_battery.yml — the static TokenRouter lane went dead when
+      # z-ai/glm-5.3-free was retired upstream; assembly cannot ship a
+      # dead lane). Canary schedule is PAUSED for the A.2 gate (see the
+      # trigger comment above); this keeps manual dispatches correct.
+      - name: Assemble failover chain from present secrets
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
+          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+        run: |
+          python - <<'EOF'
+          import json, os
+          lanes = []
+          if os.getenv("OPENROUTER_API_KEY"):
+              lanes.append({"base_url": "https://openrouter.ai/api/v1",
+                            "api_key_env": "OPENROUTER_API_KEY",
+                            "model": "stealth/union-alpha",
+                            "timeout_s": 60, "max_tokens": 4000})
+          if os.getenv("APINEX_API_KEY"):
+              lanes.append({"base_url": "https://api.apinex.bond/v1",
+                            "api_key_env": "APINEX_API_KEY",
+                            "model": "free/gemini-3.8-flash",
+                            "timeout_s": 120, "max_tokens": 4000})
+          if os.getenv("NIM_API_KEY"):
+              lanes.append({"base_url": "https://integrate.api.nvidia.com/v1",
+                            "api_key_env": "NIM_API_KEY",
+                            "model": "nvidia/nemotron-3-super-120b-a12b"})
+          assert lanes, ("no failover lanes available — add at least one "
+                         "provider secret")
+          chain = json.dumps(lanes, separators=(",", ":"))
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"RAG_FAILOVER_ENDPOINTS={chain}\n")
+          print("assembled failover chain:", chain)
+          EOF
+
       - name: Canary — 12-question coverage battery
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
-          TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DB_DATABASE_URL: ${{ secrets.DB_DATABASE_URL }}
           DB_ADMIN_DATABASE_URL: ${{ secrets.DB_ADMIN_DATABASE_URL }}
@@ -47,11 +84,7 @@ jobs:
           RAG_DISABLE_CACHE_READ: "1"
           RAG_DISABLE_CACHE_WRITE: "1"
           COVERAGE_HINT_WAIT_CAP_S: "1200"
-          # PRODUCTION PARITY (2026-09-13): without the failover lanes the
-          # battery runs failover-blind — a mid-battery Groq wall cascades
-          # into capacity refusals and the run fails like the 2026-09-12
-          # attempt did. Mirror the live service's lanes exactly.
-          RAG_FAILOVER_ENDPOINTS: '[{"base_url":"https://integrate.api.nvidia.com/v1","api_key_env":"NIM_API_KEY","model":"nvidia/nemotron-3-super-120b-a12b"},{"base_url":"https://api.tokenrouter.com/v1","api_key_env":"TOKENROUTER_API_KEY","model":"z-ai/glm-5.3-free","timeout_s":150,"max_tokens":6000}]'
+          # RAG_FAILOVER_ENDPOINTS assembled by the preflight step above.
           # Pruning + near-exact cache thresholds are default-on in code
           # since df5cca6/7037ccd — the battery measures the same pipeline
           # the live service runs.

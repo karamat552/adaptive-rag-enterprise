@@ -29,11 +29,52 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ASSEMBLE the failover chain from whichever lane secrets are
+      # present — a missing secret can never poison the battery with a
+      # dead/empty-key lane (the TokenRouter lesson: its free model was
+      # retired upstream overnight and the static lane went dead).
+      # Lane order = probe results 2026-09-17: union-alpha (3.6-12s,
+      # strict-JSON + [n]-citation clean) -> APInex gemini free (10-67s)
+      # -> NIM. Executive stage stays PINNED (ADR-008); these are
+      # router+fleet lanes only.
+      - name: Assemble failover chain from present secrets
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
+          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+        run: |
+          python - <<'EOF'
+          import json, os
+          lanes = []
+          if os.getenv("OPENROUTER_API_KEY"):
+              lanes.append({"base_url": "https://openrouter.ai/api/v1",
+                            "api_key_env": "OPENROUTER_API_KEY",
+                            "model": "stealth/union-alpha",
+                            "timeout_s": 60, "max_tokens": 4000})
+          if os.getenv("APINEX_API_KEY"):
+              lanes.append({"base_url": "https://api.apinex.bond/v1",
+                            "api_key_env": "APINEX_API_KEY",
+                            "model": "free/gemini-3.8-flash",
+                            "timeout_s": 120, "max_tokens": 4000})
+          if os.getenv("NIM_API_KEY"):
+              lanes.append({"base_url": "https://integrate.api.nvidia.com/v1",
+                            "api_key_env": "NIM_API_KEY",
+                            "model": "nvidia/nemotron-3-super-120b-a12b"})
+          assert lanes, ("no failover lanes available — add at least one "
+                         "of OPENROUTER_API_KEY / APINEX_API_KEY / NIM_API_KEY "
+                         "as a repository secret")
+          chain = json.dumps(lanes, separators=(",", ":"))
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"RAG_FAILOVER_ENDPOINTS={chain}\n")
+          print("assembled failover chain:", chain)
+          EOF
+
       - name: A.2 battery — matrix + corrupted + shadow
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
-          TOKENROUTER_API_KEY: ${{ secrets.TOKENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DB_DATABASE_URL: ${{ secrets.DB_DATABASE_URL }}
           DB_ADMIN_DATABASE_URL: ${{ secrets.DB_ADMIN_DATABASE_URL }}
@@ -44,10 +85,8 @@ jobs:
           RAG_DISABLE_CACHE_READ: "1"
           RAG_DISABLE_CACHE_WRITE: "1"
           COVERAGE_HINT_WAIT_CAP_S: "1200"
-          # PRODUCTION PARITY: mirror the live service's failover lanes
-          # exactly — a mid-battery Groq wall must degrade to lane 1/2,
-          # not cascade into capacity refusals (the 2026-09-12 lesson).
-          RAG_FAILOVER_ENDPOINTS: '[{"base_url":"https://integrate.api.nvidia.com/v1","api_key_env":"NIM_API_KEY","model":"nvidia/nemotron-3-super-120b-a12b"},{"base_url":"https://api.tokenrouter.com/v1","api_key_env":"TOKENROUTER_API_KEY","model":"z-ai/glm-5.3-free","timeout_s":150,"max_tokens":6000}]'
+          # RAG_FAILOVER_ENDPOINTS is assembled by the preflight step
+          # above (GITHUB_ENV) — only lanes with present secrets run.
         run: |
           python scripts/battery_phase1.py --shadow --corrupted \
             --report shadow_battery_report.json

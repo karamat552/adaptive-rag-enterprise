@@ -33,3 +33,6 @@ data/*.pdf
 unseen_results.json
 q2_attempt*.json
 coverage_report.json
+
+# advisor dev tool — key never committed (ADR-008: dev aid, not a RAG stage)
+advisor/key.txt
