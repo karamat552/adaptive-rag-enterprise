@@ -3670,13 +3670,19 @@ if __name__ == "__main__":
             except Exception as exc:
                 logger.exception("Benchmark invocation failed")
                 r = {"outcome": "graph_error", "answer": str(exc), "cached": False,
-                     "usage": {"total": 0}, "latency_s": 0.0, "run_id": "-"}
+                     "per_model": {}, "latency_s": 0.0, "run_id": "-"}
             passed = r["outcome"] == expected
+            # per-question tokens from the per-model telemetry (the old
+            # flat 'usage' key was retired with the token-plan refactor —
+            # KeyError 'usage' crashed the benchmark's print line; found
+            # during the 2026-09-17 exec vetting, fixed here)
+            tok = sum(u.get("input", 0) + u.get("output", 0)
+                      for u in (r.get("per_model") or {}).values())
             print(f"   -> {'PASS' if passed else 'FAIL'} | outcome={r['outcome']} "
                   f"| {'CACHED' if r.get('cached') else 'live'} "
-                  f"| {r['latency_s']:.2f}s | tokens={r['usage']['total']}")
+                  f"| {r['latency_s']:.2f}s | tokens={tok}")
             print(f"   -> {r['answer'][:130]}...\n")
-            results.append((passed, r["latency_s"], r["usage"]["total"]))
+            results.append((passed, r["latency_s"], tok))
             if not r.get("cached"):
                 await asyncio.sleep(1.5)
 
