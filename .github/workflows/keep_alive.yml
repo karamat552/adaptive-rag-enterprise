@@ -1,7 +1,17 @@
 # KEEP-ALIVE — Render free-tier anti-spin-down
-# Pings /health every 10 minutes so the free Render instance never idles out
-# (the free tier sleeps a service after ~15 minutes without traffic; the next
-# real visitor would pay a 30-60s cold start). Wakes Neon compute too.
+# Pings /live (process-alive, deliberately dependency-free) every 10
+# minutes so the free Render instance never idles out (the free tier
+# sleeps a service after ~15 minutes without traffic; the next real
+# visitor would pay a 30-60s cold start).
+#
+# NEON DRAIN FIX (2026-09-17): this workflow used to ping /health, which
+# touches the database — resetting Neon's 5-minute idle timer every 10
+# minutes and defeating scale-to-zero. That converts the free tier into
+# always-on compute: 0.25 CU x ~720h ~= 180 compute-hours/month ~= the
+# ENTIRE free allowance — the root cause (with heavy live testing) of the
+# mid-month quota wall that took the database and the A.2 battery down.
+# /live keeps Render warm without ever waking Neon; deep DB health is
+# verified by the nightly shadow battery, which fails loudly if it's down.
 #
 # Replaces the in-chat cron automation (2026-09-15): keep-alive belongs in
 # infrastructure, not a chat session — this survives without any agent and
@@ -21,18 +31,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wake Render + Neon
+      - name: Wake Render (process liveness only — never the DB)
         run: |
           for attempt in 1 2; do
-            code=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            code=$(curl -s -o /tmp/live.json -w "%{http_code}" \
                     --max-time 60 \
-                    https://adaptive-rag-enterprise.onrender.com/health) || code="curl-failed"
+                    https://adaptive-rag-enterprise.onrender.com/live) || code="curl-failed"
             if [ "$code" = "200" ]; then
-              echo "healthy: $(cat /tmp/health.json | head -c 200)"
+              echo "alive: $(cat /tmp/live.json | head -c 200)"
               exit 0
             fi
             echo "attempt $attempt got: $code"
             [ $attempt -lt 2 ] && sleep 30
           done
-          echo "::error::Deployment down — /health returned $code after retry"
+          echo "::error::Deployment down — /live returned $code after retry"
           exit 1
