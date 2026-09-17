@@ -8,9 +8,17 @@
 name: canary
 
 on:
-  schedule:
-    - cron: "30 0 * * *"   # 00:30 UTC = 06:00 IST, right after Groq's daily reset
-  workflow_dispatch: {}     # manual trigger for ad-hoc runs
+  # A.2 GATE PRIORITY (2026-09-17): nightly schedule PAUSED. The canary's
+  # 12-question battery drains the fresh Groq exec window (200K TPD/model)
+  # ~40 minutes before the shadow battery needs it — the 09-17 run showed
+  # the A.2 measurement starving on quota walls (13/22 covered questions
+  # 429-aborted) because the canary consumed the window first. The A.2
+  # gate is the current project milestone; its instrument (shadow_battery
+  # .yml) gets the fresh window exclusively. RESTORE this cron after the
+  # gate clears (7 green nights) or when non-Groq exec capacity lands.
+  # schedule:
+  #   - cron: "30 0 * * *"   # 00:30 UTC = 06:00 IST, right after Groq's daily reset
+  workflow_dispatch: {}     # manual trigger for ad-hoc runs (still available)
 
 jobs:
   coverage-battery:
