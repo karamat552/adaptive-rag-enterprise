@@ -1115,6 +1115,20 @@ def migrate_from_manifest(
 
     if report.reindexed or report.deleted_orphaned:
         bump_corpus_epoch()
+        # REGISTRY EPOCH ALIGNMENT (live-caught 2026-09-18, fresh-Neon
+        # reprovision): UPSERT_REGISTRY_SQL stamps the PRE-bump epoch
+        # (it reads corpus_state at write time), so after the bump every
+        # current-epoch join — sync_fact_rows' chunk sweep, chunk
+        # records, search scoping — saw ZERO chunks (registry at 1,
+        # state at 2, fact sync wrote 0 rows). All SURVIVING sources'
+        # chunks are current AT the new epoch; the registry must say so.
+        with admin_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE source_registry SET corpus_epoch = "
+                "(SELECT epoch FROM corpus_state WHERE id = 1);")
+            cur.execute("SELECT source, corpus_epoch FROM source_registry;")
+            logger.info("Registry aligned to corpus epoch: %s",
+                        cur.fetchall())
     purge_expired_cache()
 
     logger.info("Migration done: reindexed=%s skipped=%s orphans=%s inserted=%d invalid=%d failed=%s",
