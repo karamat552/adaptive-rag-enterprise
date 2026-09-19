@@ -1,8 +1,9 @@
 """DEV ADVISOR — a standalone second opinion for development decisions.
 
 The owner's tool (2026-09-17): a free, strong reviewer (OpenRouter
-stealth/union-alpha — pricing 0/0, 262K context) to DEBATE with while
-building: architecture calls, bug hypotheses, review of diffs and docs.
+z-ai/glm-5.2:free — pricing 0/0, 32K context; the original stealth/
+union-alpha retired 2026-09-18 -> unbiased/pareto, paid) to DEBATE with
+while building: architecture calls, bug hypotheses, review of diffs and docs.
 
 HARD BOUNDARY (ADR-008 stands): this is a DEVELOPMENT aid only.
  - It is NEVER imported by the pipeline (no module in the project
@@ -31,7 +32,7 @@ import httpx
 
 HERE = Path(__file__).resolve().parent
 KEY_FILE = HERE / "key.txt"
-DEFAULT_MODEL = "stealth/union-alpha"
+DEFAULT_MODEL = "z-ai/glm-5.2:free"   # stealth/union-alpha retired 2026-09-18 -> unbiased/pareto (paid)
 DEFAULT_SYSTEM = (
     "You are a skeptical senior systems reviewer for a financial-doc "
     "RAG platform whose moat is deterministic verification (byte-span "

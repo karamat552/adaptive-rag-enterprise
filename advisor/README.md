@@ -1,9 +1,11 @@
 # advisor/ — the standalone dev advisor
 
 A free second opinion for development decisions (owner tool, 2026-09-17).
-Backed by OpenRouter **stealth/union-alpha** (pricing 0/0 during the
-stealth period, 262K context) — live-probed: strict-JSON and [n]-citation
-probes pass, 3.6–12s latency.
+Backed by OpenRouter **z-ai/glm-5.2:free** (free 0/0, 32K context) —
+live-probed: clean strict-JSON verdicts, ~4s latency. (The original advisor
+model, stealth/union-alpha, retired 2026-09-18 and graduated to
+unbiased/pareto — paid, $2.5/$7.5 per M — usable via --model once the
+account has credits.)
 
 ## Setup (one time)
 
@@ -36,7 +38,7 @@ python advisor/advisor.py --system "you are a compliance auditor" "..."
 
 This is a **development aid only**. Nothing in the pipeline imports it;
 no workflow calls it; it never serves a RAG stage. The failover-chain
-use of union-alpha is a *separate* decision under ADR-008's live-probe
+use of the advisory model is a *separate* decision under ADR-008's live-probe
 rules (router+fleet lanes only — the executive peer pool forbids
 community proxies, and that ruling stands regardless of this folder).
 

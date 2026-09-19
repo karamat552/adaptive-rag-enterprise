@@ -46,11 +46,10 @@ jobs:
           python - <<'EOF'
           import json, os
           lanes = []
-          if os.getenv("OPENROUTER_API_KEY"):
-              lanes.append({"base_url": "https://openrouter.ai/api/v1",
-                            "api_key_env": "OPENROUTER_API_KEY",
-                            "model": "stealth/union-alpha",
-                            "timeout_s": 60, "max_tokens": 4000})
+          # order = 2026-09-18 vetting evidence: APInex steady (10-67s),
+          # NIM vetted, glm-5.2:free LAST (upstream shared-pool congestion
+          # measured live: benchmark corpus runs refused at 443s/464s;
+          # tamper 4/4 PASS but ADR-008 bar not met)
           if os.getenv("APINEX_API_KEY"):
               lanes.append({"base_url": "https://api.apinex.bond/v1",
                             "api_key_env": "APINEX_API_KEY",
@@ -60,6 +59,11 @@ jobs:
               lanes.append({"base_url": "https://integrate.api.nvidia.com/v1",
                             "api_key_env": "NIM_API_KEY",
                             "model": "nvidia/nemotron-3-super-120b-a12b"})
+          if os.getenv("OPENROUTER_API_KEY"):
+              lanes.append({"base_url": "https://openrouter.ai/api/v1",
+                            "api_key_env": "OPENROUTER_API_KEY",
+                            "model": "z-ai/glm-5.2:free",
+                            "timeout_s": 60, "max_tokens": 4000})
           assert lanes, ("no failover lanes available — add at least one "
                          "of OPENROUTER_API_KEY / APINEX_API_KEY / NIM_API_KEY "
                          "as a repository secret")
