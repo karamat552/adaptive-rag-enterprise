@@ -8,7 +8,9 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
-const OUT = new URL("../../gui_shots/", import.meta.url).pathname.replace(/^\/(\w:)/, "$1");
+const OUT = (process.env.SHOT_DIR
+  ? process.env.SHOT_DIR.replace(/\\/g, "/").replace(/\/$/, "") + "/"
+  : new URL("../../gui_shots/", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"));
 mkdirSync(OUT, { recursive: true });
 const CONSOLE_URL = process.env.CONSOLE_URL || "http://localhost:5173/";
 const FULL = process.argv.includes("--full");
@@ -19,6 +21,15 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await page.goto(CONSOLE_URL, { waitUntil: "domcontentloaded" });
 await page.getByText("backend live").first().waitFor({ timeout: 20000 });
 await page.waitForTimeout(600);
+
+// tenant auth: Render enforces QUERY_API_KEYS — the key is stored locally
+// in the browser via the header pill (the production posture)
+if (process.env.CONSOLE_API_KEY) {
+  await page.getByRole("button", { name: "api key" }).click();
+  await page.getByPlaceholder("X-API-Key").fill(process.env.CONSOLE_API_KEY);
+  await page.getByRole("button", { name: "save" }).click();
+  await page.waitForTimeout(400);
+}
 await page.screenshot({ path: OUT + "t1_initial.png", fullPage: FULL });
 
 // submit a FastPath-covered query via the example chip (real click path)
