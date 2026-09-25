@@ -36,3 +36,11 @@ coverage_report.json
 
 # advisor dev tool — key never committed (ADR-008: dev aid, not a RAG stage)
 advisor/key.txt
+
+# frontend build toolchain (portable, never committed)
+.tools_node/
+node_portable.zip
+
+# frontend build artifacts
+frontend/node_modules/
+frontend/dist/

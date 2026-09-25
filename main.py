@@ -375,8 +375,16 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Adaptive RAG — Enterprise Financial Intelligence",
               version="2.1.0", lifespan=lifespan)
 
+# Browser origins allowed to call this API: the Streamlit client, the React
+# console (dev), and whatever the production frontend origin is — set
+# ALLOWED_ORIGINS (comma-separated) to override, e.g. the Vercel domain.
+_DEFAULT_ORIGINS = ("http://localhost:8501,http://127.0.0.1:8501,"
+                    "http://localhost:5173,http://127.0.0.1:5173")
 app.add_middleware(CORSMiddleware,
-                   allow_origins=["http://localhost:8501", "http://127.0.0.1:8501"],
+                   allow_origins=[o.strip() for o in
+                                  os.getenv("ALLOWED_ORIGINS",
+                                            _DEFAULT_ORIGINS).split(",")
+                                  if o.strip()],
                    allow_methods=["*"], allow_headers=["*"])
 
 

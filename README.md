@@ -237,6 +237,16 @@ container's first request is a warm semantic-cache hit in ~7s.
 
 ---
 
+## Executive Console (`frontend/`)
+
+The production frontend is a **React 19 + Vite + Tailwind v4** single-page
+app (dark theme, ~77 KB gzipped): live animated pipeline rail driven by the
+SSE `transition` stream, per-claim `DETERMINISTIC` vs `LLM AUDIT` verifier
+badges from the receipt, health telemetry, and fail-closed refusal framing.
+The Streamlit client (`app.py`) remains as the lightweight fallback.
+Dev/deploy: see [frontend/README.md](frontend/README.md); captured flow
+evidence in [docs/screenshots/](docs/screenshots/).
+
 ## Gateway API (`main.py`)
 
 | Route | Method | Purpose |
