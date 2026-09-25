@@ -1,0 +1,9 @@
+# Upload ONLY what the root vercel.json build needs: the frontend source
+# + the root config. Everything else in the repo (backend, docs, venvs)
+# is dead weight for a static console build.
+*
+!frontend
+!frontend/**
+frontend/node_modules/
+frontend/dist/
+!vercel.json
