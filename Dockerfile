@@ -64,9 +64,16 @@ USER appuser
 
 EXPOSE 8000 8501
 
-# Native Container Health Probe
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Native Container Health Probe — LIVENESS ONLY (/live).
+# The service's own doctrine (main.py): a liveness failure restarts the pod,
+# so it must NEVER probe downstreams. /health pings Postgres, which on
+# scale-to-zero Neon takes 3.4-8.8s to cold-wake — the old 5s-timeout
+# /health probe marked healthy containers unhealthy on cold wakes and
+# risked restart loops (live-caught during the 2026-09-20 deploy
+# diagnosis). Deep health stays at /health and /ready for monitoring;
+# the container probe answers "is the process serving" in ~15ms.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/live || exit 1
 
 # Default execution: FastAPI Microservice.
 # Single worker is intentional: the per-IP token buckets, Prometheus counters,

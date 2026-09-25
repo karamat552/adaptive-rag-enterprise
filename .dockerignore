@@ -13,3 +13,14 @@ data/
 corpus_chunks.json
 corpus_chunks.jsonl
 *.md
+# Non-runtime folders (build-context slimming; the backend image needs none of these)
+frontend/
+advisor/
+docs/
+.github/
+.zcode/
+.tools_node/
+.ci_venv/
+audit_bundle_white_whale/
+*.pdf
+Karamat_*.pdf
