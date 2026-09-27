@@ -8,7 +8,7 @@ const browser = await chromium.launch({ channel: "msedge", headless: true });
 for (const vp of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
   const page = await browser.newPage({ viewport: vp });
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.getByText("backend live").first().waitFor({ timeout: 20000 });
+  await page.getByText(/epoch \d/).first().waitFor({ timeout: 20000 });
   await page.waitForTimeout(400);
   const audit = await page.evaluate(() => {
     const vw = document.documentElement.clientWidth;

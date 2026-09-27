@@ -1,16 +1,17 @@
 import React, { useState } from "react";
-import { getApiKey, setApiKey } from "../api.js";
+import { getApiKey, setApiKey, getAdminKey, setAdminKey } from "../api.js";
 
-export default function Header({ health }) {
+export default function Header({ health, pingMs }) {
   const [key, setKey] = useState(getApiKey());
-  const [editing, setEditing] = useState(false);
+  const [admin, setAdmin] = useState(getAdminKey());
+  const [editing, setEditing] = useState(null); // "query" | "admin" | null
 
-  const save = () => { setApiKey(key.trim()); setEditing(false); };
   const live = !!health;
   const db = health?.db || {};
+  const models = health?.models || {};
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4">
+    <header className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
         <div className="relative flex h-10 w-10 items-center justify-center rounded-xl
                         bg-gradient-to-br from-brand-600 to-cyan-350/70 shadow-lg
@@ -31,19 +32,27 @@ export default function Header({ health }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="pill">
           <span className={`dot ${live ? "dot-live" : "dot-pending"}`} />
-          {live ? "backend live" : "backend offline"}
+          {live ? "live" : "offline"}
         </span>
         {live && (
           <>
-            <span className="pill font-mono">{health.provider}</span>
-            <span className="pill font-mono">epoch {db.epoch ?? "–"}</span>
-            <span className="pill font-mono">{db.chunks ?? "–"} chunks</span>
-            <span className="pill font-mono">
-              {health.failover?.endpoints ?? 0} failover lanes
+            <span className="pill font-mono" title={`router ${models.router} · fleet ${models.fleet} · executive ${models.executive}`}>
+              {health.provider}
             </span>
+            <span className="pill font-mono" title={`Semantic cache: ${db.live_cache_entries} live entries · circuit failures: ${health.circuit_failures}`}>
+              epoch {db.epoch ?? "–"} · {db.chunks ?? "–"} chunks
+            </span>
+            <span className="pill font-mono" title="Failover lanes armed behind the primary">
+              {health.failover?.endpoints ?? 0} lanes
+            </span>
+            {pingMs != null && (
+              <span className="pill font-mono" title="Client-measured gateway round-trip">
+                {Math.round(pingMs)}ms
+              </span>
+            )}
             {health.failover?.executive_pinned && (
               <span className="pill border-emerald-450/40 text-emerald-450">
                 exec pinned
@@ -51,31 +60,44 @@ export default function Header({ health }) {
             )}
           </>
         )}
-        {editing ? (
+
+        {editing === "query" ? (
           <span className="pill gap-1.5">
-            <input
-              autoFocus
-              type="password"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="X-API-Key"
-              className="w-32 bg-transparent font-mono text-[11px] text-mist-200
-                         outline-none placeholder:text-mist-500"
-            />
-            <button onClick={save}
-                    className="text-brand-400 hover:text-brand-500 font-semibold">save</button>
+            <input autoFocus type="password" value={key}
+                   onChange={(e) => setKey(e.target.value)}
+                   onKeyDown={(e) => e.key === "Enter" &&
+                     (setApiKey(key.trim()), setEditing(null))}
+                   placeholder="X-API-Key"
+                   className="w-32 bg-transparent font-mono text-[11px] text-mist-200
+                              outline-none placeholder:text-mist-500" />
+            <button onClick={() => (setApiKey(key.trim()), setEditing(null))}
+                    className="font-semibold text-brand-400 hover:text-brand-500">save</button>
           </span>
         ) : (
-          <button onClick={() => setEditing(true)}
-                  className="pill hover:border-brand-500/50 transition-colors"
-                  title="Tenant API key (stored locally; required when the gateway enforces auth)">
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                 strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M15 7a2 2 0 012 2m3-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {getApiKey() ? "key set" : "api key"}
+          <button onClick={() => setEditing("query")}
+                  className="pill transition-colors hover:border-brand-500/50"
+                  title="Query API key — stored locally; optional when the gateway allows anonymous demo access">
+            🔑 {getApiKey() ? "key set" : "api key"}
+          </button>
+        )}
+
+        {editing === "admin" ? (
+          <span className="pill gap-1.5">
+            <input autoFocus type="password" value={admin}
+                   onChange={(e) => setAdmin(e.target.value)}
+                   onKeyDown={(e) => e.key === "Enter" &&
+                     (setAdminKey(admin.trim()), setEditing(null))}
+                   placeholder="ADMIN_API_KEY"
+                   className="w-36 bg-transparent font-mono text-[11px] text-mist-200
+                              outline-none placeholder:text-mist-500" />
+            <button onClick={() => (setAdminKey(admin.trim()), setEditing(null))}
+                    className="font-semibold text-amber-450 hover:text-amber-450/80">save</button>
+          </span>
+        ) : (
+          <button onClick={() => setEditing("admin")}
+                  className="pill transition-colors hover:border-amber-450/50"
+                  title="Admin key — enables 👎 Flag Inaccurate cache eviction (stored locally, never sent except to /feedback)">
+            🛡️ {getAdminKey() ? "admin set" : "admin key"}
           </button>
         )}
       </div>

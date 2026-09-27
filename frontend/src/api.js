@@ -8,6 +8,7 @@ const API_BASE =
   "http://localhost:8000";
 
 const KEY_STORAGE = "arag.apikey";
+const ADMIN_STORAGE = "arag.adminkey";
 
 export const getApiKey = () =>
   (typeof localStorage !== "undefined" && localStorage.getItem(KEY_STORAGE)) || "";
@@ -16,6 +17,15 @@ export const setApiKey = (k) => {
   if (typeof localStorage === "undefined") return;
   if (k) localStorage.setItem(KEY_STORAGE, k);
   else localStorage.removeItem(KEY_STORAGE);
+};
+
+export const getAdminKey = () =>
+  (typeof localStorage !== "undefined" && localStorage.getItem(ADMIN_STORAGE)) || "";
+
+export const setAdminKey = (k) => {
+  if (typeof localStorage === "undefined") return;
+  if (k) localStorage.setItem(ADMIN_STORAGE, k);
+  else localStorage.removeItem(ADMIN_STORAGE);
 };
 
 function headers(json = true) {
@@ -36,6 +46,36 @@ export async function fetchReceipt(runId) {
   const r = await fetch(`${API_BASE}/verify/${runId}`, { headers: headers(false) });
   if (!r.ok) throw new Error(`verify ${r.status}`);
   return r.json();
+}
+
+/**👎 Poison-pill cache eviction: POST /feedback (X-Admin-Key). Returns
+ * {status, evicted} — evicted = semantic-cache entries purged so the next
+ * ask of this question re-verifies from the filings. */
+export async function postFeedback(question) {
+  const admin = getAdminKey();
+  const h = { "Content-Type": "application/json" };
+  if (admin) h["X-Admin-Key"] = admin;
+  const r = await fetch(`${API_BASE}/feedback`, {
+    method: "POST", headers: h,
+    body: JSON.stringify({ question, tenant_id: "default" }),
+  });
+  let evicted = 0;
+  try { evicted = (await r.json()).evicted || 0; } catch { /* keep 0 */ }
+  return { status: r.status, evicted };
+}
+
+/**🔏 Compliance Audit Bundle: GET /export/{run_id} streams the offline-
+ * verifiable zip (receipt + evidence + transcripts + Ed25519 attestation
+ * + stdlib verifier). Downloaded client-side into a Blob. */
+export async function downloadExportBundle(runId) {
+  const r = await fetch(`${API_BASE}/export/${runId}`, { headers: headers(false) });
+  if (!r.ok) throw new Error(`export ${r.status}`);
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `compliance_bundle_${runId}.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /**

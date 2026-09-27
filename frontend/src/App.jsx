@@ -21,10 +21,15 @@ export default function App() {
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState(null);
   const [health, setHealth] = useState(null);
+  const [pingMs, setPingMs] = useState(null);
   const abortRef = useRef(null);
 
   const refreshHealth = useCallback(() => {
-    fetchHealth().then(setHealth).catch(() => setHealth(null));
+    const t0 = performance.now();
+    fetchHealth().then((h) => {
+      setHealth(h);
+      setPingMs(performance.now() - t0);
+    }).catch(() => setHealth(null));
   }, []);
 
   useEffect(() => {
@@ -75,7 +80,7 @@ export default function App() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6">
-      <Header health={health} />
+      <Header health={health} pingMs={pingMs} />
 
       <main className="flex flex-1 flex-col gap-6">
         <QueryConsole

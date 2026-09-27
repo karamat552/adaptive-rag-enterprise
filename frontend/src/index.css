@@ -112,6 +112,15 @@ body {
   color: var(--color-brand-400);
 }
 
+/* the claimed evidence span, highlighted inside the page transcript —
+   the trust centerpiece (amber like the Streamlit original) */
+.hl-mark {
+  background: #ffe08a;
+  color: #111;
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

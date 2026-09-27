@@ -19,7 +19,7 @@ const browser = await chromium.launch({ channel: "msedge", headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 await page.goto(CONSOLE_URL, { waitUntil: "domcontentloaded" });
-await page.getByText("backend live").first().waitFor({ timeout: 20000 });
+await page.getByText(/epoch \d/).first().waitFor({ timeout: 20000 });
 await page.waitForTimeout(600);
 
 // tenant auth: Render enforces QUERY_API_KEYS — the key is stored locally
