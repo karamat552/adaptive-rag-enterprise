@@ -223,6 +223,10 @@ def require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
 # - QUERY_API_KEYS unset -> OPEN MODE (local/demo/dev): every caller is the
 #   default tenant, behavior unchanged. This mirrors the bootstrap posture
 #   of the rest of the service and keeps the Streamlit demo working.
+# - QUERY_API_KEYS set + ALLOW_OPEN_MODE=true -> keys are honored when
+#   PRESENT (valid key -> its tenant), and an ABSENT/EMPTY key is an
+#   ANONYMOUS caller on the default tenant (the public-demo posture,
+#   owner decision 2026-09-20). A present-but-INVALID key is still 403.
 def _query_api_keys() -> Dict[str, str]:
     """Parse QUERY_API_KEYS -> {api_key: tenant_id}. Malformed entries fail
     LOUD at first use (config error, not runtime) as an explicit 500 —
@@ -263,7 +267,13 @@ def require_query_key(x_api_key: Optional[str] = Header(default=None),
     mode is now an AFFIRMATIVE opt-in. An unset QUERY_API_KEYS fails
     CLOSED unless ALLOW_OPEN_MODE=true is explicitly set — the unsafe
     state requires a deliberate act, never an omission. Local dev and CI
-    set ALLOW_OPEN_MODE=true in their env/test fixtures."""
+    set ALLOW_OPEN_MODE=true in their env/test fixtures.
+
+    ANONYMOUS FALLBACK (owner decision, 2026-09-20): the same explicit
+    ALLOW_OPEN_MODE=true also applies when keys ARE configured — a
+    missing/empty X-API-Key is admitted as an anonymous caller on the
+    default tenant (public-demo posture); a present-but-invalid key is
+    still 403 (anonymous is admitted, spoofed is not)."""
     keys = _query_api_keys()
     if not keys:
         if os.getenv("ALLOW_OPEN_MODE", "").lower() in ("", "0", "false", "no"):
@@ -280,6 +290,22 @@ def require_query_key(x_api_key: Optional[str] = Header(default=None),
         return None                    # explicit opt-in open mode
     METRICS.inc("auth_checked_total")
     if not x_api_key:
+        # ANONYMOUS FALLBACK (owner decision, 2026-09-20): keys are
+        # configured AND ALLOW_OPEN_MODE=true is explicitly set -> an
+        # ABSENT or EMPTY key is an ANONYMOUS caller, admitted as the
+        # default tenant — the public-demo path: visitors get instant
+        # answers with zero login hurdles, and the console's key pill
+        # stays optional. Fail-closed remains the DEFAULT: an unset or
+        # negative ALLOW_OPEN_MODE keeps the 401, so the permissive
+        # state is still an affirmative act, never an omission (the
+        # B.6.2 property). A PRESENT-but-INVALID key is still 403 below:
+        # open mode admits anonymous visitors, never spoofed ones.
+        if os.getenv("ALLOW_OPEN_MODE", "").lower() not in ("", "0",
+                                                             "false", "no"):
+            logger.warning("OPEN MODE with keys configured: anonymous "
+                           "caller admitted as the default tenant "
+                           "(ALLOW_OPEN_MODE=true, missing/empty X-API-Key).")
+            return None
         METRICS.inc("auth_rejected_total")
         raise HTTPException(status_code=401,
                             detail="Missing X-API-Key (QUERY_API_KEYS is enforced)")

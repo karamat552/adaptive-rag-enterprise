@@ -132,8 +132,17 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 
 ## Operational posture
 
-- `/query` auth: **QUERY_API_KEYS** now enforces tenant identity when set
-  (open mode when unset — demo posture) — `99989df`.
+- `/query` auth: **QUERY_API_KEYS** enforces tenant identity when a key is
+  PRESENT (valid key -> its tenant; present-but-invalid -> 403; no key
+  without the opt-in -> 401; keys unset without the opt-in -> 503
+  fail-closed) — `99989df`. **ANONYMOUS FALLBACK (owner decision,
+  2026-09-20):** with keys configured AND `ALLOW_OPEN_MODE=true`
+  explicitly set, a missing/empty X-API-Key is an ANONYMOUS caller on
+  the default tenant — the public-demo posture (recruiters get instant
+  answers, zero login hurdles). The permissive state stays an
+  affirmative act, never an omission (the B.6.2 property holds); a
+  present-but-INVALID key is still 403 (anonymous is admitted, spoofed
+  is not).
 - Failover (2026-09-17): primary (Groq) → **OpenRouter stealth/union-alpha (lane 1, FREE 0/0 pricing, live-probed: strict-JSON + [n]-citations clean, 3.6–12s)** → APInex free/gemini-3.8-flash (lane 2, 10–67s) → NIM (lane 3). Executive PINNED + PEER-RESCUE (ADR-008 amendment: NIM 120b → Gemini 3.5-flash; community proxies are forbidden in the peer pool — that ruling stands). CI workflows ASSEMBLE the chain from present secrets (a dead static lane can never ship again).
 - Quota economics: a full battery fits one 200K window post-ADR-015.
 - Specialist pruning: **DEFAULT-ON** with evidence-pool parity (one specialist at top_k≈15, not 5 — calls shrink, evidence never does). `RAG_SPECIALIST_PRUNING=0` restores the full fleet — `df5cca6`.

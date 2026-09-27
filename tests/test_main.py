@@ -498,12 +498,60 @@ def test_query_auth_open_mode_without_env(client, monkeypatch):
         f"open mode must not reject: {r.status_code} {r.text[:120]}"
 
 
-def test_query_auth_missing_key_401(client, monkeypatch):
+def test_query_auth_missing_key_401_without_optin(client, monkeypatch):
+    """Fail-closed default (B.6.2 property): keys configured and
+    ALLOW_OPEN_MODE NOT explicitly set -> a missing key must 401. The
+    permissive state is an affirmative act, never an omission."""
     import os
     monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    monkeypatch.delenv("ALLOW_OPEN_MODE", raising=False)
     r = client.request("POST", "/query",
                        json={"question": "What was Tesla revenue in Q4 2023?"})
-    assert r.status_code == 401, "enforced mode without a key must 401"
+    assert r.status_code == 401, \
+        "enforced mode without the explicit opt-in must 401 (missing key)"
+
+
+def test_query_auth_anonymous_allowed_with_open_mode(client, monkeypatch):
+    """ANONYMOUS FALLBACK (owner decision, 2026-09-20): keys configured
+    AND ALLOW_OPEN_MODE=true -> a MISSING key is an anonymous caller on
+    the default tenant — the public-demo posture (recruiters get instant
+    answers, zero login hurdles)."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?"})
+    assert r.status_code != 401, \
+        f"open mode must admit anonymous callers: {r.status_code} {r.text[:120]}"
+    assert r.status_code in (200, 499), \
+        f"anonymous caller must reach the pipeline: {r.status_code} {r.text[:120]}"
+
+
+def test_query_auth_empty_key_anonymous_in_open_mode(client, monkeypatch):
+    """An EMPTY X-API-Key header is the same anonymous class as a missing
+    one — admitted in open mode, never in enforced mode."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?"},
+                       headers={"X-API-Key": ""})
+    assert r.status_code in (200, 499), \
+        f"empty key in open mode is anonymous, not rejected: {r.status_code}"
+
+
+def test_query_auth_invalid_key_403_even_in_open_mode(client, monkeypatch):
+    """Open mode admits ANONYMOUS visitors, never SPOOFED ones: a
+    present-but-invalid key is a misconfiguration or an attack — 403
+    regardless of ALLOW_OPEN_MODE."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.request("POST", "/query",
+                       json={"question": "What was Tesla revenue in Q4 2023?"},
+                       headers={"X-API-Key": "wrong-key"})
+    assert r.status_code == 403, \
+        f"a present-but-invalid key must 403 even in open mode: {r.status_code}"
 
 
 def test_query_auth_valid_key_and_tenant(client, monkeypatch):
@@ -550,9 +598,13 @@ def test_query_auth_malformed_env_loud(client, monkeypatch):
 
 def test_query_auth_stream_key_bound_tenant(client, monkeypatch):
     """The SSE stream endpoint carries the same auth: valid key passes;
-    the bound tenant overrides any declared tenant_id."""
+    the bound tenant overrides any declared tenant_id. Without the
+    explicit ALLOW_OPEN_MODE opt-in, a key-less stream still 401s
+    (fail-closed default); with it, the anonymous caller is admitted
+    (the public-demo posture, owner decision 2026-09-20)."""
     import os
     monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    monkeypatch.delenv("ALLOW_OPEN_MODE", raising=False)
     r = client.request("GET",
                        "/query/stream?question=What+was+Tesla+revenue+in+Q4+2023%3F",
                        headers={"X-API-Key": "secret-a"})
@@ -560,4 +612,10 @@ def test_query_auth_stream_key_bound_tenant(client, monkeypatch):
         f"stream with valid key must pass: {r.status_code}"
     r2 = client.request("GET",
                         "/query/stream?question=What+was+Tesla+revenue+in+Q4+2023%3F")
-    assert r2.status_code == 401, "stream without key in enforced mode must 401"
+    assert r2.status_code == 401, \
+        "stream without key must 401 without the ALLOW_OPEN_MODE opt-in"
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r3 = client.request("GET",
+                        "/query/stream?question=What+was+Tesla+revenue+in+Q4+2023%3F")
+    assert r3.status_code in (200, 499), \
+        f"anonymous stream must be admitted under the explicit opt-in: {r3.status_code}"
