@@ -698,9 +698,12 @@ def test_bind_output_cap_headroom_floor():
 
 
 # ============ peer-to-peer executive failover (ADR-008 amendment) ========
-def test_exec_peer_failover_disabled_by_default(monkeypatch):
-    """The executive stays PINNED unless RAG_EXEC_PEER_FAILOVER=1 — the
-    amendment is opt-in, the ADR-008 default behavior is unchanged."""
+def test_exec_peer_failover_on_by_default(monkeypatch):
+    """OWNER DECISION 2026-09-20 (run 521bec0cf161: 245s quota-aborted
+    refusal while vetted peers sat idle): a quota wall at the executive
+    escalates to the vetted peer pool by DEFAULT now. Unset env = rescue
+    armed; explicit RAG_EXEC_PEER_FAILOVER=0 restores the pinned-only
+    behavior."""
     import asyncio
     import adaptive_rag as ar
 
@@ -717,10 +720,35 @@ def test_exec_peer_failover_disabled_by_default(monkeypatch):
     import unittest.mock as mock
     monkeypatch.delenv("RAG_EXEC_PEER_FAILOVER", raising=False)
     with mock.patch.object(ar, "_exec_peer_fallback", _fake_fallback):
+        asyncio.run(ar._llm_call(_Boom(), [("h", "q")], "synthesize"))
+
+    assert rescued["n"] == 1, "unset flag must now escalate to the peer pool"
+
+
+def test_exec_peer_failover_disabled_explicitly(monkeypatch):
+    """RAG_EXEC_PEER_FAILOVER=0 keeps the executive PINNED — quota walls
+    stay fail-closed to verified refusal (the ADR-008 posture is now an
+    explicit opt-OUT)."""
+    import asyncio
+    import adaptive_rag as ar
+
+    class _Boom:
+        async def ainvoke(self, *a, **k):
+            raise Exception("429 Rate limit reached TPD")
+
+    rescued = {"n": 0}
+
+    async def _fake_fallback(messages, stage, schema=None):
+        rescued["n"] += 1
+        return object()
+
+    import unittest.mock as mock
+    monkeypatch.setenv("RAG_EXEC_PEER_FAILOVER", "0")
+    with mock.patch.object(ar, "_exec_peer_fallback", _fake_fallback):
         with pytest.raises(Exception, match="429"):
             asyncio.run(ar._llm_call(_Boom(), [("h", "q")], "synthesize"))
 
-    assert rescued["n"] == 0, "without the flag, quota walls stay fail-closed"
+    assert rescued["n"] == 0, "explicit 0 must keep quota walls fail-closed"
 
 
 def test_exec_peer_failover_rescues_quota_walls(monkeypatch):

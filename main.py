@@ -343,6 +343,11 @@ def _shape_result(final: Dict[str, Any], run_id: str, elapsed: float) -> Dict[st
         "outcome": final.get("outcome", "unknown"),
         "grounded": bool(final.get("grounded", False)),
         "cached": bool(final.get("cached_hit", False)),
+        # FastPath truth for the console's banner: the fact_fastpath node
+        # runs on flag-on queries even when it DEMOTES, so node presence
+        # in the transition stream cannot mean "served" (live-caught on
+        # run 521bec0cf161). This field is the anchored truth.
+        "fastpath_served": bool(final.get("fastpath_served")),
         "degraded_agents": final.get("degraded_agents", []),
         "sources": final.get("documents", []),
         # Cache-replay provenance: run_id whose receipt proves this answer.

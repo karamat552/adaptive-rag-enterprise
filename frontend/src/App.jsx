@@ -64,9 +64,13 @@ export default function App() {
     });
   }, [phase]);
 
+  // RESULT-ANCHORED TRUTH (run 521bec0cf161 lesson): the fact_fastpath
+  // node executes — and emits a transition — on every flag-on query, even
+  // when it demotes to the fleet or the run refuses. Node presence in the
+  // stream never means "served"; only the result's fastpath_served does.
   const fastpathFlash = useMemo(
-    () => transitions.some((t) => t.node === "fact_fastpath"),
-    [transitions]
+    () => result?.fastpath_served === true,
+    [result]
   );
 
   return (

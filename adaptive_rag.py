@@ -1182,8 +1182,18 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         # failure still fails closed exactly as before; the peer tier only
         # answers the day-capped-TPD class that killed both morning
         # batteries' audit stages.
-        if (os.getenv("RAG_EXEC_PEER_FAILOVER") == "1"
-                and is_quota):
+        # EXEC PEER ESCALATION (ADR-008 amendment; owner decision 2026-09-20
+        # flipped the default ON): a quota-class failure at the executive
+        # escalates to the vetted peer pool UNLESS RAG_EXEC_PEER_FAILOVER=0
+        # explicitly disables it. The live evidence (run 521bec0cf161:
+        # 245s burn to a quota-aborted refusal while peers sat idle) showed
+        # the opt-in default was failing exactly the runs it was built to
+        # save. The pool stays the VETTED allowlist (NIM nemotron-120b,
+        # gemini-3.5-flash) — community lanes (APInex etc.) remain
+        # fleet-only per ADR-008's ruling.
+        if is_quota and \
+                os.getenv("RAG_EXEC_PEER_FAILOVER",
+                          "").lower() not in ("0", "false", "no"):
             peer = await _exec_peer_fallback(messages, stage,
                                              schema=peer_schema)
             if peer is not None:
@@ -1239,15 +1249,21 @@ async def _exec_peer_fallback(messages: list, stage: str,
             continue
         try:
             from langchain_openai import ChatOpenAI
+            # Peer headroom: the vetted peers include a REASONING model
+            # (NIM nemotron-120b — ADR-012's lesson: reasoning under a
+            # tight cap truncates mid-thought). The primary's 45s budget
+            # is not the peers' budget; live evidence: 42.5s bare-success
+            # rescues, and one TimeoutError kill at exactly that ceiling.
+            peer_timeout_s = float(os.getenv("RAG_EXEC_PEER_TIMEOUT_S", "90"))
             engine = ChatOpenAI(model=peer["model"], temperature=0.0,
-                                timeout=get_settings().llm_timeout_s,
+                                timeout=peer_timeout_s,
                                 max_retries=1, base_url=peer["base_url"],
                                 api_key=key)
             collector = UsageCollector()
             t0 = time.perf_counter()
             result = await asyncio.wait_for(
                 engine.ainvoke(messages, config={"callbacks": [collector]}),
-                timeout=get_settings().llm_timeout_s)
+                timeout=peer_timeout_s)
             _EXEC_PEER_COOLDOWN.clear(pid)
             if schema is not None:
                 text = extract_text_content(result.content)
@@ -3321,7 +3337,18 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
 # 9. ROUTING & FACTORY
 # ===========================================================================
 def route_cache_check(state: MultiAgentState) -> str:
-    return END if state.get("cached_hit") else "fact_fastpath"
+    if state.get("cached_hit"):
+        return END
+    # The FastPath node is entered only when the flag is on — with the
+    # flag off it would emit a phantom transition on EVERY query (it
+    # declines and falls back), which the console mistook for "FastPath
+    # engaged" (live-caught on run 521bec0cf161, 2026-09-20). The node
+    # itself stays the single serve/demote decision point; the flag-on
+    # demoted case is handled by the result-anchored banner (fastpath_
+    # served in the shaped result), not by node presence.
+    if os.getenv("RAG_FACT_FASTPATH") != "1":
+        return "gateway"
+    return "fact_fastpath"
 
 
 def route_fact_fastpath(state: MultiAgentState) -> str:
@@ -3522,9 +3549,13 @@ def build_graph():
     # shadow_fact is fail-open and never mutates serving state.
     # Phase-2 order: cache first (0-token replay), then the FAST PATH
     # (0-LLM deterministic lookup), then the router — the front door.
+    # "gateway" (flag-off direct route) added 2026-09-20: route_cache_check
+    # skips the fastpath node entirely when RAG_FACT_FASTPATH is unset —
+    # no phantom transitions for the console's banner to misread.
     wf.add_conditional_edges("cache_check", route_cache_check,
                              {END: "shadow_fact",
-                              "fact_fastpath": "fact_fastpath"})
+                              "fact_fastpath": "fact_fastpath",
+                              "gateway": "gateway"})
     # Fast path: served -> END (no shadow comparison needed — the V2
     # candidate IS the served answer); any miss/exception -> V1 router.
     wf.add_conditional_edges("fact_fastpath", route_fact_fastpath,
