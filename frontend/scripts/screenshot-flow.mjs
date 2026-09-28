@@ -41,6 +41,17 @@ await page.getByText("CERTIFIED · GROUNDED").first().waitFor({ timeout: 45000 }
 await page.waitForTimeout(900); // receipt fetch settles
 await page.screenshot({ path: OUT + "t3_result.png", fullPage: true });
 
+// KPI leg: multi-entity comparative — delta cards over prose
+await page.getByRole("button", { name: "Compare Apple's and Tesla's revenue in Q4 2023." }).click();
+await page.getByText("vs Tesla").first().waitFor({ timeout: 45000 });
+await page.waitForTimeout(700);
+await page.screenshot({ path: OUT + "t4_kpi.png", fullPage: true });
+
+// Inspector leg: click the 5-gates stage card — drawer with real rules
+await page.getByRole("button", { name: /5 gates/i }).click();
+await page.getByText("Rules enforced").waitFor({ timeout: 5000 });
+await page.screenshot({ path: OUT + "t5_inspector.png", fullPage: false });
+
 const answer = await page.locator("section >> text=reported total net sales").first()
   .innerText().catch(() => "(answer text not found)");
 console.log("flow captured:", { t1: "initial", t2: "streaming", t3: "result" });

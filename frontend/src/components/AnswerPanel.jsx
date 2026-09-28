@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { getAdminKey, postFeedback, downloadExportBundle } from "../api.js";
 import { useToast } from "../toast.jsx";
+import { parseHero, parseComparative, unitAbbr } from "../parse.js";
 
 // Markdown-lite renderer for answers: bold, inline code, bullet lists,
 // paragraphs. Deliberately dependency-free — the answer surface is bounded
@@ -92,6 +93,10 @@ export default function AnswerPanel({ result, question }) {
   const grounded = !!result.grounded;
   const zeroToken = (usage.llm_calls || 0) === 0 && grounded;
   const sources = result.sources || [];
+  // Phase-2: deterministic surfaces for FastPath answers — parse fails
+  // closed (null) for any fleet prose and the UI stays prose-only.
+  const hero = result.fastpath_served ? parseHero(result.answer) : null;
+  const kpi = result.fastpath_served ? parseComparative(result.answer) : null;
   const [flagged, setFlagged] = useState(false);
   const [flagMsg, setFlagMsg] = useState(null);
   const notify = useToast();
@@ -183,6 +188,63 @@ export default function AnswerPanel({ result, question }) {
 
       <div className="px-5 py-4">
         <p className="mb-2 font-mono text-[11px] text-mist-500">Q: {question}</p>
+
+        {kpi && (
+          <div className="mb-5 grid gap-3 sm:grid-cols-2" role="list">
+            {kpi.cards.map((c, i) => (
+              <div key={i} role="listitem"
+                   className="glass glass-hover rounded-xl p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-semibold text-mist-200">
+                    {c.company}
+                  </span>
+                  <span className={`pill font-mono
+                    ${c.deltaPct >= 0
+                      ? "border-emerald-450/40 text-emerald-450"
+                      : "border-rose-450/40 text-rose-450"}`}>
+                    {c.deltaPct >= 0 ? "▲" : "▼"} {Math.abs(c.deltaPct)}%
+                    <span className="text-mist-500">vs {c.deltaVs}</span>
+                  </span>
+                </div>
+                <p className="mt-2 font-mono text-3xl font-semibold tracking-tight text-mist-200">
+                  ${c.figure}<span className="text-lg text-mist-400">{unitAbbr(c.unit)}</span>
+                </p>
+                <p className="mt-1 text-[11px] text-mist-400">
+                  {c.label} · {kpi.period} <span className="font-mono text-brand-400">[{c.cite}]</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {hero && (
+          <div className="mb-5 animate-rise">
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+              <span className="font-mono text-5xl font-semibold leading-none tracking-tight text-mist-200 sm:text-6xl">
+                ${hero.figure}<span className="text-2xl text-mist-400">{unitAbbr(hero.unit)}</span>
+              </span>
+              {hero.delta && (
+                <span className={`pill animate-pop font-mono
+                  ${hero.delta.dir === "increase"
+                    ? "border-emerald-450/40 text-emerald-450"
+                    : "border-rose-450/40 text-rose-450"}`}>
+                  {hero.delta.dir === "increase" ? "▲" : "▼"} {hero.delta.pct}% YoY
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-mist-400">
+              <span className="font-semibold text-mist-300">{hero.company}</span>
+              {" · "}{hero.label}{" · "}
+              <span className="font-mono">{hero.period}</span>
+              {hero.prior && (
+                <span className="text-mist-500">
+                  {"  "}(prior year {hero.prior.period}: ${hero.prior.figure}{unitAbbr(hero.prior.unit)})
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
         <MarkdownLite text={result.answer || ""} />
         {result.cached && (
           <p className="mt-3 rounded-lg border border-brand-500/25 bg-brand-500/5 px-3 py-2 text-[11px] text-brand-400/90">

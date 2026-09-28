@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import NodeInspector from "../NodeInspector.jsx";
 
 // The visual stage rail, mapped from the graph's real node names. The SSE
 // stream reports every node the run touches; the rail lights stages in order.
@@ -14,8 +15,9 @@ const STAGES = [
   { key: "terminal",   label: "Certify / refuse", nodes: ["verified_refusal", "shadow_fact", "abandon"], hint: "Receipted either way" },
 ];
 
-export default function PipelineRail({ transitions, streaming, fastpath }) {
+export default function PipelineRail({ transitions, streaming, fastpath, result, receipt }) {
   const [elapsed, setElapsed] = useState(0);
+  const [inspected, setInspected] = useState(null);
 
   useEffect(() => {
     if (!streaming) return;
@@ -79,8 +81,10 @@ export default function PipelineRail({ transitions, streaming, fastpath }) {
           const active = i === activeIdx && streaming;
           const passed = touched.size > 0 && i === activeIdx && !streaming;
           return (
-            <li key={s.key} title={s.hint} className="group relative">
-              <div
+            <li key={s.key} className="group relative">
+              <button
+                onClick={() => setInspected(s.key)}
+                title={s.hint + " — click for rules + live telemetry"}
                 className={[
                   "rounded-lg border px-2 py-2.5 text-center transition-all duration-300",
                   done || passed
@@ -88,7 +92,7 @@ export default function PipelineRail({ transitions, streaming, fastpath }) {
                     : active
                       ? "border-brand-500/70 bg-brand-500/10 shadow-lg shadow-brand-600/20"
                       : "border-ink-600 bg-ink-850/60 opacity-60",
-                ].join(" ")}
+                ].join(" ") + " cursor-pointer hover:border-brand-500/50"}
               >
                 <div className="mx-auto flex h-5 w-5 items-center justify-center">
                   {done || passed ? (
@@ -110,7 +114,7 @@ export default function PipelineRail({ transitions, streaming, fastpath }) {
                 ].join(" ")}>
                   {s.label}
                 </div>
-              </div>
+              </button>
               {active && (
                 <span className="absolute -bottom-1 left-1/2 h-[2px] w-8 -translate-x-1/2
                                  rounded-full bg-gradient-to-r from-transparent via-brand-400 to-transparent
@@ -144,6 +148,9 @@ export default function PipelineRail({ transitions, streaming, fastpath }) {
           ))}
         </div>
       )}
+
+      <NodeInspector stageKey={inspected} result={result} receipt={receipt}
+                     onClose={() => setInspected(null)} />
     </section>
   );
 }

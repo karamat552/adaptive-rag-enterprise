@@ -97,6 +97,8 @@ export default function App() {
             transitions={transitions}
             streaming={phase === "streaming"}
             fastpath={fastpathFlash}
+            result={result}
+            receipt={receipt}
           />
         )}
 
