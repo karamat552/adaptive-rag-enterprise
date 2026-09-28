@@ -121,6 +121,131 @@ body {
   border-radius: 3px;
 }
 
+/* ================= Phase 1 — the signature pass ================= */
+
+/* Receipt SEAL: a conic border beam traces the card once when the
+   CERTIFIED verdict lands, then the card keeps a sealed emerald edge.
+   Needs @property so the angle interpolates; unsupported browsers
+   degrade to a static border. One-shot (forwards), never a strobing
+   hologram. */
+@property --seal-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.seal-trace {
+  position: relative;
+  border-color: rgba(16, 185, 129, 0.30) !important;
+}
+.seal-trace::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--seal-angle),
+    transparent 0deg, rgba(34, 211, 238, 0) 300deg,
+    #22d3ee 340deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box,
+                linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: seal-trace 2.8s cubic-bezier(0.22, 1, 0.36, 1) 120ms forwards;
+  pointer-events: none;
+  opacity: 0.85;
+}
+@keyframes seal-trace {
+  to { --seal-angle: 720deg; opacity: 0.35; }
+}
+
+/* Verdict moment: the CERTIFIED/REFUSED pill pops in with a single
+   400ms overshoot — the one choreographed beat when a result lands. */
+@keyframes verdict-pop {
+  0% { transform: scale(0.82); opacity: 0; }
+  60% { transform: scale(1.07); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-pop { animation: verdict-pop 400ms cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+
+/* Rail beam: a track above the stage cards with a traveling dot that
+   eases to the active stage as SSE transitions arrive. The gradient
+   flows while streaming; the whole thing turns emerald when the
+   FastPath node engages. Pure CSS — no canvas, no JS animation loop. */
+.rail-track {
+  position: absolute;
+  left: 1%;
+  right: 1%;
+  top: -6px;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--color-ink-600);
+}
+.rail-track-flow {
+  background: linear-gradient(90deg, transparent 20%,
+              rgba(129, 140, 248, 0.9) 50%, transparent 80%);
+  background-size: 50% 100%;
+  animation: var(--animate-flow);
+}
+.rail-track-flow.rail-fast {
+  background: linear-gradient(90deg, transparent 20%,
+              rgba(16, 185, 129, 0.9) 50%, transparent 80%);
+  background-size: 50% 100%;
+}
+.rail-dot {
+  position: absolute;
+  top: -11px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 9999px;
+  background: var(--color-brand-400);
+  box-shadow: 0 0 14px rgba(129, 140, 248, 0.85);
+  transition: left 450ms cubic-bezier(0.65, 0, 0.35, 1);
+  animation: var(--animate-pulse-soft);
+}
+.rail-dot.rail-fast {
+  background: var(--color-emerald-450);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.95);
+}
+
+/* Streaming placeholder: shimmer bars while the fleet runs. */
+.skeleton-bar {
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--color-ink-700) 25%,
+              var(--color-ink-500) 50%, var(--color-ink-700) 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Toast entrance. */
+.toast { animation: toast-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes toast-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Fold-down: grid-rows 0fr -> 1fr height animation, zero JS. */
+.expander-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.expander-grid[data-open="true"] { grid-template-rows: 1fr; }
+.expander-grid > * { overflow: hidden; min-height: 0; }
+
+/* Accessibility: every Phase-1 effect is a courtesy, never a
+   requirement — motion-sensitive visitors get the same information. */
+@media (prefers-reduced-motion: reduce) {
+  .seal-trace::before, .animate-pop, .rail-dot, .skeleton-bar,
+  .toast, .expander-grid, .rail-track-flow {
+    animation: none !important;
+    transition: none !important;
+  }
+  .seal-trace::before { opacity: 0.35; }
+}
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

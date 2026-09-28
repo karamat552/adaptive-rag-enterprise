@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { getAdminKey, postFeedback, downloadExportBundle } from "../api.js";
+import { useToast } from "../toast.jsx";
 
 // Markdown-lite renderer for answers: bold, inline code, bullet lists,
 // paragraphs. Deliberately dependency-free — the answer surface is bounded
@@ -47,26 +48,40 @@ export function MarkdownLite({ text }) {
   return <div className="prose-answer">{blocks}</div>;
 }
 
-function Expander({ title, children, defaultOpen = false }) {
+function Expander({ title, children, defaultOpen = false, onCopy, copyLabel }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-lg border border-ink-600 bg-ink-850/60">
-      <button onClick={() => setOpen(!open)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left
-                         text-xs font-medium text-mist-300 transition-colors
-                         hover:text-mist-200">
-        <svg className={`h-3.5 w-3.5 shrink-0 text-mist-500 transition-transform
-                         ${open ? "rotate-90" : ""}`}
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="flex-1 truncate">{title}</span>
-      </button>
-      {open && (
-        <div className="border-t border-ink-700 px-3 py-2 text-xs leading-relaxed text-mist-400">
+      <div className="flex items-center gap-1 px-3 py-2">
+        <button onClick={() => setOpen(!open)}
+                className="flex flex-1 items-center gap-2 text-left
+                           text-xs font-medium text-mist-300 transition-colors
+                           hover:text-mist-200">
+          <svg className={`h-3.5 w-3.5 shrink-0 text-mist-500 transition-transform
+                           ${open ? "rotate-90" : ""}`}
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="flex-1 truncate">{title}</span>
+        </button>
+        {onCopy && (
+          <button onClick={onCopy} title={copyLabel || "Copy to clipboard"}
+                  className="shrink-0 rounded p-1 text-mist-500 transition-colors
+                             hover:text-brand-400"
+                  aria-label={copyLabel || "Copy"}>
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2">
+              <rect x="9" y="9" width="11" height="11" rx="2" />
+              <path d="M5 15V5a2 2 0 012-2h10" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
+      </div>
+      <div className="expander-grid" data-open={open}>
+        <div className="px-3 pb-2.5 text-xs leading-relaxed text-mist-400">
           {children}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -79,7 +94,16 @@ export default function AnswerPanel({ result, question }) {
   const sources = result.sources || [];
   const [flagged, setFlagged] = useState(false);
   const [flagMsg, setFlagMsg] = useState(null);
-  const [dlMsg, setDlMsg] = useState(null);
+  const notify = useToast();
+
+  const copyText = async (text, label) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(`${label} copied to clipboard`, "cyan");
+    } catch {
+      notify("Clipboard unavailable in this context", "amber");
+    }
+  };
 
   const flag = async () => {
     if (flagged) return;
@@ -87,10 +111,13 @@ export default function AnswerPanel({ result, question }) {
     if (status === 200) {
       setFlagged(true);
       setFlagMsg(`🗑 Evicted ${evicted} cache entr${evicted === 1 ? "y" : "ies"} — the next ask re-verifies from filings.`);
+      notify(`Cache evicted (${evicted}) — next ask re-verifies`, "emerald");
     } else if (status === 403 || status === 401) {
       setFlagMsg(`Eviction rejected (HTTP ${status}) — a valid admin key is required.`);
+      notify("Eviction rejected — admin key required", "rose");
     } else {
       setFlagMsg(`Eviction failed — HTTP ${status}`);
+      notify(`Eviction failed — HTTP ${status}`, "rose");
     }
   };
 
@@ -105,14 +132,15 @@ export default function AnswerPanel({ result, question }) {
     a.download = `report_${result.run_id}.md`;
     a.click();
     URL.revokeObjectURL(a.href);
+    notify("📄 Report downloaded (.md)", "emerald");
   };
 
   const exportBundle = async () => {
     try {
       await downloadExportBundle(result.provenance_run_id || result.run_id);
-      setDlMsg("🔏 Offline-verifiable compliance bundle downloaded — receipt, evidence, transcripts, Ed25519 attestation + a stdlib-only verifier.");
+      notify("🔏 Offline-verifiable compliance bundle downloaded", "emerald");
     } catch (e) {
-      setDlMsg(`Bundle unavailable (${e.message}) — only grounded runs export.`);
+      notify(`Bundle unavailable (${e.message})`, "rose");
     }
   };
 
@@ -121,7 +149,7 @@ export default function AnswerPanel({ result, question }) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-5 py-3">
         <div className="flex items-center gap-2">
           {grounded ? (
-            <span className="pill border-emerald-450/40 text-emerald-450">
+            <span className="pill animate-pop border-emerald-450/40 text-emerald-450">
               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    strokeWidth="2.6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
@@ -129,7 +157,7 @@ export default function AnswerPanel({ result, question }) {
               CERTIFIED · GROUNDED
             </span>
           ) : (
-            <span className="pill border-amber-450/40 text-amber-450">
+            <span className="pill animate-pop border-amber-450/40 text-amber-450">
               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    strokeWidth="2.2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6A2 2 0 0022 18L13.7 3.9a2 2 0 00-3.4 0z" />
@@ -225,10 +253,9 @@ export default function AnswerPanel({ result, question }) {
         </span>
       </div>
 
-      {(flagMsg || dlMsg) && (
+      {flagMsg && (
         <div className="border-t border-ink-700 px-5 py-2 text-[11px] text-mist-300">
-          {flagMsg && <p className="text-mist-300">{flagMsg}</p>}
-          {dlMsg && <p className="text-cyan-350/80">{dlMsg}</p>}
+          {flagMsg}
         </div>
       )}
     </section>

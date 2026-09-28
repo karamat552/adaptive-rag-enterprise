@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useToast } from "../toast.jsx";
 
 const verifierClass = (v) =>
   v === "deterministic" || v === "python_certified"
@@ -28,22 +29,24 @@ function Expander({ title, children, defaultOpen = false, tone = "" }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className={`rounded-lg border bg-ink-850/60 ${tone || "border-ink-600"}`}>
-      <button onClick={() => setOpen(!open)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left
-                         text-xs font-medium text-mist-300 transition-colors
-                         hover:text-mist-200">
-        <svg className={`h-3.5 w-3.5 shrink-0 text-mist-500 transition-transform
-                         ${open ? "rotate-90" : ""}`}
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="flex-1">{title}</span>
-      </button>
-      {open && (
-        <div className="border-t border-ink-700 px-3 py-2.5 text-xs text-mist-400">
+      <div className="flex items-center gap-1 px-3 py-2">
+        <button onClick={() => setOpen(!open)}
+                className="flex flex-1 items-center gap-2 text-left
+                           text-xs font-medium text-mist-300 transition-colors
+                           hover:text-mist-200">
+          <svg className={`h-3.5 w-3.5 shrink-0 text-mist-500 transition-transform
+                           ${open ? "rotate-90" : ""}`}
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="flex-1">{title}</span>
+        </button>
+      </div>
+      <div className="expander-grid" data-open={open}>
+        <div className="px-3 pb-2.5 text-xs text-mist-400">
           {children}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -59,6 +62,15 @@ export default function ReceiptExplorer({ receipt, runId }) {
   const contradictions = rec.contradictions_json || [];
   const verified = v.verified === true;
   const resolvedFrom = receipt?.resolved_from_provenance;
+  const notify = useToast();
+  const copyEv = async (e, n) => {
+    try {
+      await navigator.clipboard.writeText(String(e.content || ""));
+      notify(`Evidence [${n}] copied to clipboard`, "cyan");
+    } catch {
+      notify("Clipboard unavailable in this context", "amber");
+    }
+  };
 
   if (!receipt) {
     return (
@@ -71,7 +83,7 @@ export default function ReceiptExplorer({ receipt, runId }) {
   }
 
   return (
-    <section className="glass animate-rise overflow-hidden">
+    <section className={`glass animate-rise overflow-hidden ${verified ? "seal-trace" : ""}`}>
       <div className="border-b border-ink-700 px-5 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mist-300">
@@ -190,6 +202,11 @@ export default function ReceiptExplorer({ receipt, runId }) {
                           <span className="font-semibold text-mist-300">Evidence [{n}]</span>
                           <span className="font-mono text-brand-400">{e.company}</span>
                           <span className="text-mist-500">{e.source} · p.{e.page}</span>
+                          <button onClick={() => copyEv(e, n)}
+                                  title="Copy evidence chunk"
+                                  className="pill hover:border-cyan-350/50 hover:text-cyan-350">
+                            ⧉ copy
+                          </button>
                           {e.contains_table && (
                             <span className={`pill ${e.arithmetic_ok === true
                                 ? "border-emerald-450/30 text-emerald-450/80"

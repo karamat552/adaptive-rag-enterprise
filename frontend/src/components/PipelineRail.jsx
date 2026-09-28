@@ -29,6 +29,13 @@ export default function PipelineRail({ transitions, streaming, fastpath }) {
     [transitions]
   );
 
+  // Beam color keys on the FastPath NODE engaging (mid-stream, honest:
+  // "the node is checking/serving"), not the result-anchored banner.
+  const fastEngaged = useMemo(
+    () => transitions.some((t) => t.node === "fact_fastpath"),
+    [transitions]
+  );
+
   const activeIdx = useMemo(() => {
     let last = -1;
     STAGES.forEach((s, i) => { if (s.nodes.some((n) => touched.has(n))) last = i; });
@@ -53,6 +60,17 @@ export default function PipelineRail({ transitions, streaming, fastpath }) {
             <span className="dot dot-pending" /> {elapsed.toFixed(1)}s
           </span>
         )}
+      </div>
+
+      {/* The traveling beam (desktop layout only — the multi-row mobile
+          grid has no single axis to travel). Track + dot, pure CSS. */}
+      <div className="relative mt-4 hidden lg:block" style={{ height: 0 }}>
+        <div className={`rail-track ${streaming ? "rail-track-flow" : ""} ${fastEngaged ? "rail-fast" : ""}`}>
+          {activeIdx >= 0 && (
+            <div className={`rail-dot ${fastEngaged ? "rail-fast" : ""}`}
+                 style={{ left: `${((activeIdx + 0.5) / STAGES.length) * 100}%` }} />
+          )}
+        </div>
       </div>
 
       <ol className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">

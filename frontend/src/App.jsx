@@ -5,6 +5,7 @@ import PipelineRail from "./components/PipelineRail.jsx";
 import AnswerPanel from "./components/AnswerPanel.jsx";
 import ReceiptExplorer from "./components/ReceiptExplorer.jsx";
 import { fetchHealth, fetchReceipt, streamQuery } from "./api.js";
+import { ToastProvider } from "./toast.jsx";
 
 const EXAMPLES = [
   "What was Apple's total net sales in Q4 2023?",
@@ -79,6 +80,7 @@ export default function App() {
   );
 
   return (
+    <ToastProvider>
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6">
       <Header health={health} pingMs={pingMs} />
 
@@ -110,6 +112,28 @@ export default function App() {
               Set a valid API key in the header if the gateway enforces tenant auth.
             </p>
           </div>
+        )}
+
+        {phase === "streaming" && (
+          <section className="glass animate-rise p-5">
+            <div className="flex items-center gap-2 text-xs text-mist-300">
+              <span className="dot dot-pending" />
+              <span className="font-medium">
+                {transitions.length
+                  ? (transitions[transitions.length - 1].message ||
+                     transitions[transitions.length - 1].node)
+                  : "Routing query…"}
+              </span>
+              <span className="font-mono text-[10px] text-mist-500">
+                — watch the rail
+              </span>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              <div className="skeleton-bar h-3 w-11/12" />
+              <div className="skeleton-bar h-3 w-8/12" />
+              <div className="skeleton-bar h-3 w-9/12" />
+            </div>
+          </section>
         )}
 
         {result && (
@@ -161,5 +185,6 @@ export default function App() {
         </span>
       </footer>
     </div>
+    </ToastProvider>
   );
 }
