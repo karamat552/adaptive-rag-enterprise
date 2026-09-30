@@ -88,6 +88,7 @@ def test_failover_registry_parses_and_validates(monkeypatch):
         ar._S = None      # rebuild from the real .env for subsequent tests
 
 
+@pytest.mark.live
 def test_failover_registry_empty_when_unset(monkeypatch):
     import adaptive_rag as ar
     monkeypatch.setattr(ar, "_failover_endpoints", None)
@@ -424,6 +425,7 @@ def test_transform_query_aborts_on_long_quota_hint():
     assert ar.route_after_rewrite(upd) == "verified_refusal"
 
 
+@pytest.mark.live
 def test_transform_query_retries_on_short_quota_hint():
     """An RPM-scale hint (30s) is below the abort bar — the loop retries
     normally (the window opens in time)."""
@@ -451,6 +453,7 @@ def test_transform_query_retries_on_short_quota_hint():
     assert upd.get("search_query") == "rewritten q"
 
 
+@pytest.mark.live
 def test_synthesis_429_threads_quota_hint():
     """csuite_synth's except path must thread parse_retry_hint(exc) into
     state as quota_hint_s — the abort depends on it being there."""
@@ -476,6 +479,7 @@ def test_synthesis_429_threads_quota_hint():
     assert "synthesis" in (upd.get("degraded_agents") or [])
 
 
+@pytest.mark.live
 def test_audit_429_threads_quota_hint():
     """A/B run-2 finding (2026-09-07): the abort machinery only heard
     SYNTHESIS 429s — audit-stage 429s ('try again in 16m43.104s') died in
@@ -501,6 +505,7 @@ def test_audit_429_threads_quota_hint():
         "audit-stage 429 hint must reach the optimizer's abort check"
 
 
+@pytest.mark.live
 def test_backup_engine_per_endpoint_max_tokens(monkeypatch):
     """Live lesson 2026-09-09 (Token Router lane): GLM-5.3-free is a
     reasoning model — reasoning_content burns tokens BEFORE content, so a

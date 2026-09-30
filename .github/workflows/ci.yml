@@ -17,9 +17,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
-      - name: Unit tests — persistence + gateway + eval + UI + citation guard + receipt TAMPER suite (no live deps)
-        run: pytest tests --ignore=tests/test_answer_accuracy.py -m "not integration" -v
+      - run: pip install -r requirements.lock
+      - name: Unit tests — offline suite (live/integration excluded; Phase 0 isolation 2026-09-28)
+        run: pytest tests --ignore=tests/test_answer_accuracy.py -m "not integration and not live" -v
 
   integration:
     runs-on: ubuntu-latest
@@ -42,7 +42,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.lock
 
       - name: Migrate schema + bootstrap least-privilege runtime role
         env:
@@ -58,6 +58,23 @@ jobs:
           DB_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ragdb
           DB_DATABASE_URL: postgresql://app_rag:ciruntimepw123@localhost:5432/ragdb
         run: pytest tests/test_db.py -v
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      # The lock is fully pinned (pip-compile, all transitives), so
+      # --no-deps audits exactly the frozen tree. Allowlisted IDs must
+      # carry an inline reason in pip-audit-allowlist.txt (Phase 0).
+      - name: Dependency vulnerability audit (Phase 0)
+        run: >-
+          ARGS=$(grep -v '^#' pip-audit-allowlist.txt | grep -v '^$'
+          | awk '{print "--ignore-vuln " $1}' | tr '\n' ' ');
+          pip-audit -r requirements.lock --no-deps $ARGS
 
   docker:
     runs-on: ubuntu-latest

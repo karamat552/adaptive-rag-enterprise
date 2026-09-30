@@ -802,6 +802,7 @@ def test_premise_fast_path_multi_company_ineligible():
     assert called["n"] == 0
 
 
+@pytest.mark.live
 def test_synthesis_evidence_dedup_stubs_quoted_chunks():
     """Specialist reports quote chunks; the evidence list repeated them in
     full — synthesis paid for the same content twice. A chunk whose longest
@@ -848,6 +849,7 @@ def test_synthesis_evidence_dedup_stubs_quoted_chunks():
         "the unquoted chunk must remain in full"
 
 
+@pytest.mark.live
 def test_audit_context_stubs_draft_quoted_chunks():
     """The auditor received full chunks the DRAFT already quotes verbatim —
     same double-pay. Quoted chunks stub out; citation targets remain."""

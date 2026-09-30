@@ -452,6 +452,7 @@ def test_premise_fast_path_skips_pipeline(monkeypatch):
 
 
 # ============================== provenance fallback (Gauntlet-4) ==========
+@pytest.mark.live
 def test_verify_resolves_cached_answer_via_provenance(client, monkeypatch):
     """A cached replay's own run_id has no receipt; passing its
     provenance_run_id serves the ORIGINAL certification's receipt,

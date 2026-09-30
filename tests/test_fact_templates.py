@@ -156,6 +156,7 @@ def test_shadow_never_raises_and_never_mutates_state():
         assert out in ({},) or isinstance(out, dict)
 
 
+@pytest.mark.live
 def test_shadow_coverage_miss_is_not_a_disagreement():
     """Out-of-coverage questions log a miss, write nothing to the
     ledger (V1 serves them; only covered questions count in A.2)."""

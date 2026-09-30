@@ -218,6 +218,7 @@ def test_sharpen_state_query_visible():
 
 
 # ============================== synthesis contract ========================
+@pytest.mark.live
 def test_synthesis_gets_consistency_alert_on_conflict(monkeypatch):
     """The synthesis prompt must instruct BOTH-figures reporting. Verified by
     capturing the human prompt through a mocked _llm_call."""
@@ -248,6 +249,7 @@ def test_synthesis_gets_consistency_alert_on_conflict(monkeypatch):
     assert "22314000000" in human or "22,314" in human or "23100000000" in human
 
 
+@pytest.mark.live
 def test_synthesis_clean_run_notes_no_contradictions(monkeypatch):
     import adaptive_rag as ar
 

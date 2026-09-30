@@ -303,6 +303,7 @@ def test_conditional_expansion_skips_paraphraser_on_confident_hit():
     assert rows and rows[0]["vec_similarity"] == 0.71
 
 
+@pytest.mark.live
 def test_conditional_expansion_fires_on_weak_hit():
     """Weak direct hit (below the bar) -> paraphraser runs, variants are
     searched, results RRF-fused; the direct pass is REUSED in the fusion
