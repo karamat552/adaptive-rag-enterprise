@@ -3,6 +3,7 @@
 # by the following command:
 #
 #    pip-compile --output-file=requirements.lock requirements.txt
+#    (pip-tools 7.6.1; regenerate with this exact command)
 #
 altair==6.3.0
     # via streamlit
