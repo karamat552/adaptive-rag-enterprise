@@ -1,0 +1,7 @@
+# pip-audit allowlist — one vulnerability ID per line, inline reason REQUIRED.
+# Format:   <VULN-ID>  # reason: <why this finding is accepted>
+# (Lines starting with '#' are ignored. An entry without a reason is a
+# review failure: every accepted finding must be traceable to a decision.)
+#
+# Current status (Phase 0, 2026-09-28): pip-audit -r requirements.lock
+# --no-deps reported NO known vulnerabilities — no entries yet.
