@@ -316,17 +316,31 @@ def require_query_key(x_api_key: Optional[str] = Header(default=None),
     return bound
 
 
-def _assert_tenant_match(auth_tenant: Optional[str],
-                         declared: Optional[str]) -> None:
-    """Endpoint-side impersonation check (the dependency cannot see the
-    body): a declared tenant that disagrees with the key's binding is a
-    cross-tenant attack — 403."""
-    if auth_tenant and declared and declared != auth_tenant:
+def _resolve_scoped_tenant(auth_tenant: Optional[str],
+                           declared: Optional[str]) -> str:
+    """Phase 1 tenancy fix (2026-09-30): the auth-derived tenant IS the
+    identity; a declared tenant_id may only CONFIRM it, never substitute.
+    Closes the anonymous hole on every read endpoint — the old pattern
+    (assert + `auth_tenant or declared`) passed an anonymous caller's
+    DECLARED tenant straight through. Authenticated: declared must match
+    the key's binding or be absent. Anonymous (open-mode only): the
+    reachable scope is the default tenant alone; any other declared
+    tenant is an impersonation attempt — 403."""
+    if auth_tenant:
+        if declared and declared != auth_tenant:
+            METRICS.inc("auth_rejected_total")
+            raise HTTPException(
+                status_code=403,
+                detail=f"Key is not authorized for tenant '{declared}' "
+                       f"(bound to '{auth_tenant}')")
+        return auth_tenant
+    if declared and declared != "default":
         METRICS.inc("auth_rejected_total")
         raise HTTPException(
             status_code=403,
-            detail=f"Key is not authorized for tenant '{declared}' "
-                   f"(bound to '{auth_tenant}')")
+            detail=f"Anonymous callers are scoped to the default tenant; "
+                   f"declared '{declared}' is not authorized")
+    return "default"
 
 
 # ============================== RUN PLUMBING ===============================
@@ -502,10 +516,9 @@ async def query(req: QueryRequest, request: Request,
                 auth_tenant: Optional[str] = Depends(require_query_key)
                 ) -> JSONResponse:
     run_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
-    # Authenticated tenant wins over the declared one (the key IS identity);
-    # a declared tenant that disagrees with the key's binding is rejected.
-    _assert_tenant_match(auth_tenant, req.tenant_id)
-    tenant = auth_tenant or req.tenant_id
+    # The key IS identity; a declared tenant may only confirm (Phase 1:
+    # anonymous callers can no longer name a tenant into scope).
+    tenant = _resolve_scoped_tenant(auth_tenant, req.tenant_id)
     try:
         result = await _run_guarded(request, req.question, tenant, run_id)
     except CircuitOpenError as exc:
@@ -627,8 +640,7 @@ async def query_stream(request: Request, question: str,
     if len(question) < 3 or len(question) > 500:
         raise HTTPException(status_code=422, detail="question must be 3-500 chars")
     run_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
-    _assert_tenant_match(auth_tenant, tenant_id)
-    tenant = auth_tenant or tenant_id   # key-bound tenant wins (auth, not claim)
+    tenant = _resolve_scoped_tenant(auth_tenant, tenant_id)
     return StreamingResponse(
         _event_stream(request, question, tenant_id, run_id),
         media_type="text/event-stream",
@@ -638,20 +650,27 @@ async def query_stream(request: Request, question: str,
 
 # ============================== POST /search ===============================
 @app.post("/search")
-async def search(req: SearchRequest) -> Dict[str, Any]:
+async def search(req: SearchRequest,
+                 auth_tenant: Optional[str] = Depends(require_query_key)
+                 ) -> Dict[str, Any]:
     from db import pgvector_hybrid_search
+    # Phase 1: /search carried NO auth at all and took tenant from the
+    # body — closed 2026-09-30 (the key IS identity; declared confirms).
+    tenant = _resolve_scoped_tenant(auth_tenant, req.tenant_id)
     rows = await asyncio.to_thread(
         pgvector_hybrid_search, req.query,
         category_filter=req.category_filter,
         company_filter=req.company_filter, top_k=req.top_k,
-        tenant_id=req.tenant_id)
+        tenant_id=tenant)
     return {"status": "success", "total_results": len(rows), "results": rows}
 
 
 # ============================== GET /verify/{run_id} =======================
 @app.get("/verify/{run_id}")
 async def verify(run_id: str, tenant_id: Optional[str] = None,
-                 provenance_run_id: Optional[str] = None) -> JSONResponse:
+                 provenance_run_id: Optional[str] = None,
+                 auth_tenant: Optional[str] = Depends(require_query_key)
+                 ) -> JSONResponse:
     """Re-verification receipt for a grounded run: claim list + evidence chain
     + DETERMINISTIC on-demand recompute (slice stored page transcripts,
     re-hash company⊣source⊣page⊣slice, compare to chunk_hash). Zero LLM tokens;
@@ -662,11 +681,12 @@ async def verify(run_id: str, tenant_id: Optional[str] = None,
     provenance_run_id of the ORIGINAL certification — pass it here and this
     endpoint serves THAT receipt, labeled with both ids so the replay can
     never masquerade as fresh certification."""
-    receipt = await asyncio.to_thread(get_verification_receipt, run_id, tenant_id)
+    tenant = _resolve_scoped_tenant(auth_tenant, tenant_id)
+    receipt = await asyncio.to_thread(get_verification_receipt, run_id, tenant)
     resolved_from = None
     if not receipt and provenance_run_id and provenance_run_id != run_id:
         receipt = await asyncio.to_thread(
-            get_verification_receipt, provenance_run_id, tenant_id)
+            get_verification_receipt, provenance_run_id, tenant)
         if receipt:
             resolved_from = provenance_run_id
     if not receipt:
@@ -699,7 +719,7 @@ async def export_certificate(run_id: str, tenant_id: Optional[str] = None,
     import io
     import zipfile
     from datetime import datetime as _dt, timezone as _tz
-    tenant = auth_tenant or tenant_id
+    tenant = _resolve_scoped_tenant(auth_tenant, tenant_id)
     try:
         bundle = await asyncio.to_thread(
             db.build_certificate_bundle, run_id, tenant)

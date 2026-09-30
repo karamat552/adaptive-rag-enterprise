@@ -240,10 +240,29 @@ def test_sse_happy_path_event_sequence(client, fake_graph):
     assert fake_graph.captured_state["tenant_id"] == "default"   # regression!
 
 
-def test_sse_honors_explicit_tenant(client, fake_graph):
+def test_sse_honors_explicit_tenant(client, fake_graph, monkeypatch):
+    """Tenant-scoping mechanics under a BOUND key (the key IS identity).
+    Anonymous declared-tenant passthrough was a cross-tenant hole — closed
+    Phase 1 (2026-09-30); the spoofing case is locked by the rejection
+    tests below."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "acme:secret-acme")
     client.get("/query/stream",
-               params={"question": "Apple services revenue?", "tenant_id": "acme"})
+               params={"question": "Apple services revenue?", "tenant_id": "acme"},
+               headers={"X-API-Key": "secret-acme"})
     assert fake_graph.captured_state["tenant_id"] == "acme"
+
+
+def test_sse_anonymous_spoof_rejected(client, fake_graph, monkeypatch):
+    """Anonymous (open-mode) caller DECLARING another tenant -> 403. The
+    anonymous scope is the default tenant alone."""
+    import os
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.get("/query/stream",
+                   params={"question": "Apple services revenue?",
+                            "tenant_id": "tenant-b"})
+    assert r.status_code == 403,         "anonymous caller declaring a tenant must be 403, was: "         f"{r.status_code}"
 
 
 def test_sse_question_validation(client):
@@ -302,6 +321,7 @@ def test_feedback_evicts_with_valid_key(client, monkeypatch):
 # ============================== /search tenant =============================
 def test_search_forwards_tenant(client, monkeypatch):
     import db
+    monkeypatch.setenv("QUERY_API_KEYS", "acme:secret-acme")
     seen: Dict[str, Any] = {}
 
     def _fake_search(query, category_filter=None, company_filter=None,
@@ -311,9 +331,97 @@ def test_search_forwards_tenant(client, monkeypatch):
                  "page": 1, "source": "aapl-10-q", "category": "financial",
                  "section_title": "s", "chunk_hash": "h", "contains_table": False}]
     monkeypatch.setattr(db, "pgvector_hybrid_search", _fake_search)
-    r = client.post("/search", json={"query": "services revenue", "tenant_id": "acme"})
+    r = client.post("/search", json={"query": "services revenue",
+                                     "tenant_id": "acme"},
+                    headers={"X-API-Key": "secret-acme"})
     assert r.status_code == 200
     assert seen["tenant_id"] == "acme" and seen["top_k"] == 5
+
+
+# ============ Phase 1: anonymous-scope enforcement (2026-09-30) ===========
+# The hole (all five read endpoints): _assert_tenant_match(None, declared)
+# passed, then `tenant = None or declared` = the DECLARED tenant — an
+# anonymous caller could read any tenant's data by naming it. These tests
+# are written FIRST and fail against the unfixed code.
+
+
+def test_search_requires_key_when_enforced(client, monkeypatch):
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    monkeypatch.delenv("ALLOW_OPEN_MODE", raising=False)
+    r = client.post("/search", json={"query": "Tesla revenue Q4 2023?"})
+    assert r.status_code == 401,         f"/search must 401 without a key under enforcement, was {r.status_code}"
+
+
+def test_search_anonymous_spoof_rejected(client, monkeypatch):
+    import os
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.post("/search",
+                    json={"query": "Tesla revenue Q4 2023?",
+                          "tenant_id": "tenant-b"})
+    assert r.status_code == 403,         f"anonymous /search declaring a tenant must 403, was {r.status_code}"
+
+
+def test_search_anonymous_default_scope(client, monkeypatch):
+    """Anonymous WITHOUT a declaration proceeds on the default tenant —
+    the Streamlit/console demo path stays intact."""
+    import os
+    import db
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    seen: Dict[str, Any] = {}
+
+    def _fake_search(query, category_filter=None, company_filter=None,
+                     top_k=10, tenant_id=None):
+        seen.update(tenant_id=tenant_id)
+        return []
+    monkeypatch.setattr(db, "pgvector_hybrid_search", _fake_search)
+    r = client.post("/search", json={"query": "Tesla revenue Q4 2023?"})
+    assert r.status_code == 200, f"was {r.status_code}"
+    assert seen["tenant_id"] == "default"
+
+
+def test_verify_anonymous_spoof_rejected(client, monkeypatch):
+    import os
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.get("/verify/some-run-id?tenant_id=tenant-b")
+    assert r.status_code == 403,         f"anonymous /verify declaring a tenant must 403, was {r.status_code}"
+
+
+def test_export_anonymous_spoof_rejected(client, monkeypatch):
+    import os
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.get("/export/some-run-id?tenant_id=tenant-b")
+    assert r.status_code == 403,         f"anonymous /export declaring a tenant must 403, was {r.status_code}"
+
+
+def test_query_anonymous_spoof_rejected(client, fake_graph, monkeypatch):
+    import os
+    monkeypatch.delenv("QUERY_API_KEYS", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_MODE", "true")
+    r = client.post("/query",
+                    json={"question": "Apple services revenue?",
+                          "tenant_id": "tenant-b"})
+    assert r.status_code == 403,         f"anonymous /query declaring a tenant must 403, was {r.status_code}"
+
+
+def test_verify_authenticated_cross_tenant_rejected(client, monkeypatch):
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    r = client.get("/verify/some-run-id?tenant_id=tenant-b",
+                   headers={"X-API-Key": "secret-a"})
+    assert r.status_code == 403,         f"authenticated cross-tenant /verify must 403, was {r.status_code}"
+
+
+def test_export_authenticated_cross_tenant_rejected(client, monkeypatch):
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    r = client.get("/export/some-run-id?tenant_id=tenant-b",
+                   headers={"X-API-Key": "secret-a"})
+    assert r.status_code == 403,         f"authenticated cross-tenant /export must 403, was {r.status_code}"
 
 
 # ============================== eval.py pure functions =====================
@@ -424,13 +532,18 @@ def test_verify_404_without_receipt(client, monkeypatch):
 
 
 def test_verify_passes_tenant_scope(client, monkeypatch):
+    """Reworked Phase 1 (2026-09-30): the tenant scope reaches the receipt
+    lookup under a BOUND key. The old form (anonymous + declared acme) was
+    the closed spoofing hole — the resolver now 403s it before the lookup."""
+    monkeypatch.setenv("QUERY_API_KEYS", "acme:secret-acme")
     seen = {}
 
     def _fake_get(rid, tid=None):
         seen["tenant_id"] = tid
         return None
     monkeypatch.setattr(main, "get_verification_receipt", _fake_get)
-    client.get("/verify/req-9", params={"tenant_id": "acme"})
+    client.get("/verify/req-9", params={"tenant_id": "acme"},
+               headers={"X-API-Key": "secret-acme"})
     assert seen["tenant_id"] == "acme"
 
 
