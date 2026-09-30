@@ -44,3 +44,32 @@ node_portable.zip
 # frontend build artifacts
 frontend/node_modules/
 frontend/dist/
+
+.vercel
+.env*
+
+# Phase 0 repo hygiene (2026-09-28): personal one-offs + session artifacts.
+# The vetting EVIDENCE remains recorded in KNOWN_ISSUES + commit 9c9ce33 message.
+/vet_exec_report.json
+/scripts/generate_resume.py
+/scripts/generate_resume_ai_ml.py
+/scripts/ask_gemini_opinion.py
+/shadow_battery_report.json
+/shadow_smoke*_report.json
+/shadow_smoke*_log.txt
+/*_log.txt
+/*.log
+/ab_segmented_log.txt
+/advisor_consult_*.log
+/cloud_query.json
+/anon_query.json
+/query_result.json
+/fastpath_*.json
+/fp_live*.json
+/post_fix.json
+/arutva_page.html
+/gui_shots/
+/sb_log.zip
+/shadow_battery_artifact.zip
+/REVIEW.md
+/.tools_venv/
