@@ -733,3 +733,23 @@ def test_query_auth_stream_key_bound_tenant(client, monkeypatch):
                         "/query/stream?question=What+was+Tesla+revenue+in+Q4+2023%3F")
     assert r3.status_code in (200, 499), \
         f"anonymous stream must be admitted under the explicit opt-in: {r3.status_code}"
+
+
+# ============ Phase 1: private-uploads feature flag (C7) ==================
+def test_private_uploads_flag_default_off(client, monkeypatch):
+    """RAG_PRIVATE_UPLOADS unset -> the feature reader is False and NO
+    upload route is mounted (Phase 1 contract; routes arrive in Phase 2+
+    only behind this flag)."""
+    import os
+    monkeypatch.delenv("RAG_PRIVATE_UPLOADS", raising=False)
+    assert main.private_uploads_enabled() is False
+    paths = client.get("/openapi.json").json()["paths"]
+    assert not any("ingest" in p or "upload" in p for p in paths),         f"no upload route may be mounted when the flag is OFF, found: "         f"{[p for p in paths if 'ingest' in p or 'upload' in p]}"
+
+
+def test_private_uploads_flag_explicit_on(client, monkeypatch):
+    """RAG_PRIVATE_UPLOADS=1 -> the reader flips True (the same explicit
+    opt-in style as the other feature flags)."""
+    import os
+    monkeypatch.setenv("RAG_PRIVATE_UPLOADS", "1")
+    assert main.private_uploads_enabled() is True

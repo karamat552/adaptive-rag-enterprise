@@ -201,6 +201,17 @@ class FeedbackRequest(BaseModel):
     tenant_id: Optional[str] = None   # None -> purge ALL tenants (safety first)
 
 
+# ====================== PRIVATE UPLOADS FEATURE FLAG (Phase 1) =================
+# RAG_PRIVATE_UPLOADS gates the entire upload feature (Phase 2+ routes +
+# ingestion worker). DEFAULT OFF — with the flag unset the gateway mounts
+# NO upload route, and the nightly battery / A.2 gate are untouched.
+def private_uploads_enabled() -> bool:
+    """Phase 1 scaffolding: the single feature gate for the uploads build.
+    True only when RAG_PRIVATE_UPLOADS=1 (the same explicit-opt-in style
+    as RAG_FACT_FASTPATH / RAG_EXEC_PEER_FAILOVER)."""
+    return os.getenv("RAG_PRIVATE_UPLOADS", "") in ("1", "true", "yes")
+
+
 # ============================== ADMIN AUTH =================================
 def require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
     expected = os.getenv("ADMIN_API_KEY")
