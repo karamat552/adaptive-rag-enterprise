@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from pathlib import Path
 import logging
 import os
 import secrets
@@ -58,6 +59,7 @@ from adaptive_rag import (
     get_settings,
 )
 from db import (
+    build_certificate_bundle,
     close_pool,
     evict_from_semantic_cache,
     get_settings as db_get_settings,
@@ -733,7 +735,7 @@ async def export_certificate(run_id: str, tenant_id: Optional[str] = None,
     tenant = _resolve_scoped_tenant(auth_tenant, tenant_id)
     try:
         bundle = await asyncio.to_thread(
-            db.build_certificate_bundle, run_id, tenant)
+            build_certificate_bundle, run_id, tenant)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:

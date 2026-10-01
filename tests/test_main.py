@@ -753,3 +753,34 @@ def test_private_uploads_flag_explicit_on(client, monkeypatch):
     import os
     monkeypatch.setenv("RAG_PRIVATE_UPLOADS", "1")
     assert main.private_uploads_enabled() is True
+
+
+# ==================== /export 404 + 200 path (Step 5, 2026-09-30) ============
+def test_export_nonexistent_run_returns_404(client, monkeypatch):
+    """/export for a run with no receipt must 404, not 500. Caught the live
+    bug: the handler referenced the never-imported `db` MODULE name, so every
+    /export call raised NameError -> 500 — including valid receipts."""
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+    r = client.get("/export/00000000deadbeef",
+                   params={"tenant_id": "tenant-a"},
+                   headers={"X-API-Key": "secret-a"})
+    assert r.status_code == 404, \
+        f"/export for a missing run must 404, was {r.status_code}"
+
+
+def test_export_serves_bundle_for_existing_receipt(client, monkeypatch):
+    """The 200 path must reach the bundle builder and stream the zip. On the
+    broken code this died with NameError before the builder was ever
+    called."""
+    monkeypatch.setenv("QUERY_API_KEYS", "tenant-a:secret-a")
+
+    def _fake_bundle(run_id, tenant_id=None):
+        return {"receipt": {"run_id": run_id},
+                "signature": {"public_key": "PK"}}
+
+    monkeypatch.setattr(main, "build_certificate_bundle", _fake_bundle)
+    r = client.get("/export/run-exists-1",
+                   params={"tenant_id": "tenant-a"},
+                   headers={"X-API-Key": "secret-a"})
+    assert r.status_code == 200, f"was {r.status_code}: {r.text[:200]}"
+    assert r.headers["content-type"].startswith("application/zip")
