@@ -1427,7 +1427,8 @@ async def _multi_query_search(search_q: str, *, category: Optional[str],
 # ===========================================================================
 async def _specialist(name: str, system_prompt: str, category: str,
                       search_q: str, original_q: str,
-                      top_k: int = 5) -> Dict[str, Any]:
+                      top_k: int = 5,
+                      tenant_id: Optional[str] = None) -> Dict[str, Any]:
     out: Dict[str, Any] = {"name": name, "report": "", "records": [],
                            "degraded": False, "usage": (0, 0, 0, 0)}
     try:
@@ -1453,7 +1454,8 @@ async def _specialist(name: str, system_prompt: str, category: str,
             for comp in multi_companies:
                 try:
                     rows = await _multi_query_search(
-                        search_q, category=category, company=comp, top_k=15)
+                        search_q, category=category, company=comp, top_k=15,
+                        tenant_id=tenant_id)
                 except Exception as e:
                     logger.warning("[%s] per-company search failed (%s): %s",
                                     name, comp, e)
@@ -1467,14 +1469,16 @@ async def _specialist(name: str, system_prompt: str, category: str,
         else:
             try:
                 raw = await _multi_query_search(search_q, category=category,
-                                                company=company_filter, top_k=20)
+                                                company=company_filter, top_k=20,
+                                                tenant_id=tenant_id)
             except Exception as e:
                 logger.warning("[%s] scoped search failed: %s", name, e)
                 raw = []
         if not raw:
             try:
                 raw = await _multi_query_search(search_q, category=None,
-                                                company=None, top_k=15)
+                                                company=None, top_k=15,
+                                                tenant_id=tenant_id)
             except Exception as e:
                 logger.warning("[%s] fallback search failed: %s", name, e)
                 raw = []
@@ -1691,7 +1695,8 @@ async def premise_fast_path(state: MultiAgentState) -> MultiAgentState:
     probe = " ".join(terms[:8])
     try:
         hits = await _db_call(pgvector_hybrid_search, probe, top_k=3,
-                              company_filter=scoped_companies[0])
+                              company_filter=scoped_companies[0],
+                              tenant_id=state.get("tenant_id") or None)
     except Exception as exc:
         logger.warning("Premise probe failed (%s) — continuing to full "
                        "pipeline.", exc)
@@ -1759,7 +1764,8 @@ async def execute_specialist_fleet(state: MultiAgentState) -> MultiAgentState:
     per_specialist_k = max(5, 15 // max(1, len(specialists)))
     results = await asyncio.gather(*[
         _specialist(name, prompt, cat, search_q, original_q,
-                    top_k=per_specialist_k)
+                    top_k=per_specialist_k,
+                    tenant_id=state.get("tenant_id") or None)
         for name, (prompt, cat) in specialists.items()
     ])
 

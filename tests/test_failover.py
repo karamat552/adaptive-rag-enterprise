@@ -979,10 +979,13 @@ def test_specialist_pruning_default_on_with_escape_hatch():
 
     seen_k = {}
 
+    seen_tenants = {}
+
     async def _spy_specialist(name, prompt, cat, search_q, original_q,
-                              top_k=5):
+                              top_k=5, tenant_id=None):
         seen[name] = True
         seen_k[name] = top_k
+        seen_tenants.setdefault(name, set()).add(tenant_id)
         return {"name": name, "report": f"{name} report", "records": [],
                 "degraded": False, "usage": (0, 0, 0, 0)}
 
@@ -999,6 +1002,8 @@ def test_specialist_pruning_default_on_with_escape_hatch():
         upd = asyncio.run(ar.execute_specialist_fleet(state))
     assert list(seen) == ["financial"], \
         "pruning must be default-on: only the selected specialist runs"
+    assert seen_tenants == {"financial": {"default"}}, \
+        "the fleet must thread the run's tenant into every specialist"
 
     # escape hatch (env explicitly 0): full fleet for A/B comparisons
     seen.clear()
