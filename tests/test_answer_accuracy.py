@@ -28,6 +28,14 @@ if not (os.getenv("DB_DATABASE_URL") or os.getenv("NEON_DATABASE_URL")
 import pytest  # noqa: E402
 
 
+# Phase 1 Step 8d (2026-09-30): every test here runs the REAL pipeline via
+# arun_query — live LLM calls plus real database writes. Unmarked, this file
+# stalled the local "not live" suite inside the exec-peer 429-failover retry
+# loop under the exhausted Groq daily wall (each peer lane waits up to 90s)
+# and wrote ~41 receipts to the production database in the process. Live-only.
+pytestmark = pytest.mark.live
+
+
 def _run(question: str) -> dict:
     from adaptive_rag import arun_query
     return asyncio.run(arun_query(question))
