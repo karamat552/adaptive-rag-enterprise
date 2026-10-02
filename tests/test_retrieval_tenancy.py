@@ -58,6 +58,8 @@ def test_specialist_retrieval_binds_run_tenant(monkeypatch):
     monkeypatch.setattr(ar, "_get_reranker",
                         lambda: SimpleNamespace(
                             rerank=lambda req: []))
+    monkeypatch.setattr(ar, "_get_engine", lambda model: object())
+    monkeypatch.setattr(ar, "_bind_output_cap", lambda engine, cap: engine)
     async def fake_llm_call(engine, messages, stage, allow_failover=False):
         return SimpleNamespace(content="specialist report [1]"), \
             SimpleNamespace(totals=lambda: (0, 0, 0, 0))
@@ -86,6 +88,8 @@ def test_specialist_default_tenant_passthrough_unchanged(monkeypatch):
     monkeypatch.setattr(ar, "_multi_query_search", fake_mq_search)
     monkeypatch.setattr(ar, "_get_reranker",
                         lambda: SimpleNamespace(rerank=lambda req: []))
+    monkeypatch.setattr(ar, "_get_engine", lambda model: object())
+    monkeypatch.setattr(ar, "_bind_output_cap", lambda engine, cap: engine)
     async def fake_llm_call(engine, messages, stage, allow_failover=False):
         return SimpleNamespace(content="r [1]"), \
             SimpleNamespace(totals=lambda: (0, 0, 0, 0))
