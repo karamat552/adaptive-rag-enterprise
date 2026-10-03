@@ -11,8 +11,12 @@
 name: shadow-battery
 
 on:
-  schedule:
-    - cron: "0 1 * * *"   # 01:00 UTC — same fresh Groq window as the canary
+  # PAUSED 2026-10-02 (owner decision, ADR-022 draft): eight consecutive
+  # 90-minute timeout kills (runs #9-#16) produced zero verdicts and zero
+  # artifacts while consuming most of the Groq daily wall (~33-41 real
+  # receipts/night). Resume by uncommenting the two schedule lines below.
+  # schedule:
+  #   - cron: "0 1 * * *"   # 01:00 UTC — same fresh Groq window as the canary
   workflow_dispatch: {}     # manual trigger (ad-hoc A.2 measurement)
 
 jobs:
