@@ -856,6 +856,77 @@ def test_verified_refusal_xbrl_objection_named(monkeypatch):
     assert len(saved["evidence"]) == 1, "evidence in play must ride the receipt"
 
 
+def test_degraded_guard_carries_the_quarantine_reason(monkeypatch):
+    """fact_checker_guard computes WHY it fail-closed; the reason must ride
+    the state (audit_objection), not just the logger.
+
+    Production finding (pipeline audit, 2026-10-03): the guard built
+    "specialists quarantined: ['financial']" and then returned only
+    {grounded: False, outcome: unverified_system} — the precise cause was
+    dropped, so every degraded run's refusal fell through to the generic
+    'draft failed the grounding audit after N attempts'. Undeclared state
+    keys are silently dropped at node merge, so the channel is declared too.
+    """
+    import asyncio
+    import adaptive_rag as ar
+
+    async def _no_db(fn, *args, **kwargs):
+        return None
+
+    monkeypatch.setattr(ar, "_db_call", _no_db)
+    upd = asyncio.run(ar.fact_checker_guard({
+        "original_question": "Apple revenue?", "run_id": "run-deg",
+        "tenant_id": "default", "retry_count": 0,
+        "documents": ["Apple | a.pdf | p1\n89,498"],
+        "evidence_records": [{"chunk_hash": "h", "content": "89,498"}],
+        "final_executive_report": "Apple revenue was 89,498 [1].",
+        "degraded_agents": ["financial"]}))
+    assert upd["grounded"] is False, "a degraded run can never certify"
+    assert "quarantin" in (upd.get("audit_objection") or "").lower()
+    assert "financial" in upd["audit_objection"], "names the actual specialist"
+
+
+def test_degraded_refusal_names_the_quarantined_specialist(monkeypatch):
+    """End-to-end: the quarantine reason reaches the USER's refusal text."""
+    import asyncio
+    import adaptive_rag as ar
+
+    saved = {}
+
+    async def _spy_db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
+                  contradictions=None, tenant_id=None, model_id=None,
+                  prompt_sha256=None):
+        saved.update(answer=answer, verdict=audit_verdict)
+        return True
+
+    monkeypatch.setattr(ar, "_db_call", _spy_db)
+    monkeypatch.setattr(ar, "save_verification_receipt", _spy_save)
+    upd = asyncio.run(ar.verified_refusal({
+        "original_question": "Q?", "run_id": "run-deg-2", "tenant_id": "default",
+        "evidence_records": [{"chunk_hash": "a" * 64}],
+        "audit_objection": "specialists quarantined: ['risk']"}))
+    text = upd["final_executive_report"]
+    assert "quarantined" in text and "risk" in text, \
+        f"refusal must name the quarantine cause, got: {text[-160:]!r}"
+    assert saved["verdict"] == "refused"
+
+
+def test_audit_objection_is_a_declared_graph_channel():
+    """LangGraph drops undeclared TypedDict keys at node merge — the channel
+    must exist or the reason vanishes in the graph path (the 2026-09-10 bug
+    class that silently discarded five keys)."""
+    import adaptive_rag as ar
+    app = ar.get_graph()
+    channels = getattr(app, "channels", None) or getattr(app.graph, "channels", None)
+    if not channels:
+        import pytest
+        pytest.skip("channel introspection unavailable on this langgraph")
+    assert "audit_objection" in channels
+
+
 def test_premise_refusal_saves_no_receipt(monkeypatch):
     """The premise fast-path writes its own specific refusal and has no
     evidence in play — it must not overwrite the receipt channel with a

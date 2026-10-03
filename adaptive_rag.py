@@ -1050,6 +1050,14 @@ class MultiAgentState(TypedDict, total=False):
     outcome: str
     cached_hit: bool
     degraded_agents: List[str]
+    # audit_objection — WHY the guard fail-closed, carried to the refusal text.
+    # fact_checker_guard already computes the precise reason ('specialists
+    # quarantined: [...]', 'synthesis quarantined', ...) but only LOGGED it,
+    # so a user whose run died to a quarantined specialist was told the
+    # generic 'draft failed the grounding audit' — the exact silent-[] problem
+    # the 2026-09-06 lesson called out. Declared here because LangGraph drops
+    # undeclared keys at node-merge.
+    audit_objection: str
     run_id: str
     tenant_id: str
     # STATE-CHANNEL COMPLETENESS (deploy-verification finding #4, 2026-09-10):
@@ -2957,7 +2965,8 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
         else:
             reason = "synthesis returned an empty draft"
         logger.warning("Audit AUTO-FAILS (fail-closed) — %s.", reason)
-        return {"grounded": False, "outcome": "unverified_system"}
+        return {"grounded": False, "outcome": "unverified_system",
+                "audit_objection": reason}
 
     bad_cite = citation_pre_audit(draft, len(docs))
     if bad_cite:
@@ -3354,6 +3363,9 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
         objection = ("XBRL crosscheck: claimed %s vs official %s (%s %s)"
                      % (_xi.get("claimed"), _xi.get("official"),
                         _xi.get("company"), _xi.get("metric")))
+    elif state.get("audit_objection"):
+        # The guard named the cause; do not bury it behind the generic text.
+        objection = state["audit_objection"]
     else:
         objection = ("draft failed the grounding audit after %d attempts"
                      % get_settings().max_retries)
