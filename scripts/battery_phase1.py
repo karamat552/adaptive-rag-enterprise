@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import json
 import logging
 import sys
 from datetime import datetime, timezone
@@ -185,6 +186,7 @@ async def shadow_pass(limit: Optional[int] = None) -> List[Dict[str, Any]]:
                           "agreement_class": None, "capacity_blocked": False,
                           "tokens": 0, "per_model": {}, "latency_s": None})
             rows.append(entry)
+            print("SHADOW-ROW " + json.dumps(entry, default=str), flush=True)
             continue
         degraded = result.get("degraded_agents") or []
         answer_text = result.get("answer") or ""
@@ -217,6 +219,7 @@ async def shadow_pass(limit: Optional[int] = None) -> List[Dict[str, Any]]:
                     entry["agreement_class"], entry["tokens"],
                     entry["latency_s"])
         rows.append(entry)
+        print("SHADOW-ROW " + json.dumps(entry, default=str), flush=True)
     return rows
 
 
