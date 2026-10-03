@@ -320,7 +320,7 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 
 ```bash
 pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.py
-# → 363 passed (offline + DB-integration when reachable; deterministic, CI-safe)
+# → 375 passed (offline + DB-integration when reachable; deterministic, CI-safe)
 ```
 
 | Suite | Tests | What it proves |
@@ -343,6 +343,47 @@ pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.
 | test_db.py | 10 | RLS isolation, pool, migration, epoch partitioning |
 
 CI (`.github/workflows/ci.yml`): unit → pgvector-16 service integration → Docker build.
+
+### Pipeline audit — evidence per stage, not a green checkmark
+
+`pytest` proves the units work. It does not prove the *pipeline* works, end to
+end, in the order a request actually travels. Two commands close that gap:
+
+```bash
+python scripts/pipeline_audit.py            # 38 checks, 9 stages, zero LLM tokens
+python scripts/pipeline_audit.py --json     # machine-readable (CI gate; exit 1 on any FAIL)
+python scripts/pipeline_audit_mutations.py  # 9 injected defects — can the audit go red?
+```
+
+Every check prints the **observed value** as its evidence, so the claim and the
+proof sit on the same line:
+
+```
+[2-pathA] covered triples serve at ZERO LLM tokens
+      → 5/5 served — Apple:ok, Apple:ok, Tesla:ok, Tesla:ok, Meta:ok
+[1-cache] replay restores documents (sources), not just the answer
+      → cached_hit=True, documents restored=True
+[8-serving] /query/stream forwards the RESOLVED tenant (not the raw param)
+      → passes resolved tenant=True; still passes raw tenant_id=False
+```
+
+A check that cannot run reports **SKIP** (visible), never a silent pass. Last
+full run: **38/38 PASS, 0 FAIL, 0 SKIP**.
+
+The mutation controls exist because a green audit proves nothing until it can
+go red. Each control injects a realistic regression — a dropped tenant
+predicate, an inverted growth gate, a fixed `top_k` that reintroduces the
+15→5 evidence-pool bug, a verifier that blesses broken links — into a
+throwaway copy and asserts the matching check flips to FAIL. Last run:
+**9/9 CAUGHT**.
+
+Two controls are fixture-level *by design*: Path A and tenant-scoped caching
+are defended in depth (forcing `path='fact'` for every query still demotes,
+because `build_path_a_answer` independently declines; deleting the cache's
+`WHERE tenant_id` predicate still cannot leak, because row-level security
+sits beneath it). No single-line mutation can violate either guard, so the
+controls mutate the audit's own fixtures to prove those assertions actually
+fire. Both facts are documented at the control site.
 
 ---
 
