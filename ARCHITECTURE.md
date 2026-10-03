@@ -105,9 +105,14 @@ migration 008) are designed but PAUSED by owner decision.
 4. **Sign/polarity lives in prose** ("net loss of $X") — invisible to all
    figure-based gates; only the LLM auditor can catch it (0/4 deterministic
    catches in B4).
-5. **Fact-store period fidelity bug**: Tesla's diluted EPS is stored as the
-   FY2023 value (2.26) under a Q4 period, which false-flagged a faithful Q4
-   claim (0.71) — reported, not yet fixed.
+5. **CORRECTED 2026-10-02 (was my misdiagnosis)**: Tesla's Q4-2023 GAAP
+   diluted EPS really IS $2.27 (10-K p.25 — net income $7,928M including
+   the one-time tax benefit, over ~3.49B shares); $0.71 is the NON-GAAP
+   figure (p.4). My benchmark draft quoted the non-GAAP value as plain
+   "diluted EPS" — the XBRL gate was right to flag it. The 234-row span
+   scan found ZERO mismatches among dual-key reconciled rows. Real nuance
+   worth keeping: GAAP/non-GAAP basis distinctions live with the audit,
+   and the fact store carries no basis label on claims.
 6. **The segment-vs-consolidated misbind** (a gross-margin question answered
    with the Services segment revenue) is real and reproduced; B2's design
    (ingest-time scope tagging + a scope gate) awaits approval.
