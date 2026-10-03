@@ -2,7 +2,12 @@
 
 ![CI](https://github.com/karamat552/adaptive-rag-enterprise/actions/workflows/ci.yml/badge.svg)
 
-**311 tests · battery-best 90% / live-run 50–67% recall (every miss documented) · 0 fabrications · every certification AND refusal crypto-receipted · 22 regression classes · 4 provider lanes**
+> **Not financial advice.** This system is a technical demonstration of a
+> retrieval-and-verification pipeline over public SEC filings. Answers are
+> model-generated from an indexed corpus and checked by deterministic gates —
+> they can still be wrong, and no claim here is investment guidance.
+
+**390+ tests (offline suite 366 green; live/integration classes run separately) · every certification AND refusal crypto-receipted · 5 deterministic gates + LLM audit · 4 provider lanes**
 
 > I built this to answer one question: *can an AI system prove — cryptographically,
 > deterministically, without trust — that every number it outputs came from a

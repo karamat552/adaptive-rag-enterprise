@@ -84,6 +84,14 @@ export default function App() {
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6">
       <Header health={health} pingMs={pingMs} />
 
+      <p
+        role="note"
+        className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-center text-xs text-amber-200/90"
+      >
+        Not financial advice — this console is a technical demonstration of a
+        retrieval-and-verification pipeline over public SEC filings.
+      </p>
+
       <main className="flex flex-1 flex-col gap-6">
         <QueryConsole
           onAsk={ask}
