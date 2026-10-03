@@ -1608,6 +1608,16 @@ async def check_cache_node(state: MultiAgentState) -> MultiAgentState:
             "financial_report": cached.get("financial_report"),
             "risk_report": cached.get("risk_report"),
             "product_report": cached.get("product_report"),
+            # SOURCES ON REPLAY (live-caught 2026-10-03): the payload never
+            # stored `documents`, so every cache replay shaped `sources: []`
+            # — the console showed a cached brief with NO evidence listed,
+            # directly contradicting the "every claim traceable" contract.
+            # Replays are the common path (identical re-asks hit at ~0
+            # distance), so this was invisible on first ask and visible on
+            # every repeat. Legacy entries predate this field: they fall
+            # back to [] (unchanged behaviour) and self-heal on the next
+            # full-price certification.
+            "documents": cached.get("documents") or [],
             "grounded": True, "outcome": "vectorstore", "cached_hit": True,
             "provenance_run_id": provenance_run_id,
         }
@@ -3130,6 +3140,11 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
                                    "financial_report": state.get("financial_report"),
                                    "risk_report": state.get("risk_report"),
                                    "product_report": state.get("product_report"),
+                                   # Persist the evidence the draft cited, so
+                                   # a replay can still show its sources
+                                   # (live-caught 2026-10-03: replays shaped
+                                   # `sources: []` because this was missing).
+                                   "documents": state.get("documents") or [],
                                    "grounded": True, "outcome": "vectorstore",
                                    # provenance threading (Gauntlet-4 finding):
                                    # the receipt for THIS certification is the

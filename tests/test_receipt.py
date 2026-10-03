@@ -667,6 +667,75 @@ def test_cache_replay_with_provenance_serves_normally():
     assert upd.get("provenance_run_id") == "orig-run-7"
 
 
+def test_cache_replay_restores_sources():
+    """LIVE-CAUGHT 2026-10-03 (production): a cache replay shaped
+    `sources: []` because the saved payload never carried `documents` —
+    the console rendered a certified brief with NO evidence listed, while
+    the first, uncached ask showed it. Replays are the common path
+    (identical re-asks hit at ~0 distance), so the regression was visible
+    on every repeat and invisible on the first ask. The payload must now
+    round-trip the cited documents."""
+    import asyncio
+    import adaptive_rag as ar
+
+    docs = ["Apple | aapl-10-q | Page 5\nServices: 22,314",
+            "Tesla | tsla-10-k | Page 3\nEnergy revenue: 6,035"]
+
+    def _modern(*a, **k):
+        return {"answer": "certified [1][2]", "documents": docs,
+                "provenance_run_id": "orig-run-7"}
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _modern), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "replay-run-9", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is True
+    assert upd.get("documents") == docs, \
+        "a replay must still show the evidence its certification rested on"
+
+
+def test_cache_payload_persists_documents():
+    """Source-level contract for the same bug: the save path must store
+    `documents` in the cached response payload. Without it, CHECK-side
+    restoration has nothing to restore."""
+    import inspect
+    import adaptive_rag as ar
+    src = inspect.getsource(ar.fact_checker_guard)
+    assert '"documents": state.get("documents") or []' in src, \
+        "the cache payload must persist the cited documents"
+
+
+def test_legacy_cache_entry_without_documents_still_serves():
+    """Legacy payloads predate the `documents` field. They must keep
+    serving (as [] sources, the old behaviour) rather than crash — the
+    moat is that /verify still resolves their provenance receipt; the
+    evidence list self-heals on the next full-price certification."""
+    import asyncio
+    import adaptive_rag as ar
+
+    def _legacy(*a, **k):
+        return {"answer": "old certified [1]",
+                "provenance_run_id": "orig-run-legacy"}   # no documents
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _legacy), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "replay-run-9", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is True
+    assert upd.get("documents") == []
+    assert upd.get("provenance_run_id") == "orig-run-legacy"
+
+
 def test_graph_channels_complete():
     """DEPLOY-VERIFICATION FINDING #4 (2026-09-10, live-caught on Render):
     LangGraph DROPS undeclared TypedDict keys at node-merge. FIVE keys were
