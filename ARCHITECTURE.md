@@ -33,9 +33,13 @@ instantly. A replay whose stored answer lacks provenance is deleted
 **3. FastPath (`fact_fastpath`).** For questions whose (company, metric,
 period) exists in the fact store — rows extracted from PDF spans AND
 reconciled against SEC's structured XBRL data (dual-key) — a deterministic
-answer is served with zero LLM calls (~6-10 s, mostly embedding). It is
-flag-gated (`RAG_FACT_FASTPATH`, default OFF) until the A.2 promotion gate
-passes; today the fact store covers only 7-8 triples (three companies).
+answer is served with zero LLM calls (~6-10 s, mostly embedding). **The
+flag is ON in production** (owner-set `RAG_FACT_FASTPATH=1` in the Render
+env, verified via the Render dashboard 2026-10-02); the code default is
+OFF and the check is exact-match (`!= "1"` — a stray space or trailing
+newline silently disables it), and the nightly runners never set it (the
+shadow battery must measure V1). Today the fact store covers 7 triples
+across three companies, all span-verified 2026-10-02.
 
 **4. Router.** A small LLM classifies the question (financial-comparison /
 risk / product / out-of-domain). Out-of-domain questions never reach the
