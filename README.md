@@ -9,10 +9,19 @@
 > verified source?*
 
 **🚀 Live demo:** [adaptive-rag-enterprise.streamlit.app](https://adaptive-rag-enterprise.streamlit.app)
+(free tier — click "wake it back up" if it shows the sleep screen)
 · **API:** [adaptive-rag-enterprise.onrender.com](https://adaptive-rag-enterprise.onrender.com)
 ([/health](https://adaptive-rag-enterprise.onrender.com/health) ·
 [/metrics](https://adaptive-rag-enterprise.onrender.com/metrics) ·
-[/verify/{run_id}](https://adaptive-rag-enterprise.onrender.com/verify/1efc9fe87875))
+[/verify/2d96298969e7](https://adaptive-rag-enterprise.onrender.com/verify/2d96298969e7))
+
+> **Proof in one click (no keys, no login, zero LLM tokens):**
+> <https://adaptive-rag-enterprise.onrender.com/verify/2d96298969e7> —
+> a live Path-A run whose receipt re-verifies deterministically
+> (`verified: true`, `hash_ok: true`, `verbatim: true`). The 15/15
+> white-whale receipt below is preserved as an immutable artifact in
+> [`audit_bundle_white_whale/`](audit_bundle_white_whale/) — that one
+> survives database resets; the live run does not.
 
 ---
 
@@ -209,8 +218,21 @@ fixed, and locked with a named test. Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES
 
 **The white-whale receipt** (Apple-vs-Meta comparison — the hardest question,
 refused in 4 consecutive batteries before certifying): run `1efc9fe87875`,
-**15/15 cryptographic links verified**, exports as an offline-verifiable
-compliance bundle (see `audit_bundle_white_whale/`).
+**15/15 cryptographic links verified**. It is preserved in
+[`audit_bundle_white_whale/`](audit_bundle_white_whale/) as a committed,
+immutable artifact — verify it yourself, offline, in one command:
+
+```bash
+cd audit_bundle_white_whale && python verify_certificate.py
+# → PASS — chain verified offline (15/15 links ok, 0 citation issues)  [exit 0]
+```
+
+> **Why the bundle and not a live link:** that receipt lives in corpus
+> epoch 9. The production database was later rebuilt (the current corpus
+> is epoch 2), so `/verify/1efc9fe87875` correctly 404s — the row is gone.
+> The committed bundle is the durable form of the same proof, and it is
+> the one an outside auditor would actually be handed. Live receipts are
+> ephemeral by nature; anchor to the artifact.
 
 ---
 
