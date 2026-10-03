@@ -1092,6 +1092,13 @@ class MultiAgentState(TypedDict, total=False):
     fastpath_served: bool
     served_path: str
     fastpath_reason: str
+    # Live-caught 2026-10-03: a router outage (missing key, 429 storm,
+    # dead model catalog) fail-closed to route='out_of_domain', so the
+    # caller was told a perfectly good in-domain question was "outside
+    # the scope of the database" — a capacity/config problem wearing a
+    # logic problem's name. Same class as audit_unavailable: keep the
+    # fail-closed routing, NAME the true cause in the refusal text.
+    router_unavailable: bool
 
 
 def _with_usage(state: MultiAgentState, totals: Tuple[int, int, int, int],
@@ -1640,7 +1647,11 @@ The pruning flag controls whether the system USES your selection."""
             allow_failover=True)
     except Exception as e:
         logger.error("Router unavailable — FAIL-CLOSED to refusal: %s", e)
-        return {"route": "out_of_domain"}
+        # router_unavailable names the true cause for the refusal text:
+        # without it the caller reads "outside the scope of the database"
+        # and blames their own question for a provider/config failure
+        # (live-caught 2026-10-03 — no GROQ_API_KEY produced exactly that).
+        return {"route": "out_of_domain", "router_unavailable": True}
     if not isinstance(decision, RouteDecision):
         # Defense-in-depth (live crash 2026-09-13): a non-schema response
         # (raw AIMessage from an unbound failover lane) must never reach
@@ -1648,7 +1659,7 @@ The pruning flag controls whether the system USES your selection."""
         # Same contract as a router outage: fail-closed to refusal.
         logger.error("Router returned %s instead of RouteDecision — "
                      "FAIL-CLOSED to refusal.", type(decision).__name__)
-        return {"route": "out_of_domain"}
+        return {"route": "out_of_domain", "router_unavailable": True}
     logger.info("Routing Destination: %s", decision.destination.upper())
     extras: Dict[str, Any] = {"route": decision.destination}
     if getattr(decision, "active_specialists", None):
@@ -1720,6 +1731,21 @@ async def premise_fast_path(state: MultiAgentState) -> MultiAgentState:
 
 
 async def cannot_answer(state: MultiAgentState) -> MultiAgentState:
+    # TRUTHFUL REFUSAL (2026-10-03): route_question fail-closes to
+    # 'out_of_domain' on ANY router failure so the pipeline still refuses
+    # instead of crashing — but the refusal TEXT must not tell the caller
+    # their question was off-topic when the classifier never ran. Same
+    # rule as audit_unavailable on the audit stage (KNOWN_ISSUES).
+    if state.get("router_unavailable"):
+        logger.error("Router unavailable — refusing with the TRUE cause "
+                     "(not an out-of-domain verdict the router never made).")
+        return {"final_executive_report":
+                "⚠️ I could not classify this question: the routing stage is "
+                "unavailable (the language model behind it is unreachable, "
+                "unconfigured, or rate-limited). This is a service-side "
+                "problem, not a verdict on your question — please retry "
+                "shortly.",
+                "outcome": "out_of_domain"}
     logger.warning("Threat or out-of-scope query intercepted.")
     return {"final_executive_report":
             "This request is outside the scope of the enterprise SEC financial "

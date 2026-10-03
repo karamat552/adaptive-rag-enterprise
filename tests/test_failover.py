@@ -97,6 +97,14 @@ def test_failover_registry_empty_when_unset(monkeypatch):
     # pydantic-settings: the .env FILE also carries the var when the real
     # deployment configures failover — neutralize it for this test, restore after.
     import os
+    from pathlib import Path
+    # A bare clone has no .env (only .env.example is committed). This test
+    # edits the real .env in place, so WITHOUT the file there is nothing to
+    # neutralize and the old open() raised FileNotFoundError — a live-marked
+    # test must SKIP cleanly, never crash with a traceback that looks like a
+    # code regression. (Found 2026-10-03 running the suite on a fresh clone.)
+    if not Path(".env").exists():
+        pytest.skip("no .env in this checkout — nothing to neutralize")
     saved = {}
     try:
         with open(".env", encoding="utf-8") as fh:

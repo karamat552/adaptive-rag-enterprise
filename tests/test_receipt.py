@@ -690,7 +690,10 @@ def test_graph_channels_complete():
                 # 2026-09-16 live-caught additions: audit_unavailable
                 # separates technical refusals from logic rejections;
                 # shadow_coverage_miss is fact_shadow's coverage note.
+                # 2026-10-03: router_unavailable separates a router
+                # outage from a genuine out-of-domain verdict.
                 "audit_unavailable", "shadow_coverage_miss",
+                "router_unavailable",
                 # Phase-2 fast path (fact_fastpath node) channels.
                 "fastpath_served", "served_path", "fastpath_reason"):
         assert key in ks, (

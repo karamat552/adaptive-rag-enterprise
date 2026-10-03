@@ -655,7 +655,14 @@ async def query_stream(request: Request, question: str,
     run_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
     tenant = _resolve_scoped_tenant(auth_tenant, tenant_id)
     return StreamingResponse(
-        _event_stream(request, question, tenant_id, run_id),
+        # MUST forward the RESOLVED tenant, never the raw declared param:
+        # _resolve_scoped_tenant returns the key's binding when the caller
+        # omits tenant_id, and forwarding the raw None here re-resolved to
+        # the DEFAULT tenant — an authenticated acme key ran the entire
+        # SSE pipeline (retrieval, RLS scope, receipts) as 'default'.
+        # POST /query always passed the resolved value, so the two
+        # endpoints disagreed; the SSE path is the one the console uses.
+        _event_stream(request, question, tenant, run_id),
         media_type="text/event-stream",
         headers={"X-Request-ID": run_id, "Cache-Control": "no-cache",
                  "X-Accel-Buffering": "no"})
