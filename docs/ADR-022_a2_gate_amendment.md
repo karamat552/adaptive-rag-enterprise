@@ -76,9 +76,16 @@ No pruning happens today; nightly rows continue to accumulate at ~33–41/night.
 
 Under any amended option, **the green-night counter restarts from zero under
 the new definition on the first night the amended battery runs.** The
-pre-amendment streak (currently 0 green) is void, not carried. The A.2
-promotion decision (fastpath serving flag `RAG_FACT_FASTPATH` in production)
-remains gated on the new definition's consecutive-green requirement.
+pre-amendment streak (currently 0 green) is void, not carried.
+
+**Correction 2026-10-02:** the fastpath serving flag is ALREADY ON in
+production (owner-set `RAG_FACT_FASTPATH=1`, verified via the Render
+dashboard) — the A.2 gate is therefore not a promotion gate but a
+**confirmation gate**: its verdict (agreement + corrupted catches under the
+amended definition) either confirms the owner's decision or triggers a
+retreat (flag off). The nightly runners never set the flag (the shadow
+battery measures V1 by design), so battery receipts are full-pipeline runs
+regardless of the production flag.
 
 ## Consequences
 
