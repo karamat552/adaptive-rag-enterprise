@@ -253,6 +253,38 @@ def test_sse_honors_explicit_tenant(client, fake_graph, monkeypatch):
     assert fake_graph.captured_state["tenant_id"] == "acme"
 
 
+def test_sse_authenticated_key_without_declaration_uses_key_tenant(
+        client, fake_graph, monkeypatch):
+    """Regression (2026-10-03): /query/stream resolved the tenant correctly
+    and then forwarded the RAW declared param instead — an authenticated
+    'acme' key that simply omitted tenant_id ran the whole pipeline as
+    'default' (retrieval + RLS scope + receipt tenant), while POST /query
+    got it right. The key IS identity; omission must never silently
+    downgrade the caller to the default tenant."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "acme:secret-acme")
+    r = client.get("/query/stream",
+                   params={"question": "Apple services revenue?"},
+                   headers={"X-API-Key": "secret-acme"})
+    assert r.status_code == 200
+    assert fake_graph.captured_state["tenant_id"] == "acme", \
+        "SSE must run as the key's tenant, not the default tenant"
+
+
+def test_stream_and_post_agree_on_resolved_tenant(fake_graph, monkeypatch):
+    """The two run entry points must never disagree about identity: same key,
+    same (absent) declaration, same tenant — on both /query and /query/stream."""
+    import os
+    monkeypatch.setenv("QUERY_API_KEYS", "acme:secret-acme")
+    client = _SyncASGI(main.app)
+    client.post("/query", json={"question": "Apple services revenue?"},
+                headers={"X-API-Key": "secret-acme"})
+    assert fake_graph.captured_state["tenant_id"] == "acme"
+    client.get("/query/stream", params={"question": "Apple services revenue?"},
+               headers={"X-API-Key": "secret-acme"})
+    assert fake_graph.captured_state["tenant_id"] == "acme"
+
+
 def test_sse_anonymous_spoof_rejected(client, fake_graph, monkeypatch):
     """Anonymous (open-mode) caller DECLARING another tenant -> 403. The
     anonymous scope is the default tenant alone."""

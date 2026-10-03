@@ -667,6 +667,75 @@ def test_cache_replay_with_provenance_serves_normally():
     assert upd.get("provenance_run_id") == "orig-run-7"
 
 
+def test_cache_replay_restores_sources():
+    """LIVE-CAUGHT 2026-10-03 (production): a cache replay shaped
+    `sources: []` because the saved payload never carried `documents` —
+    the console rendered a certified brief with NO evidence listed, while
+    the first, uncached ask showed it. Replays are the common path
+    (identical re-asks hit at ~0 distance), so the regression was visible
+    on every repeat and invisible on the first ask. The payload must now
+    round-trip the cited documents."""
+    import asyncio
+    import adaptive_rag as ar
+
+    docs = ["Apple | aapl-10-q | Page 5\nServices: 22,314",
+            "Tesla | tsla-10-k | Page 3\nEnergy revenue: 6,035"]
+
+    def _modern(*a, **k):
+        return {"answer": "certified [1][2]", "documents": docs,
+                "provenance_run_id": "orig-run-7"}
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _modern), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "replay-run-9", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is True
+    assert upd.get("documents") == docs, \
+        "a replay must still show the evidence its certification rested on"
+
+
+def test_cache_payload_persists_documents():
+    """Source-level contract for the same bug: the save path must store
+    `documents` in the cached response payload. Without it, CHECK-side
+    restoration has nothing to restore."""
+    import inspect
+    import adaptive_rag as ar
+    src = inspect.getsource(ar.fact_checker_guard)
+    assert '"documents": state.get("documents") or []' in src, \
+        "the cache payload must persist the cited documents"
+
+
+def test_legacy_cache_entry_without_documents_still_serves():
+    """Legacy payloads predate the `documents` field. They must keep
+    serving (as [] sources, the old behaviour) rather than crash — the
+    moat is that /verify still resolves their provenance receipt; the
+    evidence list self-heals on the next full-price certification."""
+    import asyncio
+    import adaptive_rag as ar
+
+    def _legacy(*a, **k):
+        return {"answer": "old certified [1]",
+                "provenance_run_id": "orig-run-legacy"}   # no documents
+
+    async def _db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    import unittest.mock as mock
+    with mock.patch.object(ar, "check_semantic_cache", _legacy), \
+         mock.patch.object(ar, "_db_call", _db):
+        state = {"original_question": "q?", "retry_count": 0,
+                 "run_id": "replay-run-9", "tenant_id": "default"}
+        upd = asyncio.run(ar.check_cache_node(state))
+    assert upd.get("cached_hit") is True
+    assert upd.get("documents") == []
+    assert upd.get("provenance_run_id") == "orig-run-legacy"
+
+
 def test_graph_channels_complete():
     """DEPLOY-VERIFICATION FINDING #4 (2026-09-10, live-caught on Render):
     LangGraph DROPS undeclared TypedDict keys at node-merge. FIVE keys were
@@ -690,7 +759,10 @@ def test_graph_channels_complete():
                 # 2026-09-16 live-caught additions: audit_unavailable
                 # separates technical refusals from logic rejections;
                 # shadow_coverage_miss is fact_shadow's coverage note.
+                # 2026-10-03: router_unavailable separates a router
+                # outage from a genuine out-of-domain verdict.
                 "audit_unavailable", "shadow_coverage_miss",
+                "router_unavailable",
                 # Phase-2 fast path (fact_fastpath node) channels.
                 "fastpath_served", "served_path", "fastpath_reason"):
         assert key in ks, (
@@ -782,6 +854,77 @@ def test_verified_refusal_xbrl_objection_named(monkeypatch):
     assert saved["verdict"] == "refused"
     assert "$40,111M" in saved["answer"] and "$89,498M" in saved["answer"]
     assert len(saved["evidence"]) == 1, "evidence in play must ride the receipt"
+
+
+def test_degraded_guard_carries_the_quarantine_reason(monkeypatch):
+    """fact_checker_guard computes WHY it fail-closed; the reason must ride
+    the state (audit_objection), not just the logger.
+
+    Production finding (pipeline audit, 2026-10-03): the guard built
+    "specialists quarantined: ['financial']" and then returned only
+    {grounded: False, outcome: unverified_system} — the precise cause was
+    dropped, so every degraded run's refusal fell through to the generic
+    'draft failed the grounding audit after N attempts'. Undeclared state
+    keys are silently dropped at node merge, so the channel is declared too.
+    """
+    import asyncio
+    import adaptive_rag as ar
+
+    async def _no_db(fn, *args, **kwargs):
+        return None
+
+    monkeypatch.setattr(ar, "_db_call", _no_db)
+    upd = asyncio.run(ar.fact_checker_guard({
+        "original_question": "Apple revenue?", "run_id": "run-deg",
+        "tenant_id": "default", "retry_count": 0,
+        "documents": ["Apple | a.pdf | p1\n89,498"],
+        "evidence_records": [{"chunk_hash": "h", "content": "89,498"}],
+        "final_executive_report": "Apple revenue was 89,498 [1].",
+        "degraded_agents": ["financial"]}))
+    assert upd["grounded"] is False, "a degraded run can never certify"
+    assert "quarantin" in (upd.get("audit_objection") or "").lower()
+    assert "financial" in upd["audit_objection"], "names the actual specialist"
+
+
+def test_degraded_refusal_names_the_quarantined_specialist(monkeypatch):
+    """End-to-end: the quarantine reason reaches the USER's refusal text."""
+    import asyncio
+    import adaptive_rag as ar
+
+    saved = {}
+
+    async def _spy_db(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def _spy_save(run_id, question, answer, claims, evidence, audit_verdict,
+                  contradictions=None, tenant_id=None, model_id=None,
+                  prompt_sha256=None):
+        saved.update(answer=answer, verdict=audit_verdict)
+        return True
+
+    monkeypatch.setattr(ar, "_db_call", _spy_db)
+    monkeypatch.setattr(ar, "save_verification_receipt", _spy_save)
+    upd = asyncio.run(ar.verified_refusal({
+        "original_question": "Q?", "run_id": "run-deg-2", "tenant_id": "default",
+        "evidence_records": [{"chunk_hash": "a" * 64}],
+        "audit_objection": "specialists quarantined: ['risk']"}))
+    text = upd["final_executive_report"]
+    assert "quarantined" in text and "risk" in text, \
+        f"refusal must name the quarantine cause, got: {text[-160:]!r}"
+    assert saved["verdict"] == "refused"
+
+
+def test_audit_objection_is_a_declared_graph_channel():
+    """LangGraph drops undeclared TypedDict keys at node merge — the channel
+    must exist or the reason vanishes in the graph path (the 2026-09-10 bug
+    class that silently discarded five keys)."""
+    import adaptive_rag as ar
+    app = ar.get_graph()
+    channels = getattr(app, "channels", None) or getattr(app.graph, "channels", None)
+    if not channels:
+        import pytest
+        pytest.skip("channel introspection unavailable on this langgraph")
+    assert "audit_objection" in channels
 
 
 def test_premise_refusal_saves_no_receipt(monkeypatch):

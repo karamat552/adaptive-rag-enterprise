@@ -83,6 +83,11 @@ def main() -> int:
         print("  CLEAN — no logic drift, no capacity events")
 
     # Exit semantics
+    # `recall` was never bound (NameError on every path that reached these
+    # lines — the canary's exit code is what CI consumes, so this crashed
+    # precisely when it had a verdict to report). Read it from the same
+    # metrics dict the header line above already formats.
+    recall = metrics.get("recall_at_answerable", 0)
     if metrics.get("fabrications", 0) > 0:
         print("\nEXIT 1: fabrication — invariant broken")
         return 1

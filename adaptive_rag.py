@@ -1050,6 +1050,14 @@ class MultiAgentState(TypedDict, total=False):
     outcome: str
     cached_hit: bool
     degraded_agents: List[str]
+    # audit_objection — WHY the guard fail-closed, carried to the refusal text.
+    # fact_checker_guard already computes the precise reason ('specialists
+    # quarantined: [...]', 'synthesis quarantined', ...) but only LOGGED it,
+    # so a user whose run died to a quarantined specialist was told the
+    # generic 'draft failed the grounding audit' — the exact silent-[] problem
+    # the 2026-09-06 lesson called out. Declared here because LangGraph drops
+    # undeclared keys at node-merge.
+    audit_objection: str
     run_id: str
     tenant_id: str
     # STATE-CHANNEL COMPLETENESS (deploy-verification finding #4, 2026-09-10):
@@ -1092,6 +1100,13 @@ class MultiAgentState(TypedDict, total=False):
     fastpath_served: bool
     served_path: str
     fastpath_reason: str
+    # Live-caught 2026-10-03: a router outage (missing key, 429 storm,
+    # dead model catalog) fail-closed to route='out_of_domain', so the
+    # caller was told a perfectly good in-domain question was "outside
+    # the scope of the database" — a capacity/config problem wearing a
+    # logic problem's name. Same class as audit_unavailable: keep the
+    # fail-closed routing, NAME the true cause in the refusal text.
+    router_unavailable: bool
 
 
 def _with_usage(state: MultiAgentState, totals: Tuple[int, int, int, int],
@@ -1601,6 +1616,16 @@ async def check_cache_node(state: MultiAgentState) -> MultiAgentState:
             "financial_report": cached.get("financial_report"),
             "risk_report": cached.get("risk_report"),
             "product_report": cached.get("product_report"),
+            # SOURCES ON REPLAY (live-caught 2026-10-03): the payload never
+            # stored `documents`, so every cache replay shaped `sources: []`
+            # — the console showed a cached brief with NO evidence listed,
+            # directly contradicting the "every claim traceable" contract.
+            # Replays are the common path (identical re-asks hit at ~0
+            # distance), so this was invisible on first ask and visible on
+            # every repeat. Legacy entries predate this field: they fall
+            # back to [] (unchanged behaviour) and self-heal on the next
+            # full-price certification.
+            "documents": cached.get("documents") or [],
             "grounded": True, "outcome": "vectorstore", "cached_hit": True,
             "provenance_run_id": provenance_run_id,
         }
@@ -1640,7 +1665,11 @@ The pruning flag controls whether the system USES your selection."""
             allow_failover=True)
     except Exception as e:
         logger.error("Router unavailable — FAIL-CLOSED to refusal: %s", e)
-        return {"route": "out_of_domain"}
+        # router_unavailable names the true cause for the refusal text:
+        # without it the caller reads "outside the scope of the database"
+        # and blames their own question for a provider/config failure
+        # (live-caught 2026-10-03 — no GROQ_API_KEY produced exactly that).
+        return {"route": "out_of_domain", "router_unavailable": True}
     if not isinstance(decision, RouteDecision):
         # Defense-in-depth (live crash 2026-09-13): a non-schema response
         # (raw AIMessage from an unbound failover lane) must never reach
@@ -1648,7 +1677,7 @@ The pruning flag controls whether the system USES your selection."""
         # Same contract as a router outage: fail-closed to refusal.
         logger.error("Router returned %s instead of RouteDecision — "
                      "FAIL-CLOSED to refusal.", type(decision).__name__)
-        return {"route": "out_of_domain"}
+        return {"route": "out_of_domain", "router_unavailable": True}
     logger.info("Routing Destination: %s", decision.destination.upper())
     extras: Dict[str, Any] = {"route": decision.destination}
     if getattr(decision, "active_specialists", None):
@@ -1720,6 +1749,21 @@ async def premise_fast_path(state: MultiAgentState) -> MultiAgentState:
 
 
 async def cannot_answer(state: MultiAgentState) -> MultiAgentState:
+    # TRUTHFUL REFUSAL (2026-10-03): route_question fail-closes to
+    # 'out_of_domain' on ANY router failure so the pipeline still refuses
+    # instead of crashing — but the refusal TEXT must not tell the caller
+    # their question was off-topic when the classifier never ran. Same
+    # rule as audit_unavailable on the audit stage (KNOWN_ISSUES).
+    if state.get("router_unavailable"):
+        logger.error("Router unavailable — refusing with the TRUE cause "
+                     "(not an out-of-domain verdict the router never made).")
+        return {"final_executive_report":
+                "⚠️ I could not classify this question: the routing stage is "
+                "unavailable (the language model behind it is unreachable, "
+                "unconfigured, or rate-limited). This is a service-side "
+                "problem, not a verdict on your question — please retry "
+                "shortly.",
+                "outcome": "out_of_domain"}
     logger.warning("Threat or out-of-scope query intercepted.")
     return {"final_executive_report":
             "This request is outside the scope of the enterprise SEC financial "
@@ -2921,7 +2965,8 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
         else:
             reason = "synthesis returned an empty draft"
         logger.warning("Audit AUTO-FAILS (fail-closed) — %s.", reason)
-        return {"grounded": False, "outcome": "unverified_system"}
+        return {"grounded": False, "outcome": "unverified_system",
+                "audit_objection": reason}
 
     bad_cite = citation_pre_audit(draft, len(docs))
     if bad_cite:
@@ -3104,6 +3149,11 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
                                    "financial_report": state.get("financial_report"),
                                    "risk_report": state.get("risk_report"),
                                    "product_report": state.get("product_report"),
+                                   # Persist the evidence the draft cited, so
+                                   # a replay can still show its sources
+                                   # (live-caught 2026-10-03: replays shaped
+                                   # `sources: []` because this was missing).
+                                   "documents": state.get("documents") or [],
                                    "grounded": True, "outcome": "vectorstore",
                                    # provenance threading (Gauntlet-4 finding):
                                    # the receipt for THIS certification is the
@@ -3313,6 +3363,9 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
         objection = ("XBRL crosscheck: claimed %s vs official %s (%s %s)"
                      % (_xi.get("claimed"), _xi.get("official"),
                         _xi.get("company"), _xi.get("metric")))
+    elif state.get("audit_objection"):
+        # The guard named the cause; do not bury it behind the generic text.
+        objection = state["audit_objection"]
     else:
         objection = ("draft failed the grounding audit after %d attempts"
                      % get_settings().max_retries)
