@@ -1,0 +1,395 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "lifecycle",
+  "quality": "showcase",
+  "startedAt": "2026-10-05T08:32:42.757Z",
+  "specification": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/candidate.json",
+    "sha256": "c79afe3ace325f72ebe80ee5fa154c7467a1f588b541c46e8e6ae17d3309d42b",
+    "bytes": 6632
+  },
+  "artifact": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+    "sha256": "3ea479208f968a50b83a6b174e9759c45c45c1968266f7993d5faf36676cc9c9",
+    "bytes": 766720
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "lifecycle",
+        "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/candidate.json",
+        "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/adaptive-rag-enterprise",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "c79afe3ace325f72ebe80ee5fa154c7467a1f588b541c46e8e6ae17d3309d42b",
+          "bytes": 6632
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 279,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "lifecycle",
+        "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/candidate.json",
+        "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/adaptive-rag-enterprise",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "572548a8-a5ae-4025-aa65-2ecb1adad8b5",
+        "ok": true,
+        "command": "deliver",
+        "type": "lifecycle",
+        "input": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/candidate.json",
+        "output": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+        "specification": {
+          "sha256": "c79afe3ace325f72ebe80ee5fa154c7467a1f588b541c46e8e6ae17d3309d42b",
+          "bytes": 6632
+        },
+        "artifact": {
+          "sha256": "3ea479208f968a50b83a6b174e9759c45c45c1968266f7993d5faf36676cc9c9",
+          "bytes": 766720
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "https://github.com/karamat552/adaptive-rag-enterprise",
+          "revision": "1c2cface7058dc328170335e444a2fab05639778",
+          "references": 7
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 122,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+        "artifact": {
+          "sha256": "3ea479208f968a50b83a6b174e9759c45c45c1968266f7993d5faf36676cc9c9",
+          "bytes": 766720
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 0,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 85.8,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.315789473684211,
+            "maxBends": 2,
+            "routesOverSuggestedBends": 0,
+            "maxStretch": 1.496,
+            "routesOverSuggestedStretch": 1,
+            "minSegmentPx": 64,
+            "minInteriorSegmentPx": 488,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [],
+            "detours": [
+              {
+                "relationship": {
+                  "id": "t10",
+                  "from": "gauntlet",
+                  "to": "refused",
+                  "label": "gate rejects / audit down",
+                  "collectionIndex": 9,
+                  "artifactIndex": 10
+                },
+                "bends": 2,
+                "stretch": 1.496,
+                "directCorridorBlockers": [
+                  {
+                    "id": "certified",
+                    "label": "Certified",
+                    "box": [
+                      963,
+                      424,
+                      140,
+                      64
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "leadingSpace": {
+            "measured": false,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": null,
+            "requestedTargetMet": null,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "node",
+              "id": "received"
+            },
+            "minimumSourceTextPx": 8,
+            "minimumProjectedTextPx": 6.315789473684211,
+            "semanticTextCount": 28
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "572548a8-a5ae-4025-aa65-2ecb1adad8b5"
+      }
+    },
+    "browser-check": {
+      "status": "skipped",
+      "exitCode": 2,
+      "durationMs": 17,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "skipped",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "572548a8-a5ae-4025-aa65-2ecb1adad8b5",
+        "artifact": {
+          "path": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+          "sha256": "3ea479208f968a50b83a6b174e9759c45c45c1968266f7993d5faf36676cc9c9",
+          "bytes": 766720
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "unavailable",
+          "executable": null
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/chrome-unavailable",
+            "severity": "warning",
+            "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+            "subject": {
+              "artifact": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html"
+            },
+            "evidence": {
+              "executable": null
+            },
+            "supportedFixes": [
+              "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "skipped",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "readability": {
+          "status": "skipped",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "run-outcomes.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path."
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.finalize.json",
+    "summaryReceipt": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-10-05T08:32:43.238Z",
+  "durationMs": 481,
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  }
+}

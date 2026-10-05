@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "697d932f-ac0b-4978-8593-2081b47fb535",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/candidate.json",
+  "output": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+  "specification": {
+    "sha256": "8eebb6e6cacf540720d7f73570b476651678629802a04458000a9faf26bbaf72",
+    "bytes": 6180
+  },
+  "artifact": {
+    "sha256": "ad2c19ed78b162b6f2f8f1fb22c2acfe82193fc4c849279d78db3000c962fa4e",
+    "bytes": 759435
+  }
+}

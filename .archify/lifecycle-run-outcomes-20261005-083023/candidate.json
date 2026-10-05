@@ -1,0 +1,289 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Run Outcome Lifecycle",
+    "subtitle": "Every state a run can reach \u2014 and the fail-closed exits it can take",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "output": ".archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+    "repository": {
+      "url": "https://github.com/karamat552/adaptive-rag-enterprise",
+      "provider": "github",
+      "revision": "1c2cface7058dc328170335e444a2fab05639778"
+    }
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Main path"
+    },
+    {
+      "id": "shortcuts",
+      "label": "Deterministic shortcuts (0 tokens)"
+    },
+    {
+      "id": "outcomes",
+      "label": "Terminal success"
+    },
+    {
+      "id": "failure",
+      "label": "Failure + quarantine"
+    }
+  ],
+  "states": [
+    {
+      "id": "received",
+      "type": "start",
+      "label": "Query received",
+      "sublabel": "tenant resolved",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "entry",
+      "sources": [
+        {
+          "path": "main.py",
+          "line": 662,
+          "label": "query_stream"
+        }
+      ]
+    },
+    {
+      "id": "cache_probe",
+      "type": "decision",
+      "label": "Near-exact replay?",
+      "sublabel": "threshold 0.985",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1553,
+          "label": "check_cache_node"
+        }
+      ]
+    },
+    {
+      "id": "fact_path",
+      "type": "decision",
+      "label": "Covered fact?",
+      "sublabel": "company+metric+period",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3417,
+          "label": "fact_fastpath"
+        }
+      ]
+    },
+    {
+      "id": "fleet_run",
+      "type": "active",
+      "label": "Specialist fleet",
+      "sublabel": "extract + synthesize",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1774,
+          "label": "execute_specialist_fleet"
+        }
+      ]
+    },
+    {
+      "id": "gauntlet",
+      "type": "active",
+      "label": "Gate gauntlet",
+      "sublabel": "5 deterministic gates",
+      "lane": "main",
+      "col": 4,
+      "step": "05",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2948,
+          "label": "fact_checker_guard"
+        }
+      ]
+    },
+    {
+      "id": "replay",
+      "type": "success",
+      "label": "Cache replay",
+      "sublabel": "provenance threaded",
+      "lane": "shortcuts",
+      "col": 1,
+      "step": "06",
+      "tag": "terminal"
+    },
+    {
+      "id": "served_fact",
+      "type": "success",
+      "label": "Deterministic serve",
+      "sublabel": "span-verbatim",
+      "lane": "shortcuts",
+      "col": 2,
+      "step": "07",
+      "tag": "terminal"
+    },
+    {
+      "id": "quarantined",
+      "type": "waiting",
+      "label": "Specialist quarantined",
+      "sublabel": "degraded_agents",
+      "lane": "failure",
+      "col": 3,
+      "step": "08"
+    },
+    {
+      "id": "refused",
+      "type": "failure",
+      "label": "Verified refusal",
+      "sublabel": "verified_refusal / unverified",
+      "lane": "failure",
+      "col": 4,
+      "step": "09",
+      "tag": "terminal",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3338,
+          "label": "verified_refusal"
+        }
+      ],
+      "width": 170
+    },
+    {
+      "id": "certified",
+      "type": "success",
+      "label": "Certified",
+      "sublabel": "receipt written",
+      "lane": "outcomes",
+      "col": 4,
+      "step": "11",
+      "tag": "terminal",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1770,
+          "label": "build_certificate_bundle"
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t1",
+      "from": "received",
+      "to": "cache_probe",
+      "route": "straight"
+    },
+    {
+      "id": "t2",
+      "from": "cache_probe",
+      "to": "replay",
+      "label": "hit",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "t3",
+      "from": "cache_probe",
+      "to": "fact_path",
+      "label": "miss",
+      "route": "straight"
+    },
+    {
+      "id": "t4",
+      "from": "fact_path",
+      "to": "served_fact",
+      "label": "covered",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "t5",
+      "from": "fact_path",
+      "to": "fleet_run",
+      "label": "coverage miss",
+      "route": "straight"
+    },
+    {
+      "id": "t6",
+      "from": "fleet_run",
+      "to": "gauntlet",
+      "label": "draft + spans",
+      "route": "straight"
+    },
+    {
+      "id": "t7",
+      "from": "gauntlet",
+      "to": "certified",
+      "label": "all gates pass",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "t8",
+      "from": "fleet_run",
+      "to": "quarantined",
+      "label": "specialist fails",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "id": "t9",
+      "from": "quarantined",
+      "to": "refused",
+      "route": "straight"
+    },
+    {
+      "id": "t10",
+      "from": "gauntlet",
+      "to": "refused",
+      "label": "gate rejects / audit down",
+      "variant": "security",
+      "route": "right-channel"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Three terminal success states",
+      "items": [
+        "Certified \u2014 full audit passed, receipt written",
+        "Cache replay \u2014 provenance points at the certifying run",
+        "Deterministic serve \u2014 covered fact, 0 tokens, span-verbatim"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Refusal is a first-class outcome",
+      "items": [
+        "verdict='refused' receipts preserve the autopsy trail",
+        "Two distinct outcome values, both fail-closed: verified_refusal (logic) and unverified_system (capacity)",
+        "audit_objection names the real cause (quarantine, XBRL, echo, quota)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Retries are bounded",
+      "items": [
+        "max_retries=2 (adaptive_rag.py:103), then the run refuses",
+        "A degraded specialist can never certify \u2014 the guard fails closed",
+        "Rewrites sharpen the search; they never re-label a failure as success"
+      ]
+    }
+  ]
+}

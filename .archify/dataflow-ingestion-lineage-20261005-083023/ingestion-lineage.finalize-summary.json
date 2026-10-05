@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "dataflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/candidate.json",
+    "sha256": "33ab4ccbd39ce9fff66517fc7b16867f8fa75418641d268b541e4ede503017ed",
+    "bytes": 5167
+  },
+  "artifact": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+    "sha256": "4a65327af799d301707e0f40abf744760bd396cf36e03c25e0f12a72821d8ae6",
+    "bytes": 757402
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "skipped"
+  },
+  "failedStage": "browser-check",
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 1,
+    "shown": 1,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.finalize.json",
+    "summaryReceipt": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.browser-check.json"
+  },
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  },
+  "visualReview": "not-requested",
+  "durationMs": 461
+}

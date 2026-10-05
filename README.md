@@ -344,36 +344,71 @@ pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.
 
 CI (`.github/workflows/ci.yml`): unit → pgvector-16 service integration → Docker build.
 
-### Architecture diagram — rendered from evidence, not from prose
+### Five diagrams — rendered from evidence, not from prose
 
-`.archify/architecture-runtime-*/adaptive-rag-runtime.html` is an interactive
-architecture map of the runtime request journey (open it in a browser: search
-nodes, trace routes, switch views, export). It is a **single self-contained
-file** — no server, no CDN, no external references.
+**Start here:** `.archify/index.html` — a landing page linking all five.
+Each one is an interactive, searchable, traceable page (open in a browser:
+search nodes, trace routes, switch views, export) and each is a **single
+self-contained file** — no server, no CDN, no external references.
 
-It is not a hand-drawn picture. Nodes carry `sources` pinned to
+| Diagram | Type | Answers | Evidence pins | Artifact |
+|---|---|---|---|---|
+| Runtime architecture | `architecture` | What talks to what, and where each box lives in the code | 12 | `architecture-runtime-*/adaptive-rag-runtime.html` |
+| Gate gauntlet | `workflow` | Which deterministic checks run before the model is trusted, and where a run fails closed | 12 | `workflow-gate-gauntlet-*/gate-gauntlet.html` |
+| Query lifecycle | `sequence` | One question start to finish, with the early exits that skip the model | 8 | `sequence-query-lifecycle-*/query-lifecycle.html` |
+| Ingestion lineage | `dataflow` | Where every figure comes from — PDFs and SEC XBRL down to the vector store | 8 | `dataflow-ingestion-lineage-*/ingestion-lineage.html` |
+| Run outcomes | `lifecycle` | Every state a run can end in, including the ones that never reach a user | 7 | `lifecycle-run-outcomes-*/run-outcomes.html` |
+
+All five passed the same gate suite on the committed revision:
+
+| Gate | architecture | workflow | sequence | dataflow | lifecycle |
+|---|---|---|---|---|---|
+| `validate` (schema + composition + label clearance) | **pass** | **pass** | **pass** | **pass** | **pass** |
+| `deliver` | **pass** | **pass** | **pass** | **pass** | **pass** |
+| `check` (HTML/SVG structure, provenance) | **pass** | **pass** | **pass** | **pass** | **pass** |
+| `browser-check` (real Chrome, projected-text sizes) | skipped¹ | skipped¹ | skipped¹ | skipped¹ | skipped¹ |
+
+¹ No Chrome or Chromium binary exists in this sandbox, so the visual gate never
+ran on any of the five. They are schema-, layout- and structure-valid, and every
+label was checked *geometrically* for clearance by the validator (it flagged —
+and we fixed — labels that were too wide for their boxes, messages closer than
+28px, a 7px micro-segment, edges routing through unrelated nodes and label/route
+clearance violations). Nobody has confirmed the projected-text sizes in a real
+browser. Run `archify browser-check <output.html>` where Chrome exists to close
+that gap.
+
+The gate order is fixed and each stage must pass before the next runs:
+`validate → deliver → check → browser-check`. A skipped check is recorded as
+`skipped`, never as a pass — the receipts (`*.finalize-summary.json`) carry the
+per-gate result and the exact diagnostics behind any failure.
+
+They are not hand-drawn pictures. Nodes carry `sources` pinned to
 repository-relative files and line numbers at a frozen commit
 (`meta.repository.revision`), so every asserted component is checkable against
-the code at that revision. For example `gates` cites
-`adaptive_rag.py:2934` (`citation_pre_audit`) and `store` cites
-`db.py:1143` (`pgvector_hybrid_search`).
+the code at that revision. For example the architecture map's `gates` cites
+`adaptive_rag.py:2934` (`citation_pre_audit`), `store` cites `db.py:1143`
+(`pgvector_hybrid_search`), and the workflow's paired gate nodes cite the six
+checks in the order the source calls them — documents-present `2953`,
+`citation_pre_audit` `2934`, `_ECHO_MARKERS` `2983`, `assert_claim_scales`
+`2013`, `check_growth_claims` `2175`, `check_xbrl_figures` `2350` — followed by
+`fact_checker_guard` `2948`.
 
-The diagram was produced with [Archify](https://github.com/tt-a1i/archify)
-(MIT) and passed its gate suite on the committed revision:
+All five were produced with [Archify](https://github.com/tt-a1i/archify) (MIT).
+Regenerating any of them is one command per diagram, run from the repository
+root:
 
-| Gate | Result |
-|---|---|
-| `validate` (schema + composition + label clearance) | **pass** |
-| `deliver` | **pass** |
-| `check` (HTML/SVG structure, provenance) | **pass** |
-| `browser-check` (real Chrome, projected-text sizes) | **skipped — no Chrome in this sandbox** |
+```bash
+node <archify>/bin/archify.mjs finalize <type> \
+  .archify/<dir>/candidate.json .archify/<dir>/<name>.html \
+  --quality showcase --repo-root . --json
+```
 
-Honest note on that last row: the visual gate never ran, so the diagram is
-schema-, layout-, and structure-valid, and every label was checked
-*geometrically* for clearance by the validator (it flagged and we fixed two
-labels that were too wide for their gaps), but nobody has confirmed the
-projected-text sizes in a real browser. Run
-`archify browser-check <output.html>` where Chrome exists to close that gap.
+Archify never lets the agent draw: the typed JSON IR is the source of truth, the
+renderer is deterministic, and the gates run in a fixed order —
+`validate → deliver → check → browser-check`. `ok: true` requires all four; a
+non-zero exit is never a success. The diagnostics speak in exact numbers
+(`clearGapPx`, `minimumGapPx`, `labelWidthPx`, `projectedFontPx`), which is why
+the failures above were fixable rather than arguable.
 
 ### Pipeline audit — evidence per stage, not a green checkmark
 

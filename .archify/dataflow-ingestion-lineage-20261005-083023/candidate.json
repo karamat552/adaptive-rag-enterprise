@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Ingestion \u2192 Answer Data Lineage",
+    "subtitle": "Two independent producers of truth, and how each figure traces back to its bytes",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "output": ".archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+    "repository": {
+      "url": "https://github.com/karamat552/adaptive-rag-enterprise",
+      "provider": "github",
+      "revision": "1c2cface7058dc328170335e444a2fab05639778"
+    }
+  },
+  "stages": [
+    {
+      "label": "Sources"
+    },
+    {
+      "label": "Extracted"
+    },
+    {
+      "label": "Chunks + vectors"
+    },
+    {
+      "label": "Stores + served"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "xbrl",
+      "type": "cloud",
+      "label": "SEC XBRL",
+      "stage": 0,
+      "row": 0,
+      "sublabel": "company facts",
+      "sources": [
+        {
+          "path": "scripts/xbrl.py",
+          "line": 141,
+          "label": "derive_facts()"
+        }
+      ]
+    },
+    {
+      "id": "pdf",
+      "type": "external",
+      "label": "10-Q filings",
+      "stage": 0,
+      "row": 1,
+      "sublabel": "PDF \u00b7 3 companies",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 627,
+          "label": "source_registry"
+        }
+      ]
+    },
+    {
+      "id": "transcripts",
+      "type": "database",
+      "label": "Page transcripts",
+      "stage": 1,
+      "row": 1,
+      "sublabel": "per-page text",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1187,
+          "label": "transcript store"
+        }
+      ]
+    },
+    {
+      "id": "factrows",
+      "type": "database",
+      "label": "fact_rows",
+      "stage": 1,
+      "row": 0,
+      "sublabel": "metric \u00b7 period",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1406,
+          "label": "fact rows"
+        }
+      ]
+    },
+    {
+      "id": "chunks",
+      "type": "database",
+      "label": "Chunks + vectors",
+      "stage": 2,
+      "row": 1,
+      "sublabel": "span-anchored \u00b7 bge-small",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 430,
+          "label": "chunk store"
+        },
+        {
+          "path": "db.py",
+          "line": 80,
+          "label": "BAAI/bge-small-en-v1.5"
+        }
+      ]
+    },
+    {
+      "id": "pgvector",
+      "type": "database",
+      "label": "Postgres + pgvector",
+      "stage": 3,
+      "row": 1,
+      "sublabel": "hybrid search",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1143,
+          "label": "pgvector query"
+        }
+      ]
+    },
+    {
+      "id": "answer",
+      "type": "backend",
+      "label": "Certified answer",
+      "stage": 3,
+      "row": 0,
+      "sublabel": "draft + citations",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2948,
+          "label": "fact_checker_guard()"
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "pdf",
+      "to": "transcripts",
+      "label": "extract pages",
+      "classification": "document parse",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f2",
+      "from": "transcripts",
+      "to": "chunks",
+      "label": "chunk + hash",
+      "classification": "span anchoring",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f3",
+      "from": "chunks",
+      "to": "pgvector",
+      "label": "bge-small vector",
+      "classification": "384-d",
+      "variant": "default"
+    },
+    {
+      "id": "f4",
+      "from": "xbrl",
+      "to": "factrows",
+      "label": "sync facts",
+      "classification": "structured",
+      "variant": "default"
+    },
+    {
+      "id": "f5",
+      "from": "factrows",
+      "to": "answer",
+      "label": "exact match",
+      "classification": "deterministic",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f6",
+      "from": "pgvector",
+      "to": "answer",
+      "label": "hybrid RRF",
+      "classification": "retrieval",
+      "variant": "emphasis",
+      "labelDy": -25
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Every figure is reachable from its bytes",
+      "items": [
+        "chunk_hash = sha256(company \u22a3 source \u22a3 page \u22a3 slice) \u2014 the receipt recomputes it",
+        "fact_rows carry char_start/char_end into the page transcript",
+        "source_registry pins each PDF's sha256, so a swapped file breaks the chain"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Two independent producers of truth",
+      "items": [
+        "Prose path: PDF \u2192 transcripts \u2192 chunks + vectors \u2192 hybrid search",
+        "Structured path: SEC XBRL \u2192 fact_rows \u2192 exact match",
+        "Where the two agree, the answer needs no model at all"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Epoch-scoped by design",
+      "items": [
+        "Corpus epoch is stamped on chunks, facts and cache entries",
+        "A re-ingest bumps the epoch; stale cache entries stop matching",
+        "The receipt records which epoch produced the answer"
+      ]
+    }
+  ]
+}

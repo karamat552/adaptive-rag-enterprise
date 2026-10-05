@@ -1,0 +1,441 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "workflow",
+  "quality": "showcase",
+  "startedAt": "2026-10-05T08:37:16.048Z",
+  "specification": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/candidate.json",
+    "sha256": "8eebb6e6cacf540720d7f73570b476651678629802a04458000a9faf26bbaf72",
+    "bytes": 6180
+  },
+  "artifact": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+    "sha256": "ad2c19ed78b162b6f2f8f1fb22c2acfe82193fc4c849279d78db3000c962fa4e",
+    "bytes": 759435
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "workflow",
+        "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/candidate.json",
+        "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/adaptive-rag-enterprise",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "8eebb6e6cacf540720d7f73570b476651678629802a04458000a9faf26bbaf72",
+          "bytes": 6180
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 356,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "workflow",
+        "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/candidate.json",
+        "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/adaptive-rag-enterprise",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "697d932f-ac0b-4978-8593-2081b47fb535",
+        "ok": true,
+        "command": "deliver",
+        "type": "workflow",
+        "input": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/candidate.json",
+        "output": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+        "specification": {
+          "sha256": "8eebb6e6cacf540720d7f73570b476651678629802a04458000a9faf26bbaf72",
+          "bytes": 6180
+        },
+        "artifact": {
+          "sha256": "ad2c19ed78b162b6f2f8f1fb22c2acfe82193fc4c849279d78db3000c962fa4e",
+          "bytes": 759435
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "https://github.com/karamat552/adaptive-rag-enterprise",
+          "revision": "1c2cface7058dc328170335e444a2fab05639778",
+          "references": 12
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 143,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+        "artifact": {
+          "sha256": "ad2c19ed78b162b6f2f8f1fb22c2acfe82193fc4c849279d78db3000c962fa4e",
+          "bytes": 759435
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 0,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 15,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.6,
+            "maxBends": 3,
+            "routesOverSuggestedBends": 3,
+            "maxStretch": 5.258,
+            "routesOverSuggestedStretch": 3,
+            "minSegmentPx": 16,
+            "minInteriorSegmentPx": 124,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [],
+            "detours": [
+              {
+                "relationship": {
+                  "id": "e1",
+                  "from": "draft",
+                  "to": "g12",
+                  "label": "",
+                  "collectionIndex": 0,
+                  "artifactIndex": 1
+                },
+                "bends": 3,
+                "stretch": 1.272
+              },
+              {
+                "relationship": {
+                  "id": "e4",
+                  "from": "llm_audit",
+                  "to": "certified",
+                  "label": "grounded",
+                  "collectionIndex": 3,
+                  "artifactIndex": 4
+                },
+                "bends": 2,
+                "stretch": 5.258
+              },
+              {
+                "relationship": {
+                  "id": "e6",
+                  "from": "g34",
+                  "to": "refused",
+                  "label": "any gate fails",
+                  "collectionIndex": 5,
+                  "artifactIndex": 6
+                },
+                "bends": 3,
+                "stretch": 1.941
+              },
+              {
+                "relationship": {
+                  "id": "e7",
+                  "from": "llm_audit",
+                  "to": "unverified",
+                  "label": "audit unavailable",
+                  "collectionIndex": 6,
+                  "artifactIndex": 7
+                },
+                "bends": 3,
+                "stretch": 2.916,
+                "directCorridorBlockers": [
+                  {
+                    "id": "certified",
+                    "label": "Certified",
+                    "box": [
+                      408,
+                      465,
+                      92,
+                      52
+                    ]
+                  },
+                  {
+                    "id": "refused",
+                    "label": "Refused",
+                    "box": [
+                      408,
+                      654,
+                      92,
+                      52
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "leadingSpace": {
+            "measured": false,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": null,
+            "requestedTargetMet": null,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "node",
+              "id": "g34"
+            },
+            "minimumSourceTextPx": 6.6,
+            "minimumProjectedTextPx": 6.6,
+            "semanticTextCount": 19
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "697d932f-ac0b-4978-8593-2081b47fb535"
+      }
+    },
+    "browser-check": {
+      "status": "skipped",
+      "exitCode": 2,
+      "durationMs": 16,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "skipped",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "697d932f-ac0b-4978-8593-2081b47fb535",
+        "artifact": {
+          "path": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+          "sha256": "ad2c19ed78b162b6f2f8f1fb22c2acfe82193fc4c849279d78db3000c962fa4e",
+          "bytes": 759435
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "unavailable",
+          "executable": null
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/chrome-unavailable",
+            "severity": "warning",
+            "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+            "subject": {
+              "artifact": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html"
+            },
+            "evidence": {
+              "executable": null
+            },
+            "supportedFixes": [
+              "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "skipped",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "readability": {
+          "status": "skipped",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "gate-gauntlet.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path."
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.finalize.json",
+    "summaryReceipt": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-10-05T08:37:16.636Z",
+  "durationMs": 587,
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  }
+}

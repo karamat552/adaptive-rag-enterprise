@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "dataflow",
+  "quality": "showcase",
+  "startedAt": "2026-10-05T08:36:40.188Z",
+  "specification": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/candidate.json",
+    "sha256": "33ab4ccbd39ce9fff66517fc7b16867f8fa75418641d268b541e4ede503017ed",
+    "bytes": 5167
+  },
+  "artifact": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+    "sha256": "4a65327af799d301707e0f40abf744760bd396cf36e03c25e0f12a72821d8ae6",
+    "bytes": 757402
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "dataflow",
+        "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/candidate.json",
+        "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/adaptive-rag-enterprise",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "33ab4ccbd39ce9fff66517fc7b16867f8fa75418641d268b541e4ede503017ed",
+          "bytes": 5167
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 267,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "dataflow",
+        "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/candidate.json",
+        "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/adaptive-rag-enterprise",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "a6a76199-1dc6-466d-824b-7e2c7b2c725a",
+        "ok": true,
+        "command": "deliver",
+        "type": "dataflow",
+        "input": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/candidate.json",
+        "output": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+        "specification": {
+          "sha256": "33ab4ccbd39ce9fff66517fc7b16867f8fa75418641d268b541e4ede503017ed",
+          "bytes": 5167
+        },
+        "artifact": {
+          "sha256": "4a65327af799d301707e0f40abf744760bd396cf36e03c25e0f12a72821d8ae6",
+          "bytes": 757402
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "https://github.com/karamat552/adaptive-rag-enterprise",
+          "revision": "1c2cface7058dc328170335e444a2fab05639778",
+          "references": 8
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 103,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+        "artifact": {
+          "sha256": "4a65327af799d301707e0f40abf744760bd396cf36e03c25e0f12a72821d8ae6",
+          "bytes": 757402
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 0,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 46.6,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.826595744680851,
+            "maxBends": 0,
+            "routesOverSuggestedBends": 0,
+            "maxStretch": 1,
+            "routesOverSuggestedStretch": 0,
+            "minSegmentPx": 56,
+            "minInteriorSegmentPx": null,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [],
+            "detours": []
+          },
+          "leadingSpace": {
+            "measured": false,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": null,
+            "requestedTargetMet": null,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "node",
+              "id": "chunks"
+            },
+            "minimumSourceTextPx": 6.9,
+            "minimumProjectedTextPx": 6.826595744680851,
+            "semanticTextCount": 20
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "a6a76199-1dc6-466d-824b-7e2c7b2c725a"
+      }
+    },
+    "browser-check": {
+      "status": "skipped",
+      "exitCode": 2,
+      "durationMs": 16,
+      "command": [
+        "/usr/local/bin/node",
+        "/tmp/archify_test/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "skipped",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "a6a76199-1dc6-466d-824b-7e2c7b2c725a",
+        "artifact": {
+          "path": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+          "sha256": "4a65327af799d301707e0f40abf744760bd396cf36e03c25e0f12a72821d8ae6",
+          "bytes": 757402
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "unavailable",
+          "executable": null
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/chrome-unavailable",
+            "severity": "warning",
+            "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+            "subject": {
+              "artifact": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html"
+            },
+            "evidence": {
+              "executable": null
+            },
+            "supportedFixes": [
+              "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "skipped",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "readability": {
+          "status": "skipped",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "ingestion-lineage.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path."
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.finalize.json",
+    "summaryReceipt": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-10-05T08:36:40.650Z",
+  "durationMs": 461,
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  }
+}
