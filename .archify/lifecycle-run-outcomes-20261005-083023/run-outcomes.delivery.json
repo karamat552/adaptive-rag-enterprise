@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "572548a8-a5ae-4025-aa65-2ecb1adad8b5",
+  "status": "current",
+  "command": "deliver",
+  "type": "lifecycle",
+  "input": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/candidate.json",
+  "output": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+  "specification": {
+    "sha256": "c79afe3ace325f72ebe80ee5fa154c7467a1f588b541c46e8e6ae17d3309d42b",
+    "bytes": 6632
+  },
+  "artifact": {
+    "sha256": "3ea479208f968a50b83a6b174e9759c45c45c1968266f7993d5faf36676cc9c9",
+    "bytes": 766720
+  }
+}

@@ -46,7 +46,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
@@ -71,6 +71,10 @@ from db import (
 )
 
 logger = logging.getLogger("RAGService")
+
+# Boot-smoke verdict, surfaced by /health. Empty until the lifespan probe
+# runs (or when RAG_SKIP_BOOT_SMOKE=1).
+_BOOT_SMOKE: Dict[str, Any] = {}
 
 
 # ============================== REQUEST-ID CONTEXT =========================
@@ -408,12 +412,21 @@ async def lifespan(_app: FastAPI):
     # defaults were updated). A 1-token probe per configured stage model at
     # startup turns 'silently broken provider' into a loud, immediate,
     # named-model error. RAG_SKIP_BOOT_SMOKE=1 disables (offline/CI runs).
-    if os.getenv("RAG_SKIP_BOOT_SMOKE") != "1" and get_settings().provider != "openai_compatible":
+    #
+    # openai_compatible is probed TOO (2026-10-03): it was excluded, so the
+    # self-hosted / NIM / DeepSeek lane — the one whose catalogs rotate most
+    # — was the only lane whose death stayed invisible until the first query
+    # quarantined. Failures here stay NON-FATAL (a warning, never a refused
+    # boot): fail-closed governs ANSWERS, not startup.
+    if os.getenv("RAG_SKIP_BOOT_SMOKE") != "1":
         try:
             import adaptive_rag as _ar
-            await asyncio.wait_for(
-                asyncio.to_thread(_ar.boot_smoke_test), timeout=90)
+            _BOOT_SMOKE.update(await asyncio.wait_for(
+                asyncio.to_thread(_ar.boot_smoke_test), timeout=90))
+            _BOOT_SMOKE["status"] = "ok"
         except Exception as exc:
+            _BOOT_SMOKE["status"] = "failed"
+            _BOOT_SMOKE["error"] = str(exc)[:300]
             logger.warning("BOOT SMOKE FAILED — a configured model is not "
                            "serving; fix RAG_*_MODEL before trusting answers: %s", exc)
     try:
@@ -655,7 +668,14 @@ async def query_stream(request: Request, question: str,
     run_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
     tenant = _resolve_scoped_tenant(auth_tenant, tenant_id)
     return StreamingResponse(
-        _event_stream(request, question, tenant_id, run_id),
+        # MUST forward the RESOLVED tenant, never the raw declared param:
+        # _resolve_scoped_tenant returns the key's binding when the caller
+        # omits tenant_id, and forwarding the raw None here re-resolved to
+        # the DEFAULT tenant — an authenticated acme key ran the entire
+        # SSE pipeline (retrieval, RLS scope, receipts) as 'default'.
+        # POST /query always passed the resolved value, so the two
+        # endpoints disagreed; the SSE path is the one the console uses.
+        _event_stream(request, question, tenant, run_id),
         media_type="text/event-stream",
         headers={"X-Request-ID": run_id, "Cache-Control": "no-cache",
                  "X-Accel-Buffering": "no"})
@@ -670,11 +690,31 @@ async def search(req: SearchRequest,
     # Phase 1: /search carried NO auth at all and took tenant from the
     # body — closed 2026-09-30 (the key IS identity; declared confirms).
     tenant = _resolve_scoped_tenant(auth_tenant, req.tenant_id)
-    rows = await asyncio.to_thread(
-        pgvector_hybrid_search, req.query,
-        category_filter=req.category_filter,
-        company_filter=req.company_filter, top_k=req.top_k,
-        tenant_id=tenant)
+    try:
+        rows = await asyncio.to_thread(
+            pgvector_hybrid_search, req.query,
+            category_filter=req.category_filter,
+            company_filter=req.company_filter, top_k=req.top_k,
+            tenant_id=tenant)
+    except Exception as exc:
+        # A missing/unloadable embedding model used to surface as a bare
+        # {"error":"internal_error"} 500 — no hint that retrieval, not the
+        # query, was broken (live-caught 2026-10-03: the ONNX model could
+        # not be fetched). Name the stage; keep it a 503 (this instance
+        # cannot serve retrieval right now), not a 500.
+        detail = str(exc)
+        logger.exception("Retrieval failed [/search]")
+        if any(m in detail for m in ("fastembed", "ONNX", "TextEmbedding",
+                                     "bge-", "model", "Connection",
+                                     "SSL", "resolve", "timed out")):
+            raise HTTPException(
+                status_code=503,
+                detail="Retrieval unavailable: the embedding model could not "
+                       "be loaded (it downloads on first use — the Docker "
+                       "image bakes it in at build time). See server logs.") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Retrieval failed — see server logs") from exc
     return {"status": "success", "total_results": len(rows), "results": rows}
 
 
@@ -802,6 +842,11 @@ async def feedback(req: FeedbackRequest) -> Dict[str, Any]:
 async def health() -> Dict[str, Any]:
     out: Dict[str, Any] = {"service": "ok"}
     out.update(get_health())
+    # Boot-smoke verdict (2026-10-03): the probe result lived only in the
+    # startup log, so diagnosing "which model is dead" required Render log
+    # access. Expose it where operators already look.
+    if _BOOT_SMOKE:
+        out["boot_smoke"] = dict(_BOOT_SMOKE)
     try:
         out["db"] = await asyncio.to_thread(health_check)
     except Exception as exc:

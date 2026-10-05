@@ -1765,17 +1765,6 @@ def verify_receipt_chain(receipt: Dict[str, Any]) -> Dict[str, Any]:
 
     return verify_bundle_core(receipt, claims, evidence, transcripts,
                               chunk_truth)
-    return {
-        "verified": verified,
-        "links_checked": links_checked,
-        "links_ok": links_ok,
-        "evidence_total": len(evidence),
-        "claims_total": len(claims),
-        "links": link_results,
-        "claim_issues": claim_issues,
-        "transcripts": transcripts_out,
-        "attribution": {h: t for h, t in chunk_truth.items()},
-    }
 
 
 def build_certificate_bundle(run_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:

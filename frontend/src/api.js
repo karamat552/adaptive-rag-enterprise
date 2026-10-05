@@ -3,9 +3,17 @@
 // X-API-Key auth header rides every request — the gateway is fail-closed and
 // production requires tenant identity.
 
-const API_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
-  "http://localhost:8000";
+const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
+
+// Resolution order:
+//   1. VITE_API_BASE           — explicit override (production builds set it)
+//   2. "/api" in dev           — same-origin, proxied to the gateway by Vite
+//                                (vite.config.js). Works behind ANY host or
+//                                proxy with no CORS config, because the
+//                                browser never makes a cross-origin request.
+//   3. localhost:8000          — production build with no override: unchanged
+//                                from the previous behaviour.
+const API_BASE = ENV.VITE_API_BASE || (ENV.DEV ? "/api" : "http://localhost:8000");
 
 const KEY_STORAGE = "arag.apikey";
 const ADMIN_STORAGE = "arag.adminkey";

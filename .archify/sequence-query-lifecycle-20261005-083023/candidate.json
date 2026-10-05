@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "One Query's Lifecycle",
+    "subtitle": "HTTP ingress \u2192 certified answer: cache probe, deterministic paths, fleet, gates",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "column_fit": "spread",
+    "output": ".archify/sequence-query-lifecycle-20261005-083023/query-lifecycle.html",
+    "repository": {
+      "url": "https://github.com/karamat552/adaptive-rag-enterprise",
+      "provider": "github",
+      "revision": "1c2cface7058dc328170335e444a2fab05639778"
+    },
+    "viewBox": [
+      1000,
+      600
+    ]
+  },
+  "segments": [
+    {
+      "from": 150,
+      "to": 195,
+      "label": "1 \u00b7 Ingress"
+    },
+    {
+      "from": 205,
+      "to": 295,
+      "label": "2 \u00b7 Deterministic (0 tokens)"
+    },
+    {
+      "from": 305,
+      "to": 395,
+      "label": "3 \u00b7 Provenance + fleet"
+    },
+    {
+      "from": 405,
+      "to": 502,
+      "label": "4 \u00b7 Audit, certify, answer"
+    }
+  ],
+  "participants": [
+    {
+      "id": "console",
+      "type": "external",
+      "label": "Console",
+      "sublabel": "React",
+      "sources": [
+        {
+          "path": "frontend/src/App.jsx"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "Gateway",
+      "sublabel": "main.py",
+      "sources": [
+        {
+          "path": "main.py",
+          "line": 662,
+          "label": "query_stream"
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "type": "backend",
+      "label": "Graph",
+      "sublabel": "adaptive_rag",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3654,
+          "label": "get_graph()"
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "type": "database",
+      "label": "Cache",
+      "sublabel": "semantic",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1553,
+          "label": "check_cache_node"
+        }
+      ]
+    },
+    {
+      "id": "fast",
+      "type": "backend",
+      "label": "Path A",
+      "sublabel": "exact fact",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3417,
+          "label": "fact_fastpath"
+        }
+      ]
+    },
+    {
+      "id": "fleet",
+      "type": "backend",
+      "label": "Fleet",
+      "sublabel": "3 specialists",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1774,
+          "label": "execute_specialist_fleet"
+        }
+      ]
+    },
+    {
+      "id": "gates",
+      "type": "security",
+      "label": "Gates",
+      "sublabel": "5 deterministc",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2948,
+          "label": "fact_checker_guard"
+        }
+      ]
+    },
+    {
+      "id": "proof",
+      "type": "database",
+      "label": "Proof",
+      "sublabel": "receipts",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1770,
+          "label": "build_certificate_bundle"
+        }
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "console",
+      "to": "gateway",
+      "y": 160,
+      "label": "POST /query \u00b7 API key",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m2",
+      "from": "gateway",
+      "to": "graph",
+      "y": 190,
+      "label": "invoke graph"
+    },
+    {
+      "id": "m3",
+      "from": "graph",
+      "to": "cache",
+      "y": 220,
+      "label": "1 \u00b7 probe replay"
+    },
+    {
+      "id": "m4",
+      "from": "cache",
+      "to": "graph",
+      "y": 250,
+      "label": "hit \u00b7 provenance",
+      "variant": "return"
+    },
+    {
+      "id": "m5",
+      "from": "graph",
+      "to": "fast",
+      "y": 280,
+      "label": "2 \u00b7 covered triple?"
+    },
+    {
+      "id": "m6",
+      "from": "fast",
+      "to": "graph",
+      "y": 310,
+      "label": "served \u00b7 0 tokens",
+      "variant": "return"
+    },
+    {
+      "id": "m7",
+      "from": "graph",
+      "to": "fleet",
+      "y": 340,
+      "label": "3 \u00b7 miss \u2192 demote"
+    },
+    {
+      "id": "m8",
+      "from": "fleet",
+      "to": "gates",
+      "y": 370,
+      "label": "draft + spans"
+    },
+    {
+      "id": "m9",
+      "from": "gates",
+      "to": "graph",
+      "y": 400,
+      "label": "grounded = true",
+      "variant": "return"
+    },
+    {
+      "id": "m10",
+      "from": "gates",
+      "to": "proof",
+      "y": 430,
+      "label": "certify"
+    },
+    {
+      "id": "m11",
+      "from": "proof",
+      "to": "graph",
+      "y": 460,
+      "label": "receipt + run_id",
+      "variant": "return"
+    },
+    {
+      "id": "m12",
+      "from": "graph",
+      "to": "console",
+      "y": 490,
+      "label": "answer + proof link",
+      "variant": "emphasis"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "gateway",
+      "from": 155,
+      "to": 210,
+      "type": "backend"
+    },
+    {
+      "participant": "graph",
+      "from": 170,
+      "to": 495,
+      "type": "backend"
+    },
+    {
+      "participant": "cache",
+      "from": 210,
+      "to": 280,
+      "type": "database"
+    },
+    {
+      "participant": "fast",
+      "from": 270,
+      "to": 340,
+      "type": "backend"
+    },
+    {
+      "participant": "fleet",
+      "from": 330,
+      "to": 400,
+      "type": "backend"
+    },
+    {
+      "participant": "gates",
+      "from": 370,
+      "to": 460,
+      "type": "security"
+    },
+    {
+      "participant": "proof",
+      "from": 430,
+      "to": 488,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Two deterministic exits before any model call",
+      "items": [
+        "A near-exact cache hit replays the certified answer with its provenance",
+        "A covered company+metric+period is served from the fact store",
+        "Both return without spending a single LLM token"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Every path ends in a receipt",
+      "items": [
+        "Certified runs write a receipt whose spans re-hash to their chunk_hash",
+        "Refusals write verdict='refused' \u2014 the autopsy trail",
+        "A replay points at the run that EARNED the certification"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Fail-closed is a path, not an error",
+      "items": [
+        "Router outage, quarantined specialist, zero documents \u2192 refuse",
+        "Each refusal names its true cause instead of blaming the question",
+        "max_retries=2, then the run refuses rather than guessing"
+      ]
+    }
+  ]
+}

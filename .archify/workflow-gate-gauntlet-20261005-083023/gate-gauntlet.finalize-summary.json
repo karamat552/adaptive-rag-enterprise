@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/candidate.json",
+    "sha256": "8eebb6e6cacf540720d7f73570b476651678629802a04458000a9faf26bbaf72",
+    "bytes": 6180
+  },
+  "artifact": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+    "sha256": "ad2c19ed78b162b6f2f8f1fb22c2acfe82193fc4c849279d78db3000c962fa4e",
+    "bytes": 759435
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "skipped"
+  },
+  "failedStage": "browser-check",
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 1,
+    "shown": 1,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.finalize.json",
+    "summaryReceipt": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/adaptive-rag-enterprise/.archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.browser-check.json"
+  },
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  },
+  "visualReview": "not-requested",
+  "durationMs": 587
+}

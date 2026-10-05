@@ -1050,6 +1050,14 @@ class MultiAgentState(TypedDict, total=False):
     outcome: str
     cached_hit: bool
     degraded_agents: List[str]
+    # audit_objection — WHY the guard fail-closed, carried to the refusal text.
+    # fact_checker_guard already computes the precise reason ('specialists
+    # quarantined: [...]', 'synthesis quarantined', ...) but only LOGGED it,
+    # so a user whose run died to a quarantined specialist was told the
+    # generic 'draft failed the grounding audit' — the exact silent-[] problem
+    # the 2026-09-06 lesson called out. Declared here because LangGraph drops
+    # undeclared keys at node-merge.
+    audit_objection: str
     run_id: str
     tenant_id: str
     # STATE-CHANNEL COMPLETENESS (deploy-verification finding #4, 2026-09-10):
@@ -1092,6 +1100,13 @@ class MultiAgentState(TypedDict, total=False):
     fastpath_served: bool
     served_path: str
     fastpath_reason: str
+    # Live-caught 2026-10-03: a router outage (missing key, 429 storm,
+    # dead model catalog) fail-closed to route='out_of_domain', so the
+    # caller was told a perfectly good in-domain question was "outside
+    # the scope of the database" — a capacity/config problem wearing a
+    # logic problem's name. Same class as audit_unavailable: keep the
+    # fail-closed routing, NAME the true cause in the refusal text.
+    router_unavailable: bool
 
 
 def _with_usage(state: MultiAgentState, totals: Tuple[int, int, int, int],
@@ -1601,6 +1616,16 @@ async def check_cache_node(state: MultiAgentState) -> MultiAgentState:
             "financial_report": cached.get("financial_report"),
             "risk_report": cached.get("risk_report"),
             "product_report": cached.get("product_report"),
+            # SOURCES ON REPLAY (live-caught 2026-10-03): the payload never
+            # stored `documents`, so every cache replay shaped `sources: []`
+            # — the console showed a cached brief with NO evidence listed,
+            # directly contradicting the "every claim traceable" contract.
+            # Replays are the common path (identical re-asks hit at ~0
+            # distance), so this was invisible on first ask and visible on
+            # every repeat. Legacy entries predate this field: they fall
+            # back to [] (unchanged behaviour) and self-heal on the next
+            # full-price certification.
+            "documents": cached.get("documents") or [],
             "grounded": True, "outcome": "vectorstore", "cached_hit": True,
             "provenance_run_id": provenance_run_id,
         }
@@ -1640,7 +1665,11 @@ The pruning flag controls whether the system USES your selection."""
             allow_failover=True)
     except Exception as e:
         logger.error("Router unavailable — FAIL-CLOSED to refusal: %s", e)
-        return {"route": "out_of_domain"}
+        # router_unavailable names the true cause for the refusal text:
+        # without it the caller reads "outside the scope of the database"
+        # and blames their own question for a provider/config failure
+        # (live-caught 2026-10-03 — no GROQ_API_KEY produced exactly that).
+        return {"route": "out_of_domain", "router_unavailable": True}
     if not isinstance(decision, RouteDecision):
         # Defense-in-depth (live crash 2026-09-13): a non-schema response
         # (raw AIMessage from an unbound failover lane) must never reach
@@ -1648,7 +1677,7 @@ The pruning flag controls whether the system USES your selection."""
         # Same contract as a router outage: fail-closed to refusal.
         logger.error("Router returned %s instead of RouteDecision — "
                      "FAIL-CLOSED to refusal.", type(decision).__name__)
-        return {"route": "out_of_domain"}
+        return {"route": "out_of_domain", "router_unavailable": True}
     logger.info("Routing Destination: %s", decision.destination.upper())
     extras: Dict[str, Any] = {"route": decision.destination}
     if getattr(decision, "active_specialists", None):
@@ -1720,6 +1749,21 @@ async def premise_fast_path(state: MultiAgentState) -> MultiAgentState:
 
 
 async def cannot_answer(state: MultiAgentState) -> MultiAgentState:
+    # TRUTHFUL REFUSAL (2026-10-03): route_question fail-closes to
+    # 'out_of_domain' on ANY router failure so the pipeline still refuses
+    # instead of crashing — but the refusal TEXT must not tell the caller
+    # their question was off-topic when the classifier never ran. Same
+    # rule as audit_unavailable on the audit stage (KNOWN_ISSUES).
+    if state.get("router_unavailable"):
+        logger.error("Router unavailable — refusing with the TRUE cause "
+                     "(not an out-of-domain verdict the router never made).")
+        return {"final_executive_report":
+                "⚠️ I could not classify this question: the routing stage is "
+                "unavailable (the language model behind it is unreachable, "
+                "unconfigured, or rate-limited). This is a service-side "
+                "problem, not a verdict on your question — please retry "
+                "shortly.",
+                "outcome": "out_of_domain"}
     logger.warning("Threat or out-of-scope query intercepted.")
     return {"final_executive_report":
             "This request is outside the scope of the enterprise SEC financial "
@@ -2901,6 +2945,131 @@ def citation_pre_audit(draft: str, doc_count: int) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# 4b-bis. DETERMINISTIC SOURCES LEDGER (citation-ledger fidelity fix)
+# ---------------------------------------------------------------------------
+# The observation (live, 2026-10-03): a certified brief cited 【13】/【14】 in
+# its prose while its own 'Verified Sources Ledger' enumerated only 10 rows.
+# Diagnosis: the citations were IN RANGE — the bounds gate above was correct
+# and nothing was fabricated. The defect was one of provenance, not truth:
+# rule 2 of the synthesis prompt asked the MODEL to enumerate its own
+# sources, so the ledger was the single part of a certified answer that was
+# neither derived from nor verified against the evidence list. A model can
+# cite correctly and still miscount its own bibliography.
+#
+# Fix: stop asking the model to enumerate. Rebuild the ledger from the same
+# `evidence_records` the receipt carries, driven by the citation indices the
+# brief actually uses. Ledger and citations then cannot disagree BY
+# CONSTRUCTION — there is no second author to drift.
+#
+# Slot alignment is guaranteed upstream: fleet inference stores
+# `evidence_records` in the SAME canonical ordering as `documents`
+# (adaptive_rag.py, "SAME canonical ordering"), and synthesis preserves a
+# slot for every chunk even when it collapses the text to a quoted stub
+# ("Slots are PRESERVED"). So `[n]` ↔ `records[n-1]` ↔ `Evidence [n]`.
+_LEDGER_HEADER_RE = re.compile(
+    r"^#{1,6}[ \t]*Verified[ \t]+Sources[ \t]+Ledger[ \t]*$",
+    re.IGNORECASE | re.MULTILINE)
+_LEDGER_TITLE = "Verified Sources Ledger"
+_LEDGER_BULLET_RE = re.compile(r"^[-*\u2022]\s+|\d+[.)]\s+")
+_LEDGER_NOTE = ("*Derived deterministically from the numbered evidence this "
+                "brief cites — not model-authored.*")
+
+
+def split_ledger(draft: str) -> Tuple[str, Optional[str]]:
+    """Splits a brief into (body, ledger_section). The ledger is the tail of
+    the document (synthesis rule 2 puts it last), so everything from its
+    header onward is the ledger. Returns (draft, None) when there is none."""
+    m = _LEDGER_HEADER_RE.search(draft or "")
+    if not m:
+        return draft or "", None
+    return draft[:m.start()], draft[m.start():]
+
+
+def cited_indices(text: str) -> List[int]:
+    """Distinct in-document-order citation indices used by `text`."""
+    out: List[int] = []
+    for m in _CITE_RE.finditer(text or ""):
+        n = _cite_index(m)
+        if n not in out:
+            out.append(n)
+    return out
+
+
+def ledger_row_indices(ledger: Optional[str]) -> List[int]:
+    """Citation indices enumerated as ledger rows.
+
+    Only table ROWS / list ITEMS count — the table's own header cell
+    ('| Footnote | Company | Document & Page |') and any prose above it are
+    not entries. This is the number the fidelity check compares."""
+    if not ledger:
+        return []
+    out: List[int] = []
+    for line in ledger.splitlines()[1:]:
+        stripped = line.strip()
+        if not stripped or set(stripped) <= set("|-: "):
+            continue                      # separator row
+        if not (stripped.startswith("|") or _LEDGER_BULLET_RE.match(stripped)):
+            continue                      # title, prose note, blank
+        for m in _CITE_RE.finditer(stripped):
+            n = _cite_index(m)
+            if n not in out:
+                out.append(n)
+    return out
+
+
+def ledger_fidelity_gap(draft: str) -> Optional[str]:
+    """The invariant, as a check: the ledger must enumerate exactly the
+    evidence the brief cites. Returns a human-readable gap description, or
+    None when the two agree."""
+    body, ledger = split_ledger(draft)
+    cited = cited_indices(body)
+    listed = ledger_row_indices(ledger)
+    if ledger is None:
+        return (f"no '{_LEDGER_TITLE}' section present, but the brief cites "
+                f"{len(cited)} index(es) {cited}")
+    if cited == listed:
+        return None
+    return (f"ledger lists {len(listed)} entr(ies) {listed} but the brief "
+            f"cites {len(cited)} index(es) {cited}")
+
+
+def _ledger_row(n: int, record: Dict[str, Any]) -> str:
+    company = (record or {}).get("company") or "unknown"
+    source = (record or {}).get("source") or "unknown source"
+    page = (record or {}).get("page")
+    where = f"{source}, Page {page}" if page is not None else str(source)
+    return f"| 【{n}】 | {company} | {where} |"
+
+
+def rebuild_verified_ledger(draft: str,
+                            records: Optional[List[Dict[str, Any]]] = None
+                            ) -> str:
+    """Replaces whatever ledger the model wrote with one derived from the
+    evidence the brief actually cites. Idempotent: running it twice yields
+    the same text.
+
+    Never fabricates a source: an index with no corresponding record is
+    rendered as an explicit unknown rather than a plausible-looking row, and
+    a brief that cites nothing gets a ledger that says so."""
+    body, _ = split_ledger(draft)
+    rows = records or []
+    cited = cited_indices(body)
+    lines = [f"### {_LEDGER_TITLE}", "", _LEDGER_NOTE, ""]
+    if not cited:
+        lines.append("*No indexed evidence was cited by this brief.*")
+    else:
+        lines += ["| Footnote | Company | Document & Page |",
+                  "|---|---|---|"]
+        for n in cited:
+            rec = rows[n - 1] if 1 <= n <= len(rows) else None
+            lines.append(_ledger_row(n, rec))
+    rebuilt = body.rstrip() + "\n\n" + "\n".join(lines) + "\n"
+    logger.info("[ledger] rebuilt deterministically: %d cited index(es) %s "
+                "→ %d row(s).", len(cited), cited, len(cited))
+    return rebuilt
+
+
 async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
     draft = state.get("final_executive_report", "")
     docs = state.get("documents", [])
@@ -2921,7 +3090,8 @@ async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
         else:
             reason = "synthesis returned an empty draft"
         logger.warning("Audit AUTO-FAILS (fail-closed) — %s.", reason)
-        return {"grounded": False, "outcome": "unverified_system"}
+        return {"grounded": False, "outcome": "unverified_system",
+                "audit_objection": reason}
 
     bad_cite = citation_pre_audit(draft, len(docs))
     if bad_cite:
@@ -3094,6 +3264,13 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
 
     if is_safe:
         logger.info("Compliance Status: CERTIFIED GROUNDED")
+        # CITATION-LEDGER FIDELITY (2026-10-03 observation, fixed here):
+        # rebuild the ledger from the evidence this brief actually cites
+        # before anything downstream copies the text. Placed FIRST so the
+        # cached answer, the returned answer and the receipt's claim
+        # extraction all see the identical, ledgers-agree text.
+        draft = rebuild_verified_ledger(draft,
+                                        state.get("evidence_records") or [])
         s = get_settings()
         if not s.disable_cache_writes and os.getenv("RAG_DISABLE_CACHE_WRITE") != "1":
             try:
@@ -3104,6 +3281,11 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
                                    "financial_report": state.get("financial_report"),
                                    "risk_report": state.get("risk_report"),
                                    "product_report": state.get("product_report"),
+                                   # Persist the evidence the draft cited, so
+                                   # a replay can still show its sources
+                                   # (live-caught 2026-10-03: replays shaped
+                                   # `sources: []` because this was missing).
+                                   "documents": state.get("documents") or [],
                                    "grounded": True, "outcome": "vectorstore",
                                    # provenance threading (Gauntlet-4 finding):
                                    # the receipt for THIS certification is the
@@ -3313,6 +3495,9 @@ async def verified_refusal(state: MultiAgentState) -> MultiAgentState:
         objection = ("XBRL crosscheck: claimed %s vs official %s (%s %s)"
                      % (_xi.get("claimed"), _xi.get("official"),
                         _xi.get("company"), _xi.get("metric")))
+    elif state.get("audit_objection"):
+        # The guard named the cause; do not bury it behind the generic text.
+        objection = state["audit_objection"]
     else:
         objection = ("draft failed the grounding audit after %d attempts"
                      % get_settings().max_retries)

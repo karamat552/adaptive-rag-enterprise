@@ -46,3 +46,22 @@ jobs:
           done
           echo "::error::Deployment down — /live returned $code after retry"
           exit 1
+
+      # STREAMLIT COMMUNITY CLOUD SLEEP (added 2026-10-03): the public demo
+      # showed recruiters a "Zzzz — this app has gone to sleep" screen. Free
+      # Streamlit apps idle out, and a sleeping app is a worse first
+      # impression than a slow one. Best-effort ping, PURELY advisory: any
+      # non-200 is reported as a warning, never a failure, because
+      # Streamlit's sleep behaviour is not a contract we control and a red
+      # workflow here would be noise. The durable proof link remains
+      # /verify/{run_id} on Render (no keys, no login, zero tokens).
+      - name: Nudge Streamlit demo awake (best-effort, never fails the job)
+        continue-on-error: true
+        run: |
+          body=$(curl -sL --max-time 90 -A "Mozilla/5.0 (keep-alive)" \
+                  https://adaptive-rag-enterprise.streamlit.app) || body=""
+          if printf '%s' "$body" | grep -qi "gone to sleep"; then
+            echo "::warning::Streamlit demo is ASLEEP — wake it at https://adaptive-rag-enterprise.streamlit.app (one click)"
+          else
+            echo "Streamlit demo responded (not in the sleep state)."
+          fi

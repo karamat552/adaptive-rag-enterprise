@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "lifecycle",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/candidate.json",
+    "sha256": "c79afe3ace325f72ebe80ee5fa154c7467a1f588b541c46e8e6ae17d3309d42b",
+    "bytes": 6632
+  },
+  "artifact": {
+    "path": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html",
+    "sha256": "3ea479208f968a50b83a6b174e9759c45c45c1968266f7993d5faf36676cc9c9",
+    "bytes": 766720
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "skipped"
+  },
+  "failedStage": "browser-check",
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 1,
+    "shown": 1,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.finalize.json",
+    "summaryReceipt": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/adaptive-rag-enterprise/.archify/lifecycle-run-outcomes-20261005-083023/run-outcomes.browser-check.json"
+  },
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  },
+  "visualReview": "not-requested",
+  "durationMs": 481
+}

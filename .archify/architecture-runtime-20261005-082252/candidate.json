@@ -1,0 +1,406 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Adaptive RAG \u2014 Runtime Request Journey",
+    "subtitle": "Ingestion \u2192 certified answer \u2192 offline verification",
+    "output": ".archify/architecture-runtime-20261005-082252/adaptive-rag-runtime.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/karamat552/adaptive-rag-enterprise",
+      "provider": "github",
+      "revision": "7447c072e21a22f888da632b5c528f90f219ca9e"
+    }
+  },
+  "components": [
+    {
+      "id": "console",
+      "type": "external",
+      "label": "Executive Console",
+      "sublabel": "React + Vite :5173",
+      "pos": [
+        30,
+        360
+      ],
+      "size": [
+        128,
+        58
+      ],
+      "sources": [
+        {
+          "path": "frontend/src/App.jsx"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "FastAPI Gateway",
+      "sublabel": "main.py :8000",
+      "pos": [
+        288,
+        360
+      ],
+      "size": [
+        128,
+        58
+      ],
+      "tag": "auth \u00b7 rate limit",
+      "sources": [
+        {
+          "path": "main.py",
+          "line": 446,
+          "label": "app = FastAPI(...)"
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "type": "backend",
+      "label": "LangGraph Orchestrator",
+      "sublabel": "adaptive_rag.py",
+      "pos": [
+        546,
+        360
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "tag": "51 state channels",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3654,
+          "label": "get_graph()"
+        }
+      ]
+    },
+    {
+      "id": "gates",
+      "type": "security",
+      "label": "Deterministic Gates",
+      "sublabel": "zero LLM tokens",
+      "pos": [
+        804,
+        360
+      ],
+      "size": [
+        128,
+        58
+      ],
+      "tag": "citation \u00b7 scale \u00b7 growth",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2934,
+          "label": "citation_pre_audit()"
+        }
+      ]
+    },
+    {
+      "id": "receipts",
+      "type": "database",
+      "label": "Receipts + Certificates",
+      "sublabel": "sha256 hash chain",
+      "pos": [
+        1062,
+        360
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "tag": "Ed25519 optional",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1770,
+          "label": "build_certificate_bundle()"
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "type": "database",
+      "label": "Semantic Cache",
+      "sublabel": "near-exact replay",
+      "pos": [
+        370,
+        170
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "threshold 0.985",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1553,
+          "label": "check_cache_node()"
+        }
+      ]
+    },
+    {
+      "id": "fastpath",
+      "type": "backend",
+      "label": "Path A Fastpath",
+      "sublabel": "exact fact match",
+      "pos": [
+        620,
+        170
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "0 LLM tokens",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3417,
+          "label": "fact_fastpath()"
+        }
+      ]
+    },
+    {
+      "id": "fleet",
+      "type": "backend",
+      "label": "Specialist Fleet",
+      "sublabel": "financial \u00b7 risk \u00b7 product",
+      "pos": [
+        620,
+        560
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "pruning keeps pool=15",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1774,
+          "label": "execute_specialist_fleet()"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "Postgres + pgvector",
+      "sublabel": "corpus \u00b7 facts \u00b7 cache",
+      "pos": [
+        930,
+        560
+      ],
+      "size": [
+        150,
+        58
+      ],
+      "tag": "epoch-scoped \u00b7 RLS",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1143,
+          "label": "pgvector_hybrid_search()"
+        }
+      ]
+    },
+    {
+      "id": "groq",
+      "type": "cloud",
+      "label": "Groq LLM Fleet",
+      "sublabel": "router \u00b7 fleet \u00b7 executive",
+      "pos": [
+        300,
+        560
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "3 failover lanes",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 76,
+          "label": "provider default 'groq'"
+        }
+      ]
+    },
+    {
+      "id": "embed",
+      "type": "cloud",
+      "label": "bge-small-en-v1.5",
+      "sublabel": "384-d embeddings",
+      "pos": [
+        930,
+        720
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "pinned per epoch",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 80,
+          "label": "embed_model_name"
+        }
+      ]
+    },
+    {
+      "id": "verifier",
+      "type": "security",
+      "label": "Offline Verifier",
+      "sublabel": "no database needed",
+      "pos": [
+        1130,
+        720
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "re-hash every span",
+      "sources": [
+        {
+          "path": "verify_certificate.py",
+          "line": 52,
+          "label": "verify_core()"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Render \u2014 production API",
+      "wraps": [
+        "gateway",
+        "graph",
+        "gates",
+        "receipts",
+        "cache",
+        "fastpath",
+        "fleet",
+        "store"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "tenant scope \u2014 row-level security",
+      "wraps": [
+        "store",
+        "receipts"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "console-gateway",
+      "from": "console",
+      "to": "gateway",
+      "label": "HTTPS \u00b7 API key",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gateway-graph",
+      "from": "gateway",
+      "to": "graph",
+      "label": "invoke run"
+    },
+    {
+      "id": "graph-cache",
+      "from": "graph",
+      "to": "cache",
+      "label": "1 \u00b7 cache probe"
+    },
+    {
+      "id": "graph-fastpath",
+      "from": "graph",
+      "to": "fastpath",
+      "label": "2 \u00b7 covered fact?"
+    },
+    {
+      "id": "graph-fleet",
+      "from": "graph",
+      "to": "fleet",
+      "label": "3 \u00b7 cache miss"
+    },
+    {
+      "id": "fastpath-fleet",
+      "from": "fastpath",
+      "to": "fleet",
+      "label": "coverage miss demotes"
+    },
+    {
+      "id": "fleet-groq",
+      "from": "fleet",
+      "to": "groq",
+      "label": "extract + synthesize"
+    },
+    {
+      "id": "fleet-store",
+      "from": "fleet",
+      "to": "store",
+      "label": "hybrid search (spans)"
+    },
+    {
+      "id": "store-embed",
+      "from": "store",
+      "to": "embed",
+      "label": "embed query"
+    },
+    {
+      "id": "fleet-gates",
+      "from": "fleet",
+      "to": "gates",
+      "label": "draft + spans"
+    },
+    {
+      "id": "gates-receipts",
+      "from": "gates",
+      "to": "receipts",
+      "label": "certify"
+    },
+    {
+      "id": "receipts-verifier",
+      "from": "receipts",
+      "to": "verifier",
+      "label": "offline verify"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Deterministic fast path",
+      "items": [
+        "Covered company + metric + period is served with 0 LLM tokens",
+        "Figures are re-matched span-verbatim against the filing row",
+        "A coverage miss demotes to the fleet \u2014 never a guessed serve"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Proof, not assertion",
+      "items": [
+        "Every certified answer writes a receipt with its evidence spans",
+        "sha256(company \u22a3 source \u22a3 page \u22a3 slice) must equal chunk_hash",
+        "The verifier re-hashes offline \u2014 the database is not required"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Fail-closed by construction",
+      "items": [
+        "Router outage, quarantined specialist, missing span \u2192 refuse",
+        "Refusals name the true cause and still write an autopsy receipt",
+        "Tenant isolation enforced by query predicate and by RLS"
+      ]
+    }
+  ]
+}

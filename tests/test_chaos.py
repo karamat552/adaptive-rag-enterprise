@@ -107,6 +107,37 @@ def test_chaos_router_dead(monkeypatch):
     upd = asyncio.run(ar.route_question(_state()))
     assert upd.get("route") == "out_of_domain", \
         "router death must fail-closed to refusal routing"
+    assert upd.get("router_unavailable") is True, \
+        "router death must be NAMED, not disguised as an out-of-domain verdict"
+
+
+def test_router_outage_refusal_names_the_true_cause(monkeypatch):
+    """Live-caught 2026-10-03: with no provider key configured, a valid
+    in-domain question produced 'This request is outside the scope of the
+    enterprise SEC financial intelligence database' — the caller was told
+    their question was off-topic when the router had never run. The
+    fail-closed refusal stands; the TEXT must name the service-side cause
+    (same rule the audit stage got for audit_unavailable)."""
+    async def _dead_llm(*a, **k):
+        raise RuntimeError("GROQ_API_KEY missing (RAG_PROVIDER=groq).")
+    monkeypatch.setattr(ar, "_llm_call", _dead_llm)
+    upd = asyncio.run(ar.route_question(_state()))
+    assert upd.get("router_unavailable") is True
+    out = asyncio.run(ar.cannot_answer({**upd, **_state()}))
+    text = out["final_executive_report"]
+    assert "outside the scope" not in text, \
+        "a router outage must never be reported as an out-of-domain verdict"
+    assert "routing stage is unavailable" in text
+    assert out["outcome"] == "out_of_domain"   # fail-closed posture unchanged
+
+
+def test_genuine_out_of_domain_still_reads_as_out_of_domain(monkeypatch):
+    """The marker must not leak into real out-of-domain verdicts: when the
+    router RUNS and says out_of_domain, the caller still gets the scope
+    message it has always gotten."""
+    out = asyncio.run(ar.cannot_answer(_state()))
+    assert "outside the scope" in out["final_executive_report"]
+    assert out["outcome"] == "out_of_domain"
 
 
 # ---------------- Contract 4: one specialist dead -> quarantine + auto-fail

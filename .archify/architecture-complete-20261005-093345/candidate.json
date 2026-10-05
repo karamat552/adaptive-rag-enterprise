@@ -1,0 +1,609 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Adaptive RAG Enterprise \u2014 the whole system on one canvas",
+    "subtitle": "The union of all five focused diagrams: ingestion, query path, the gate gauntlet, outcomes and proof",
+    "output": ".archify/architecture-complete-20261005-093345/adaptive-rag-complete.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "repository": {
+      "url": "https://github.com/karamat552/adaptive-rag-enterprise",
+      "provider": "github",
+      "revision": "782f5547ac2243893e5ac8b84d840d48b16a999d"
+    }
+  },
+  "components": [
+    {
+      "id": "filings",
+      "type": "external",
+      "label": "10-Q filings",
+      "sublabel": "3 companies \u00b7 PDF",
+      "pos": [
+        30,
+        40
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 627,
+          "label": "source_registry"
+        }
+      ]
+    },
+    {
+      "id": "transcripts",
+      "type": "database",
+      "label": "Page transcripts",
+      "sublabel": "per-page text",
+      "pos": [
+        288,
+        40
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1187,
+          "label": "transcript store"
+        }
+      ]
+    },
+    {
+      "id": "chunks",
+      "type": "database",
+      "label": "Chunks + vectors",
+      "sublabel": "bge-small \u00b7 384-d",
+      "tag": "span-anchored",
+      "pos": [
+        546,
+        40
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 430,
+          "label": "chunk store"
+        },
+        {
+          "path": "db.py",
+          "line": 80,
+          "label": "BAAI/bge-small-en-v1.5"
+        }
+      ]
+    },
+    {
+      "id": "xbrl",
+      "type": "cloud",
+      "label": "SEC XBRL",
+      "sublabel": "company facts",
+      "pos": [
+        30,
+        230
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "scripts/xbrl.py",
+          "line": 141,
+          "label": "derive_facts()"
+        }
+      ]
+    },
+    {
+      "id": "factrows",
+      "type": "database",
+      "label": "fact_rows",
+      "sublabel": "metric \u00b7 period",
+      "pos": [
+        288,
+        230
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1406,
+          "label": "fact rows"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "Postgres + pgvector",
+      "sublabel": "corpus \u00b7 facts \u00b7 cache",
+      "tag": "epoch-scoped \u00b7 RLS",
+      "pos": [
+        804,
+        120
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1143,
+          "label": "pgvector query"
+        }
+      ]
+    },
+    {
+      "id": "console",
+      "type": "external",
+      "label": "Executive Console",
+      "sublabel": "React + Vite",
+      "pos": [
+        30,
+        420
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "frontend/src/App.jsx"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "FastAPI Gateway",
+      "sublabel": "main.py :8000",
+      "tag": "auth \u00b7 rate limit",
+      "pos": [
+        288,
+        420
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "main.py",
+          "line": 446,
+          "label": "app routes"
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "type": "backend",
+      "label": "LangGraph Orchestrator",
+      "sublabel": "51 state channels",
+      "pos": [
+        546,
+        420
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3654,
+          "label": "graph build"
+        }
+      ]
+    },
+    {
+      "id": "fleet",
+      "type": "backend",
+      "label": "Specialist Fleet",
+      "sublabel": "financial \u00b7 risk \u00b7 product",
+      "tag": "pruning keeps pool=15",
+      "pos": [
+        804,
+        420
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1774,
+          "label": "fleet node"
+        }
+      ]
+    },
+    {
+      "id": "gates",
+      "type": "security",
+      "label": "Deterministic Gates",
+      "sublabel": "zero LLM tokens",
+      "tag": "citation \u00b7 scale \u00b7 growth",
+      "pos": [
+        1062,
+        420
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2934,
+          "label": "citation_pre_audit()"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 2013,
+          "label": "assert_claim_scales()"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 2350,
+          "label": "check_xbrl_figures()"
+        }
+      ]
+    },
+    {
+      "id": "audit",
+      "type": "cloud",
+      "label": "Grounding Audit",
+      "sublabel": "executive model judges",
+      "pos": [
+        1320,
+        420
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2948,
+          "label": "fact_checker_guard()"
+        }
+      ]
+    },
+    {
+      "id": "certified",
+      "type": "backend",
+      "label": "Certified Answer",
+      "sublabel": "receipt written",
+      "pos": [
+        1578,
+        420
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1770,
+          "label": "build_certificate_bundle()"
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "type": "database",
+      "label": "Semantic Cache",
+      "sublabel": "probe \u00b7 replay",
+      "tag": "threshold 0.985",
+      "pos": [
+        288,
+        610
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1553,
+          "label": "cache node"
+        }
+      ]
+    },
+    {
+      "id": "fastpath",
+      "type": "backend",
+      "label": "Path A Fastpath",
+      "sublabel": "exact fact match",
+      "tag": "0 LLM tokens",
+      "pos": [
+        546,
+        610
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3417,
+          "label": "Path A"
+        }
+      ]
+    },
+    {
+      "id": "refused",
+      "type": "security",
+      "label": "Verified Refusal",
+      "sublabel": "names the cause",
+      "tag": "audit_objection",
+      "pos": [
+        1062,
+        610
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3338,
+          "label": "verified_refusal()"
+        }
+      ]
+    },
+    {
+      "id": "unverified",
+      "type": "security",
+      "label": "Unverified",
+      "sublabel": "audit down",
+      "tag": "fail closed",
+      "pos": [
+        1320,
+        610
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2968,
+          "label": "unverified_system"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 1094,
+          "label": "audit_unavailable"
+        }
+      ]
+    },
+    {
+      "id": "receipts",
+      "type": "database",
+      "label": "Receipts + Certificates",
+      "sublabel": "sha256 hash chain",
+      "tag": "Ed25519 optional",
+      "pos": [
+        1578,
+        610
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1770,
+          "label": "build_certificate_bundle()"
+        }
+      ]
+    },
+    {
+      "id": "verifier",
+      "type": "security",
+      "label": "Offline Verifier",
+      "sublabel": "no database needed",
+      "tag": "re-hash every span",
+      "pos": [
+        1320,
+        800
+      ],
+      "size": [
+        160,
+        58
+      ],
+      "sources": [
+        {
+          "path": "verify_certificate.py",
+          "line": 52,
+          "label": "verify"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Ingestion \u2014 offline, epoch-scoped",
+      "wraps": [
+        "filings",
+        "transcripts",
+        "chunks",
+        "xbrl",
+        "factrows"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Fail-closed exits \u2014 nothing ships unverified",
+      "wraps": [
+        "refused",
+        "unverified"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "from": "filings",
+      "to": "transcripts",
+      "label": "extract pages",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c2",
+      "from": "transcripts",
+      "to": "chunks",
+      "label": "chunk + hash"
+    },
+    {
+      "id": "c3",
+      "from": "chunks",
+      "to": "store",
+      "label": "vectors"
+    },
+    {
+      "id": "c4",
+      "from": "xbrl",
+      "to": "factrows",
+      "label": "sync facts"
+    },
+    {
+      "id": "c5",
+      "from": "factrows",
+      "to": "store",
+      "label": "facts"
+    },
+    {
+      "id": "c6",
+      "from": "console",
+      "to": "gateway",
+      "label": "HTTPS \u00b7 API key",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c7",
+      "from": "gateway",
+      "to": "graph",
+      "label": "invoke run"
+    },
+    {
+      "id": "c8",
+      "from": "graph",
+      "to": "cache",
+      "label": "1 \u00b7 probe / replay"
+    },
+    {
+      "id": "c9",
+      "from": "graph",
+      "to": "fastpath",
+      "label": "2 \u00b7 covered fact?"
+    },
+    {
+      "id": "c10",
+      "from": "graph",
+      "to": "fleet",
+      "label": "3 \u00b7 coverage miss"
+    },
+    {
+      "id": "c11",
+      "from": "fleet",
+      "to": "store",
+      "label": "hybrid search"
+    },
+    {
+      "id": "c12",
+      "from": "fleet",
+      "to": "gates",
+      "label": "draft + spans"
+    },
+    {
+      "id": "c13",
+      "from": "gates",
+      "to": "audit",
+      "label": "six gates clean"
+    },
+    {
+      "id": "c14",
+      "from": "audit",
+      "to": "certified",
+      "label": "grounded",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c15",
+      "from": "gates",
+      "to": "refused",
+      "label": "any gate fails"
+    },
+    {
+      "id": "c16",
+      "from": "audit",
+      "to": "unverified",
+      "label": "audit down"
+    },
+    {
+      "id": "c17",
+      "from": "certified",
+      "to": "receipts",
+      "label": "receipt written"
+    },
+    {
+      "id": "c18",
+      "from": "receipts",
+      "to": "verifier",
+      "label": "offline verify"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One system, one canvas",
+      "items": [
+        "The union of all five focused diagrams, on a single page",
+        "Read left to right for the request journey, top to bottom for data",
+        "Detail still lives in the five focused diagrams \u2014 this is the orientation view"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Two independent producers of truth",
+      "items": [
+        "Prose: 10-Q filings \u2192 page transcripts \u2192 chunks + vectors",
+        "Structured: SEC XBRL \u2192 fact_rows, reconciled by exact match",
+        "Both land in Postgres + pgvector, scoped to a corpus epoch"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Nothing ships unverified",
+      "items": [
+        "Six deterministic gates run before the model is asked \u2014 zero tokens",
+        "Refusal and unverified are first-class outcomes, not error paths",
+        "Every answer carries a re-hashable receipt the offline verifier can replay"
+      ]
+    }
+  ]
+}

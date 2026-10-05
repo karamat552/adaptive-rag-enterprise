@@ -1,0 +1,278 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "The Gate Gauntlet",
+    "subtitle": "What every draft must survive before it may call itself certified",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "output": ".archify/workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html",
+    "repository": {
+      "url": "https://github.com/karamat552/adaptive-rag-enterprise",
+      "provider": "github",
+      "revision": "1c2cface7058dc328170335e444a2fab05639778"
+    }
+  },
+  "lanes": [
+    {
+      "id": "input",
+      "label": "Draft production"
+    },
+    {
+      "id": "det",
+      "label": "Deterministic gates \u2014 zero LLM tokens"
+    },
+    {
+      "id": "model",
+      "label": "Model judgement"
+    },
+    {
+      "id": "exit",
+      "label": "Certified"
+    },
+    {
+      "id": "refuse",
+      "label": "Fail-closed exit",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "Zero-token gates",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "security"
+    },
+    {
+      "id": "p2",
+      "label": "Judgement",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "draft",
+    "g12",
+    "g34",
+    "llm_audit",
+    "certified"
+  ],
+  "nodes": [
+    {
+      "id": "draft",
+      "lane": "input",
+      "col": 0,
+      "type": "backend",
+      "label": "Draft",
+      "sublabel": "fleet output",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 1837,
+          "label": "synthesize_csuite_report"
+        }
+      ]
+    },
+    {
+      "id": "g12",
+      "lane": "det",
+      "col": 1,
+      "type": "security",
+      "label": "Gates 1-3",
+      "sublabel": "docs \u00b7 bounds \u00b7 echo",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2953,
+          "label": "docs check"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 2934,
+          "label": "citation_pre_audit()"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 2983,
+          "label": "_ECHO_MARKERS"
+        }
+      ]
+    },
+    {
+      "id": "g34",
+      "lane": "det",
+      "col": 2,
+      "type": "security",
+      "label": "Gates 4-6",
+      "sublabel": "scale \u00b7 growth \u00b7 XBRL",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2013,
+          "label": "assert_claim_scales()"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 2175,
+          "label": "check_growth_claims()"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 2350,
+          "label": "check_xbrl_figures()"
+        }
+      ]
+    },
+    {
+      "id": "llm_audit",
+      "lane": "model",
+      "col": 3,
+      "type": "cloud",
+      "label": "Audit",
+      "sublabel": "model judge",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2948,
+          "label": "fact_checker_guard()"
+        }
+      ]
+    },
+    {
+      "id": "certified",
+      "lane": "exit",
+      "col": 3,
+      "type": "backend",
+      "label": "Certified",
+      "sublabel": "receipt",
+      "sources": [
+        {
+          "path": "db.py",
+          "line": 1770,
+          "label": "build_certificate_bundle()"
+        }
+      ]
+    },
+    {
+      "id": "refused",
+      "lane": "refuse",
+      "col": 3,
+      "type": "security",
+      "label": "Refused",
+      "sublabel": "cause named",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 3338,
+          "label": "verified_refusal()"
+        }
+      ]
+    },
+    {
+      "id": "unverified",
+      "lane": "refuse",
+      "col": 3,
+      "yOffset": 72,
+      "type": "security",
+      "label": "Unverified",
+      "sublabel": "audit down",
+      "sources": [
+        {
+          "path": "adaptive_rag.py",
+          "line": 2968,
+          "label": "unverified_system"
+        },
+        {
+          "path": "adaptive_rag.py",
+          "line": 1094,
+          "label": "audit_unavailable"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "draft",
+      "to": "g12",
+      "role": "main"
+    },
+    {
+      "id": "e2",
+      "from": "g12",
+      "to": "g34",
+      "role": "main"
+    },
+    {
+      "id": "e3",
+      "from": "g34",
+      "to": "llm_audit",
+      "label": "gates clean",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "llm_audit",
+      "to": "certified",
+      "label": "grounded",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e5",
+      "from": "llm_audit",
+      "to": "g12",
+      "label": "ungrounded \u2192 re-gate",
+      "role": "return",
+      "variant": "dashed"
+    },
+    {
+      "id": "e6",
+      "from": "g34",
+      "to": "refused",
+      "label": "any gate fails",
+      "role": "error",
+      "variant": "security"
+    },
+    {
+      "id": "e7",
+      "from": "llm_audit",
+      "to": "unverified",
+      "label": "audit unavailable",
+      "role": "error",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Six gates run before the model is asked",
+      "items": [
+        "Gate 1 documents present \u00b7 Gate 2 citation bounds \u00b7 Gate 3 echo guard",
+        "Gate 4 unit + scale \u00b7 Gate 5 growth direction \u00b7 Gate 6 XBRL crosscheck",
+        "All deterministic \u2014 zero tokens, and all six run before the model is asked"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Order is the design",
+      "items": [
+        "Cheap deterministic rejection precedes expensive judgement",
+        "A fabricated citation never reaches the auditor's context",
+        "XBRL compares figures against SEC-published facts, not prose"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "No gate can be argued past",
+      "items": [
+        "Any gate failure is fail-closed: retry, then refuse",
+        "A quarantined specialist can never certify, whatever the draft looks like",
+        "Every refusal names its cause and writes an autopsy receipt"
+      ]
+    }
+  ]
+}

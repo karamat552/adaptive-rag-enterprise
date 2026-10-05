@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "a6a76199-1dc6-466d-824b-7e2c7b2c725a",
+  "status": "current",
+  "command": "deliver",
+  "type": "dataflow",
+  "input": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/candidate.json",
+  "output": "/home/user/adaptive-rag-enterprise/.archify/dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html",
+  "specification": {
+    "sha256": "33ab4ccbd39ce9fff66517fc7b16867f8fa75418641d268b541e4ede503017ed",
+    "bytes": 5167
+  },
+  "artifact": {
+    "sha256": "4a65327af799d301707e0f40abf744760bd396cf36e03c25e0f12a72821d8ae6",
+    "bytes": 757402
+  }
+}
