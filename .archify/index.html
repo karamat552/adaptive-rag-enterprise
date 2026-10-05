@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Adaptive RAG — five diagrams, generated from evidence</title>
+<title>Adaptive RAG — six diagrams, generated from evidence</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -11,18 +11,19 @@
          font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
   header { max-width:1100px; margin:0 auto 34px; }
   h1 { font-size:30px; line-height:1.2; margin:0 0 10px; letter-spacing:-.02em; }
-  .lede { color:#9fb0d9; max-width:760px; margin:0 0 6px; }
-  .note { color:#7f8fb5; font-size:13.5px; max-width:820px; }
+  .lede { color:#9fb0d9; max-width:780px; margin:0 0 6px; }
+  .note { color:#7f8fb5; font-size:13.5px; max-width:830px; }
   .grid { max-width:1100px; margin:0 auto; display:grid; gap:16px;
            grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); }
   .card { display:block; text-decoration:none; color:inherit; padding:20px 20px 16px;
            background:#131a30; border:1px solid #24304f; border-radius:14px; transition:.15s; }
   .card:hover { background:#17203a; border-color:#3a4a75; transform:translateY(-1px); }
+  .card.combined { grid-column:1/-1; background:linear-gradient(135deg,#152142,#1a1631);
+                    border-color:#4a5c9e; }
   .type { font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.14em;
            text-transform:uppercase; color:#6ea8fe; margin-bottom:10px; }
-  h2 { font-size:17.5px; margin:0 0 8px; line-height:1.3; }
-  .sub { color:#b9c6e6; margin:0 0 10px; font-size:14.5px; }
-  .blurb { color:#8fa1c9; margin:0 0 14px; font-size:13.5px; }
+  h2 { font-size:18px; margin:0 0 8px; line-height:1.3; }
+  .sub { color:#b9c6e6; margin:0 0 12px; font-size:14.5px; max-width:900px; }
   .meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
   .ok { font-size:11.5px; padding:3px 8px; border-radius:999px; background:#123024; color:#5ee3a1; border:1px solid #1e4a37; }
   .skip { font-size:11.5px; padding:3px 8px; border-radius:999px; background:#2a2413; color:#e3c05e; border:1px solid #4a3f1e; }
@@ -33,68 +34,56 @@
 </head>
 <body>
 <header>
-  <h1>Adaptive RAG Enterprise — five diagrams, generated from the code</h1>
-  <p class="lede">Every box, lane, message and arrow below was produced by Archify from a typed JSON
-  specification, then gated four times: schema + layout validation, deterministic rendering, render-output
-  checks (crossings, corridors, label clearance, readability) and a real-browser check.</p>
-  <p class="note">The browser gate is <strong>skipped</strong> in all five because this machine has no Chrome
+  <h1>Adaptive RAG Enterprise — six diagrams, generated from the code</h1>
+  <p class="lede">One combined map of the whole system, plus five focused views. Every box, lane, message
+  and arrow was produced by Archify from a typed JSON specification, then gated four times: schema + layout
+  validation, deterministic rendering, render-output checks (crossings, corridors, label clearance,
+  readability) and a real-browser check.</p>
+  <p class="note">The browser gate is <strong>skipped</strong> on all six because this machine has no Chrome
   or Chromium binary — that is a stated gap, not a pass. Everything else is verified. Each file is one
   self-contained HTML page: no server, no CDN, no external requests.</p>
 </header>
 <main class="grid">
+    <a class="card combined" href="architecture-complete-20261005-093345/adaptive-rag-complete.html">
+      <div class="type">combined · start here</div>
+      <h2>Adaptive RAG Enterprise — the whole system on one canvas</h2>
+      <p class="sub">The whole system on one canvas — all five views merged: ingestion at the top, the query path across the middle, outcomes and proof at the bottom. Start here for the big picture, then open a focused diagram for the detail. 19 components, 18 connections.</p>
+      <div class="meta"><span class="ok">✓ validate</span><span class="ok">✓ deliver</span><span class="ok">✓ check</span><span class="skip">browser-check skipped (no Chrome)</span></div>
+      <div class="meta2">774 KB · self-contained · 23 evidence pins · pinned to 782f5547 · sha256 20ece8926b7ccac1…</div>
+    </a>
     <a class="card" href="architecture-runtime-20261005-082252/adaptive-rag-runtime.html">
       <div class="type">architecture</div>
       <h2>Adaptive RAG — Runtime Request Journey</h2>
       <p class="sub">Ingestion → certified answer → offline verification</p>
-      <p class="blurb">What talks to what, and where each box actually lives in the code.</p>
-      <div class="meta">
-        <span class="ok">✓ validated</span><span class="ok">✓ rendered</span><span class="ok">✓ checked</span>
-        <span class="skip">browser-check skipped (no Chrome)</span>
-      </div>
+      <div class="meta"><span class="ok">✓ validate</span><span class="ok">✓ deliver</span><span class="ok">✓ check</span><span class="skip">browser-check skipped (no Chrome)</span></div>
       <div class="meta2">758 KB · self-contained · 12 evidence pins · pinned to 7447c072 · sha256 7ada3fbac7adf024…</div>
     </a>
     <a class="card" href="workflow-gate-gauntlet-20261005-083023/gate-gauntlet.html">
       <div class="type">workflow</div>
       <h2>The Gate Gauntlet</h2>
       <p class="sub">What every draft must survive before it may call itself certified</p>
-      <p class="blurb">The gate gauntlet: six deterministic checks that run before the model is trusted, and the two fail-closed exits.</p>
-      <div class="meta">
-        <span class="ok">✓ validated</span><span class="ok">✓ rendered</span><span class="ok">✓ checked</span>
-        <span class="skip">browser-check skipped (no Chrome)</span>
-      </div>
+      <div class="meta"><span class="ok">✓ validate</span><span class="ok">✓ deliver</span><span class="ok">✓ check</span><span class="skip">browser-check skipped (no Chrome)</span></div>
       <div class="meta2">742 KB · self-contained · 12 evidence pins · pinned to 1c2cface · sha256 ad2c19ed78b162b6…</div>
     </a>
     <a class="card" href="sequence-query-lifecycle-20261005-083023/query-lifecycle.html">
       <div class="type">sequence</div>
       <h2>One Query's Lifecycle</h2>
       <p class="sub">HTTP ingress → certified answer: cache probe, deterministic paths, fleet, gates</p>
-      <p class="blurb">One question, start to finish, with the early exits that skip the model entirely.</p>
-      <div class="meta">
-        <span class="ok">✓ validated</span><span class="ok">✓ rendered</span><span class="ok">✓ checked</span>
-        <span class="skip">browser-check skipped (no Chrome)</span>
-      </div>
+      <div class="meta"><span class="ok">✓ validate</span><span class="ok">✓ deliver</span><span class="ok">✓ check</span><span class="skip">browser-check skipped (no Chrome)</span></div>
       <div class="meta2">746 KB · self-contained · 8 evidence pins · pinned to 1c2cface · sha256 ab31dbd30da6b347…</div>
     </a>
     <a class="card" href="dataflow-ingestion-lineage-20261005-083023/ingestion-lineage.html">
       <div class="type">dataflow</div>
       <h2>Ingestion → Answer Data Lineage</h2>
       <p class="sub">Two independent producers of truth, and how each figure traces back to its bytes</p>
-      <p class="blurb">Where every figure comes from: PDFs and SEC XBRL, down to the vector store.</p>
-      <div class="meta">
-        <span class="ok">✓ validated</span><span class="ok">✓ rendered</span><span class="ok">✓ checked</span>
-        <span class="skip">browser-check skipped (no Chrome)</span>
-      </div>
+      <div class="meta"><span class="ok">✓ validate</span><span class="ok">✓ deliver</span><span class="ok">✓ check</span><span class="skip">browser-check skipped (no Chrome)</span></div>
       <div class="meta2">740 KB · self-contained · 8 evidence pins · pinned to 1c2cface · sha256 4a65327af799d301…</div>
     </a>
     <a class="card" href="lifecycle-run-outcomes-20261005-083023/run-outcomes.html">
       <div class="type">lifecycle</div>
       <h2>Run Outcome Lifecycle</h2>
       <p class="sub">Every state a run can reach — and the fail-closed exits it can take</p>
-      <p class="blurb">Every state a run can end in, including the ones that never reach a user.</p>
-      <div class="meta">
-        <span class="ok">✓ validated</span><span class="ok">✓ rendered</span><span class="ok">✓ checked</span>
-        <span class="skip">browser-check skipped (no Chrome)</span>
-      </div>
+      <div class="meta"><span class="ok">✓ validate</span><span class="ok">✓ deliver</span><span class="ok">✓ check</span><span class="skip">browser-check skipped (no Chrome)</span></div>
       <div class="meta2">749 KB · self-contained · 7 evidence pins · pinned to 1c2cface · sha256 3ea479208f968a50…</div>
     </a>
 </main>

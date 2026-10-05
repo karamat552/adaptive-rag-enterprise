@@ -344,32 +344,33 @@ pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.
 
 CI (`.github/workflows/ci.yml`): unit → pgvector-16 service integration → Docker build.
 
-### Five diagrams — rendered from evidence, not from prose
+### Six diagrams — rendered from evidence, not from prose
 
-**Start here:** `.archify/index.html` — a landing page linking all five.
-Each one is an interactive, searchable, traceable page (open in a browser:
-search nodes, trace routes, switch views, export) and each is a **single
-self-contained file** — no server, no CDN, no external references.
+**Start here:** `.archify/index.html` — a landing page linking all six, with the
+combined map at the top. Each one is an interactive, searchable, traceable page
+(open in a browser: search nodes, trace routes, switch views, export) and each is
+a **single self-contained file** — no server, no CDN, no external references.
 
 | Diagram | Type | Answers | Evidence pins | Artifact |
 |---|---|---|---|---|
+| **The whole system** (combined) | `architecture` | Everything on one canvas — ingestion, query path, gates, outcomes, proof | 23 | `architecture-complete-*/adaptive-rag-complete.html` |
 | Runtime architecture | `architecture` | What talks to what, and where each box lives in the code | 12 | `architecture-runtime-*/adaptive-rag-runtime.html` |
 | Gate gauntlet | `workflow` | Which deterministic checks run before the model is trusted, and where a run fails closed | 12 | `workflow-gate-gauntlet-*/gate-gauntlet.html` |
 | Query lifecycle | `sequence` | One question start to finish, with the early exits that skip the model | 8 | `sequence-query-lifecycle-*/query-lifecycle.html` |
 | Ingestion lineage | `dataflow` | Where every figure comes from — PDFs and SEC XBRL down to the vector store | 8 | `dataflow-ingestion-lineage-*/ingestion-lineage.html` |
 | Run outcomes | `lifecycle` | Every state a run can end in, including the ones that never reach a user | 7 | `lifecycle-run-outcomes-*/run-outcomes.html` |
 
-All five passed the same gate suite on the committed revision:
+All six passed the same gate suite on the committed revision:
 
-| Gate | architecture | workflow | sequence | dataflow | lifecycle |
-|---|---|---|---|---|---|
-| `validate` (schema + composition + label clearance) | **pass** | **pass** | **pass** | **pass** | **pass** |
-| `deliver` | **pass** | **pass** | **pass** | **pass** | **pass** |
-| `check` (HTML/SVG structure, provenance) | **pass** | **pass** | **pass** | **pass** | **pass** |
-| `browser-check` (real Chrome, projected-text sizes) | skipped¹ | skipped¹ | skipped¹ | skipped¹ | skipped¹ |
+| Gate | combined | architecture | workflow | sequence | dataflow | lifecycle |
+|---|---|---|---|---|---|---|
+| `validate` (schema + composition + label clearance) | **pass** | **pass** | **pass** | **pass** | **pass** | **pass** |
+| `deliver` | **pass** | **pass** | **pass** | **pass** | **pass** | **pass** |
+| `check` (HTML/SVG structure, provenance) | **pass** | **pass** | **pass** | **pass** | **pass** | **pass** |
+| `browser-check` (real Chrome, projected-text sizes) | skipped¹ | skipped¹ | skipped¹ | skipped¹ | skipped¹ | skipped¹ |
 
 ¹ No Chrome or Chromium binary exists in this sandbox, so the visual gate never
-ran on any of the five. They are schema-, layout- and structure-valid, and every
+ran on any of the six. They are schema-, layout- and structure-valid, and every
 label was checked *geometrically* for clearance by the validator (it flagged —
 and we fixed — labels that were too wide for their boxes, messages closer than
 28px, a 7px micro-segment, edges routing through unrelated nodes and label/route
@@ -393,7 +394,14 @@ checks in the order the source calls them — documents-present `2953`,
 `2013`, `check_growth_claims` `2175`, `check_xbrl_figures` `2350` — followed by
 `fact_checker_guard` `2948`.
 
-All five were produced with [Archify](https://github.com/tt-a1i/archify) (MIT).
+The combined map is a single `architecture` spec that unions the five views —
+19 components, 18 connections — rendered onto one 1778×926 canvas. It declares
+no `viewBox`, so the renderer sizes the canvas itself and asks the reader to
+scroll a complete architecture at comfortable text sizes rather than shrink a
+semantically rich graph down to an emergency floor. It is the orientation view;
+the five focused diagrams remain the detail.
+
+All six were produced with [Archify](https://github.com/tt-a1i/archify) (MIT).
 Regenerating any of them is one command per diagram, run from the repository
 root:
 
