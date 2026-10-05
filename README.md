@@ -344,6 +344,37 @@ pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.
 
 CI (`.github/workflows/ci.yml`): unit → pgvector-16 service integration → Docker build.
 
+### Architecture diagram — rendered from evidence, not from prose
+
+`.archify/architecture-runtime-*/adaptive-rag-runtime.html` is an interactive
+architecture map of the runtime request journey (open it in a browser: search
+nodes, trace routes, switch views, export). It is a **single self-contained
+file** — no server, no CDN, no external references.
+
+It is not a hand-drawn picture. Nodes carry `sources` pinned to
+repository-relative files and line numbers at a frozen commit
+(`meta.repository.revision`), so every asserted component is checkable against
+the code at that revision. For example `gates` cites
+`adaptive_rag.py:2934` (`citation_pre_audit`) and `store` cites
+`db.py:1143` (`pgvector_hybrid_search`).
+
+The diagram was produced with [Archify](https://github.com/tt-a1i/archify)
+(MIT) and passed its gate suite on the committed revision:
+
+| Gate | Result |
+|---|---|
+| `validate` (schema + composition + label clearance) | **pass** |
+| `deliver` | **pass** |
+| `check` (HTML/SVG structure, provenance) | **pass** |
+| `browser-check` (real Chrome, projected-text sizes) | **skipped — no Chrome in this sandbox** |
+
+Honest note on that last row: the visual gate never ran, so the diagram is
+schema-, layout-, and structure-valid, and every label was checked
+*geometrically* for clearance by the validator (it flagged and we fixed two
+labels that were too wide for their gaps), but nobody has confirmed the
+projected-text sizes in a real browser. Run
+`archify browser-check <output.html>` where Chrome exists to close that gap.
+
 ### Pipeline audit — evidence per stage, not a green checkmark
 
 `pytest` proves the units work. It does not prove the *pipeline* works, end to
