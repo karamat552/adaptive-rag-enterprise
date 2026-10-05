@@ -73,3 +73,6 @@ frontend/dist/
 /shadow_battery_artifact.zip
 /REVIEW.md
 /.tools_venv/
+
+/eval_out/
+/recall.json
