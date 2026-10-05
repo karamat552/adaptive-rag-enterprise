@@ -259,3 +259,34 @@ python scripts/pipeline_audit_mutations.py      # 9 defects  → 9 CAUGHT
 pytest tests --ignore=tests/test_answer_accuracy.py -m "not integration and not live"
                                                 # 375 passed
 ```
+
+---
+
+## OPEN ITEM — deferred by the owner (2026-10-03)
+
+**Citation-ledger fidelity gap.** Status: **known, understood, deliberately
+not fixed yet** — the owner asked to schedule it. Do not "fix" it without
+confirming, and do not treat it as an undiagnosed bug.
+
+*The observation:* a certified production answer cited 【13】 and 【14】 in its
+text while its own ledger enumerated only 10 sources.
+
+*The diagnosis (already done):* the citations are **in range**, so the
+deterministic citation-bounds gate is behaving correctly — this is **not**
+fabrication and **not** a gate failure. The ledger itself is model-written
+prose (`adaptive_rag.py`, prompt around line 1897), so it is the one part of
+the answer that is neither derived nor verified against the evidence list.
+
+*The recommended fix (option 3 of the three offered):* stop asking the model
+to enumerate sources. Build the ledger **deterministically** from the
+evidence records the answer actually cited — the same `evidence_records` the
+receipt already carries — so the ledger and the citations cannot disagree,
+by construction. Two alternatives were considered and are weaker: a
+prompt-side instruction to list every source (still model-dependent) and a
+pre-audit gate that rejects a short ledger (detects the mismatch without
+removing it).
+
+*When picked up:* add the gap to `scripts/pipeline_audit.py` as a stage-5/7
+check that asserts `len(ledger) == len({cited indices})` — and confirm the
+check goes red on the current code before the fix lands, so the improvement
+is provable rather than asserted.
