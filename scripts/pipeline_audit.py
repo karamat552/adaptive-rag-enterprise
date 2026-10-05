@@ -595,6 +595,47 @@ def stage5_gates() -> None:
                    f"objection={objection!r}; names the cause={names_cause}; "
                    f"reaches the refusal text={reaches_user}")
 
+    @check("5-gates", "GATE ledger fidelity: ledger enumerates exactly the cited evidence")
+    def _ledger():
+        # The citation-ledger fidelity gap (live-observed 2026-10-03): a
+        # certified brief cited 【13】/【14】 while its own ledger listed 10
+        # rows. Citations were in range — nothing fabricated — but the ledger
+        # was MODEL-AUTHORED prose, so nothing tied it to the evidence.
+        #
+        # This check asserts BOTH halves, because a detector that never fires
+        # proves nothing:
+        #   1. the mismatch detector goes RED on the shape production emitted;
+        #   2. the deterministic rebuild removes it, and is idempotent.
+        body = ("## Executive Summary\n\n"
+                + "\n".join(f"- Metric {i} moved 【{i}】." for i in range(1, 13))
+                + "\n\nThe headline figures are 【13】 and 【14】.\n")
+        model_ledger = ("\n### Verified Sources Ledger\n\n"
+                        "| Footnote | Company | Document & Page |\n|---|---|---|\n"
+                        + "\n".join(f"| 【{i}】 | Company{i} | doc{i}.pdf, Page {i} |"
+                                    for i in range(1, 11)))
+        draft = body + "\n" + model_ledger
+        records = [{"company": f"Company{i}", "source": f"doc{i}.pdf",
+                    "page": i, "chunk_hash": f"h{i}"} for i in range(1, 15)]
+
+        gap_before = ar.ledger_fidelity_gap(draft)
+        fixed = ar.rebuild_verified_ledger(draft, records)
+        gap_after = ar.ledger_fidelity_gap(fixed)
+        rows_after = ar.ledger_row_indices(ar.split_ledger(fixed)[1])
+        cited = ar.cited_indices(ar.split_ledger(fixed)[0])
+        idempotent = ar.rebuild_verified_ledger(fixed, records) == fixed
+        # The prose must survive untouched — the fix is scoped to the ledger.
+        body_intact = (ar.split_ledger(fixed)[0].strip()
+                       == ar.split_ledger(draft)[0].strip())
+        ok = (gap_before is not None and gap_after is None
+              and rows_after == cited and idempotent and body_intact)
+        return _ev(ok,
+                   f"detector on the observed shape → "
+                   f"{'RED (caught)' if gap_before else 'silent (bad)'} "
+                   f"[{gap_before or 'no gap reported'}]; after rebuild → "
+                   f"{'clean' if gap_after is None else 'STILL GAPPED'} "
+                   f"rows={rows_after} cited={cited}; idempotent={idempotent}; "
+                   f"prose untouched={body_intact}")
+
 
 # ===========================================================================
 # STAGE 6 — TERMINALS: refusal, shadow, escalation

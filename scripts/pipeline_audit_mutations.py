@@ -163,6 +163,20 @@ CONTROLS: List[Control] = [
              "verified = (links_checked > 0 and True"),
         "if spans are not hashed, tampering is undetectable",
     ),
+    Control(
+        "ledger rebuild is neutralised (model-authored ledger ships again)",
+        "5-gates",
+        "GATE ledger fidelity: ledger enumerates exactly the cited evidence",
+        # The 2026-10-03 defect, restored: stop deriving the ledger and let
+        # whatever the model wrote through. This is exactly the pre-fix
+        # behaviour, which is why it is the right control for this check —
+        # if the check cannot go red on the real defect, it is theatre.
+        _sub("adaptive_rag.py",
+             "    body, _ = split_ledger(draft)\n    rows = records or []",
+             "    return draft\n    body, _ = split_ledger(draft)\n"
+             "    rows = records or []"),
+        "a model-authored ledger can under-enumerate its own citations",
+    ),
 ]
 
 

@@ -235,11 +235,9 @@ Two lessons, both enforced in the committed code:
 **Remaining honest gaps**
 - The `signature` block is `{"status": "unsigned"}` in production because no
   key is configured. Enabling it is now one command plus an env var.
-- The **citation-ledger fidelity gap** is still open and is the owner's call:
-  a certified answer cited 【13】/【14】 while its own ledger enumerated 10
-  sources. The citations were *in range* (the bounds gate is correct) — the
-  ledger is model-written prose. Recommended fix: derive the ledger
-  deterministically from the cited evidence.
+- ~~The **citation-ledger fidelity gap**~~ is **CLOSED — fixed 2026-10-05**
+  (see below). A certified answer had cited 【13】/【14】 while its own ledger
+  enumerated 10 sources; the ledger is now derived from the cited evidence.
 - The audit's LLM stages are exercised through routing/state contracts with
   mocked engines, so stage *logic* is verified without spending quota. A full
   live-LLM run still needs provider keys.
@@ -262,31 +260,50 @@ pytest tests --ignore=tests/test_answer_accuracy.py -m "not integration and not 
 
 ---
 
-## OPEN ITEM — deferred by the owner (2026-10-03)
+## CLOSED — citation-ledger fidelity (fixed 2026-10-05)
 
-**Citation-ledger fidelity gap.** Status: **known, understood, deliberately
-not fixed yet** — the owner asked to schedule it. Do not "fix" it without
-confirming, and do not treat it as an undiagnosed bug.
+**Status: fixed, gated, and proven by a mutation control.**
 
-*The observation:* a certified production answer cited 【13】 and 【14】 in its
-text while its own ledger enumerated only 10 sources.
+*The observation (2026-10-03):* a certified production answer cited 【13】 and
+【14】 in its text while its own ledger enumerated only 10 sources.
 
-*The diagnosis (already done):* the citations are **in range**, so the
-deterministic citation-bounds gate is behaving correctly — this is **not**
-fabrication and **not** a gate failure. The ledger itself is model-written
-prose (`adaptive_rag.py`, prompt around line 1897), so it is the one part of
-the answer that is neither derived nor verified against the evidence list.
+*The diagnosis:* the citations were **in range**, so the deterministic
+citation-bounds gate was behaving correctly — not fabrication, not a gate
+failure. The defect was provenance: prompt rule 2 asked the **model** to
+enumerate its own sources, so the ledger was the one part of a certified
+answer that was neither derived from nor verified against the evidence list.
+A model can cite correctly and still miscount its own bibliography.
 
-*The recommended fix (option 3 of the three offered):* stop asking the model
-to enumerate sources. Build the ledger **deterministically** from the
-evidence records the answer actually cited — the same `evidence_records` the
-receipt already carries — so the ledger and the citations cannot disagree,
-by construction. Two alternatives were considered and are weaker: a
-prompt-side instruction to list every source (still model-dependent) and a
-pre-audit gate that rejects a short ledger (detects the mismatch without
-removing it).
+*The fix (`adaptive_rag.py`):* the ledger is now **derived**, not authored.
+`rebuild_verified_ledger()` rebuilds it from the same `evidence_records` the
+receipt carries, driven by the citation indices the brief actually uses, so
+ledger and citations cannot disagree — by construction, not by instruction.
+It runs at the top of the `is_safe` branch of `fact_checker_guard`, before
+the cache write, the returned answer and the receipt's claim extraction, so
+all three see identical text. Slot alignment is safe upstream because fleet
+inference stores `evidence_records` in the same canonical order as
+`documents`, and synthesis preserves a slot per chunk even when it collapses
+the text to a quoted stub.
 
-*When picked up:* add the gap to `scripts/pipeline_audit.py` as a stage-5/7
-check that asserts `len(ledger) == len({cited indices})` — and confirm the
-check goes red on the current code before the fix lands, so the improvement
-is provable rather than asserted.
+Properties, all pinned by tests:
+- **Idempotent** — a second certify pass cannot append a second ledger.
+- **Scoped** — the prose body is byte-identical before and after.
+- **Never fabricates** — an index with no matching record degrades to an
+  explicit `unknown`, never to a plausible-looking company/page.
+- **Total** — a brief that cites nothing gets a ledger that says so; a brief
+  with no ledger section gets one.
+
+*The proof (three independent instruments):*
+1. **Red → green on the observed shape.** The detector reports
+   `ledger lists 10 entr(ies) [1..10] but the brief cites 14 index(es)
+   [1..14]` on a faithful reconstruction of the production output, and
+   `clean` after the rebuild.
+2. **Stage-5 audit check** — `GATE ledger fidelity: ledger enumerates exactly
+   the cited evidence` asserts *both* halves (the detector fires on the real
+   shape; the rebuild resolves it and is idempotent).
+3. **Mutation control** — `ledger rebuild is neutralised (model-authored
+   ledger ships again)` restores the pre-fix behaviour and the audit check
+   flips to **FAIL**, i.e. the check is not theatre.
+
+*Tests:* `tests/test_ledger_fidelity.py` (11 tests). Full suite: **386 passed**,
+1 known failure (the `bge-small` weights download, unchanged and unrelated).

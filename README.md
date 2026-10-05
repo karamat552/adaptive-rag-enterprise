@@ -320,13 +320,14 @@ Full ledger: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) · Roadmap: [GAP_ANALYSIS.md](GA
 
 ```bash
 pytest tests/ -q --ignore=tests/test_answer_accuracy.py --ignore=tests/test_app.py
-# → 375 passed (offline + DB-integration when reachable; deterministic, CI-safe)
+# → 386 passed (offline + DB-integration when reachable; deterministic, CI-safe)
 ```
 
 | Suite | Tests | What it proves |
 |---|---|---|
 | test_fact_extract.py | 47 | Phase-0 fact store: span-anchored extraction (real Apple/Meta/Tesla corpus fixtures), fail-closed column binding, B.1.1/B.1.3/B.1.5 dispositions, exact-match routing guard + interpretive-stem demotion + fuzz operators, live end-to-end sync+verify (integration-marked) |
 | test_fact_templates.py | 13 | Phase-1 templates (span-verbatim figures, NUMERIC-padding guard), shadow executor isolation contract, agreement classifier, receipt lineage, live ledger round-trip (integration-marked) |
+| test_ledger_fidelity.py | 11 | Citation-ledger fidelity: the detector fires on the live-observed 14-cited-vs-10-listed shape, the deterministic rebuild removes it, is idempotent, never fabricates a source, and leaves the prose byte-identical |
 | test_tamper.py | 17 | Receipt chain survives span shifts, hash forgeries, relabeling, OOB |
 | test_failover.py | 37 | Quota cooldowns, peer rescue, timeout handling, circuit ownership |
 | test_contradictions.py | 36 | Scale normalization, GAAP/non-GAAP basis, period binding |

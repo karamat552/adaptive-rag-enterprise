@@ -2945,6 +2945,131 @@ def citation_pre_audit(draft: str, doc_count: int) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# 4b-bis. DETERMINISTIC SOURCES LEDGER (citation-ledger fidelity fix)
+# ---------------------------------------------------------------------------
+# The observation (live, 2026-10-03): a certified brief cited 【13】/【14】 in
+# its prose while its own 'Verified Sources Ledger' enumerated only 10 rows.
+# Diagnosis: the citations were IN RANGE — the bounds gate above was correct
+# and nothing was fabricated. The defect was one of provenance, not truth:
+# rule 2 of the synthesis prompt asked the MODEL to enumerate its own
+# sources, so the ledger was the single part of a certified answer that was
+# neither derived from nor verified against the evidence list. A model can
+# cite correctly and still miscount its own bibliography.
+#
+# Fix: stop asking the model to enumerate. Rebuild the ledger from the same
+# `evidence_records` the receipt carries, driven by the citation indices the
+# brief actually uses. Ledger and citations then cannot disagree BY
+# CONSTRUCTION — there is no second author to drift.
+#
+# Slot alignment is guaranteed upstream: fleet inference stores
+# `evidence_records` in the SAME canonical ordering as `documents`
+# (adaptive_rag.py, "SAME canonical ordering"), and synthesis preserves a
+# slot for every chunk even when it collapses the text to a quoted stub
+# ("Slots are PRESERVED"). So `[n]` ↔ `records[n-1]` ↔ `Evidence [n]`.
+_LEDGER_HEADER_RE = re.compile(
+    r"^#{1,6}[ \t]*Verified[ \t]+Sources[ \t]+Ledger[ \t]*$",
+    re.IGNORECASE | re.MULTILINE)
+_LEDGER_TITLE = "Verified Sources Ledger"
+_LEDGER_BULLET_RE = re.compile(r"^[-*\u2022]\s+|\d+[.)]\s+")
+_LEDGER_NOTE = ("*Derived deterministically from the numbered evidence this "
+                "brief cites — not model-authored.*")
+
+
+def split_ledger(draft: str) -> Tuple[str, Optional[str]]:
+    """Splits a brief into (body, ledger_section). The ledger is the tail of
+    the document (synthesis rule 2 puts it last), so everything from its
+    header onward is the ledger. Returns (draft, None) when there is none."""
+    m = _LEDGER_HEADER_RE.search(draft or "")
+    if not m:
+        return draft or "", None
+    return draft[:m.start()], draft[m.start():]
+
+
+def cited_indices(text: str) -> List[int]:
+    """Distinct in-document-order citation indices used by `text`."""
+    out: List[int] = []
+    for m in _CITE_RE.finditer(text or ""):
+        n = _cite_index(m)
+        if n not in out:
+            out.append(n)
+    return out
+
+
+def ledger_row_indices(ledger: Optional[str]) -> List[int]:
+    """Citation indices enumerated as ledger rows.
+
+    Only table ROWS / list ITEMS count — the table's own header cell
+    ('| Footnote | Company | Document & Page |') and any prose above it are
+    not entries. This is the number the fidelity check compares."""
+    if not ledger:
+        return []
+    out: List[int] = []
+    for line in ledger.splitlines()[1:]:
+        stripped = line.strip()
+        if not stripped or set(stripped) <= set("|-: "):
+            continue                      # separator row
+        if not (stripped.startswith("|") or _LEDGER_BULLET_RE.match(stripped)):
+            continue                      # title, prose note, blank
+        for m in _CITE_RE.finditer(stripped):
+            n = _cite_index(m)
+            if n not in out:
+                out.append(n)
+    return out
+
+
+def ledger_fidelity_gap(draft: str) -> Optional[str]:
+    """The invariant, as a check: the ledger must enumerate exactly the
+    evidence the brief cites. Returns a human-readable gap description, or
+    None when the two agree."""
+    body, ledger = split_ledger(draft)
+    cited = cited_indices(body)
+    listed = ledger_row_indices(ledger)
+    if ledger is None:
+        return (f"no '{_LEDGER_TITLE}' section present, but the brief cites "
+                f"{len(cited)} index(es) {cited}")
+    if cited == listed:
+        return None
+    return (f"ledger lists {len(listed)} entr(ies) {listed} but the brief "
+            f"cites {len(cited)} index(es) {cited}")
+
+
+def _ledger_row(n: int, record: Dict[str, Any]) -> str:
+    company = (record or {}).get("company") or "unknown"
+    source = (record or {}).get("source") or "unknown source"
+    page = (record or {}).get("page")
+    where = f"{source}, Page {page}" if page is not None else str(source)
+    return f"| 【{n}】 | {company} | {where} |"
+
+
+def rebuild_verified_ledger(draft: str,
+                            records: Optional[List[Dict[str, Any]]] = None
+                            ) -> str:
+    """Replaces whatever ledger the model wrote with one derived from the
+    evidence the brief actually cites. Idempotent: running it twice yields
+    the same text.
+
+    Never fabricates a source: an index with no corresponding record is
+    rendered as an explicit unknown rather than a plausible-looking row, and
+    a brief that cites nothing gets a ledger that says so."""
+    body, _ = split_ledger(draft)
+    rows = records or []
+    cited = cited_indices(body)
+    lines = [f"### {_LEDGER_TITLE}", "", _LEDGER_NOTE, ""]
+    if not cited:
+        lines.append("*No indexed evidence was cited by this brief.*")
+    else:
+        lines += ["| Footnote | Company | Document & Page |",
+                  "|---|---|---|"]
+        for n in cited:
+            rec = rows[n - 1] if 1 <= n <= len(rows) else None
+            lines.append(_ledger_row(n, rec))
+    rebuilt = body.rstrip() + "\n\n" + "\n".join(lines) + "\n"
+    logger.info("[ledger] rebuilt deterministically: %d cited index(es) %s "
+                "→ %d row(s).", len(cited), cited, len(cited))
+    return rebuilt
+
+
 async def fact_checker_guard(state: MultiAgentState) -> MultiAgentState:
     draft = state.get("final_executive_report", "")
     docs = state.get("documents", [])
@@ -3139,6 +3264,13 @@ NOTE: percentages quoted from the source table's '% Change' column are VERBATIM 
 
     if is_safe:
         logger.info("Compliance Status: CERTIFIED GROUNDED")
+        # CITATION-LEDGER FIDELITY (2026-10-03 observation, fixed here):
+        # rebuild the ledger from the evidence this brief actually cites
+        # before anything downstream copies the text. Placed FIRST so the
+        # cached answer, the returned answer and the receipt's claim
+        # extraction all see the identical, ledgers-agree text.
+        draft = rebuild_verified_ledger(draft,
+                                        state.get("evidence_records") or [])
         s = get_settings()
         if not s.disable_cache_writes and os.getenv("RAG_DISABLE_CACHE_WRITE") != "1":
             try:
