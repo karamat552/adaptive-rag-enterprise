@@ -425,9 +425,10 @@ the failures above were fixable rather than arguable.
 end, in the order a request actually travels. Two commands close that gap:
 
 ```bash
-python scripts/pipeline_audit.py            # 38 checks, 9 stages, zero LLM tokens
+python scripts/pipeline_audit.py            # 39 checks, 9 stages, zero LLM tokens
 python scripts/pipeline_audit.py --json     # machine-readable (CI gate; exit 1 on any FAIL)
-python scripts/pipeline_audit_mutations.py  # 9 injected defects — can the audit go red?
+python scripts/pipeline_audit_mutations.py  # 10 injected defects — can the audit go red?
+python scripts/local_stack_bootstrap.py     # local Postgres + corpus (audit prerequisites)
 ```
 
 Every check prints the **observed value** as its evidence, so the claim and the
