@@ -918,6 +918,20 @@ def main() -> int:
     ap.add_argument("--only", default="", help="substring filter on stage, e.g. 5-gates")
     args = ap.parse_args()
 
+    # PRODUCTION-WRITE GUARD (ported 2026-10-07 — the fix the reviewer found
+    # missing: stage 2-pathA WRITES a deterministic receipt, so the audit's
+    # ambient .env target must never be production. Guard from
+    # scripts/target_guard.py: classifies EVERY effective URL (runtime +
+    # admin), fails closed on unrecognized remotes, NO override flag).
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import target_guard
+    import db as _db
+    target_guard.refuse_production_writes(
+        {"runtime": _db.get_settings().database_url or "",
+         "admin": _db.get_settings().admin_database_url or ""},
+        "pipeline_audit.py")
+
     stages = [
         ("0-ingest", stage0_ingest), ("1-cache", stage1_cache),
         ("2-pathA", stage2_path_a), ("3-router", stage3_router),

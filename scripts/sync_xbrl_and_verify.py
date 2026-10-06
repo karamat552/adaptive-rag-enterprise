@@ -168,15 +168,23 @@ def step4_mutations(skip: bool) -> bool:
             [sys.executable, str(REPO / "scripts" / "pipeline_audit_mutations.py"),
              "--only", name],
             capture_output=True, text=True, timeout=900, cwd=str(REPO))
-        last = [ln for ln in (proc.stdout or "").splitlines()
-                if ln.strip()][-1:]
-        for ln in last:
-            print(f"    {ln.strip()}")
-        if proc.returncode != 0:
+        out = (proc.stdout or "")
+        # Distinguish SETUP-FAIL (the mutation never applied) from MISSED
+        # (it applied and ESCAPED) — an unrun control is a comment, an
+        # escaped control is a finding; they must never read the same.
+        if "SETUP-FAIL" in out:
+            print(f"    mutation {name}: SETUP-FAIL (anchor missing — "
+                  f"the mutation never applied; this is NOT an escape)")
             ok = False
-            print(f"    mutation {name} exit={proc.returncode} (NOT caught)")
+        elif "MISSED" in out:
+            print(f"    mutation {name}: MISSED (applied and ESCAPED — "
+                  f"the check does not test what it claims)")
+            ok = False
+        elif proc.returncode != 0:
+            print(f"    mutation {name}: RUNNER ERROR exit={proc.returncode}")
+            ok = False
         else:
-            print(f"    mutation {name} CAUGHT (exit 0)")
+            print(f"    mutation {name}: CAUGHT (exit 0)")
     return ok
 
 

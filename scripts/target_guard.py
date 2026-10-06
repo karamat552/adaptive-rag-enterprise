@@ -56,10 +56,31 @@ def _production_targets() -> Set[Tuple[str, str]]:
     return targets
 
 
+def _is_local(url: str) -> bool:
+    """localhost / 127.0.0.1 / ::1 / unix-socket targets are always local."""
+    parsed = _parse(url)
+    if not parsed:
+        return False
+    host = parsed[0].lower()
+    return (host in ("localhost", "127.0.0.1", "::1")
+            or host.startswith("/"))
+
+
 def classify_targets(urls: Dict[str, str]) -> Tuple[str, List[str]]:
     """Classify every provided URL; return the most dangerous class and
-    the offending URL labels. 'production' beats everything."""
+    the offending URL labels. 'production' beats 'unknown-remote' beats
+    'local-or-disposable'.
+
+    FAIL-CLOSED on unknown remotes (the reviewer's pushback, 2026-10-07):
+    the old version classified anything not matching .env's production
+    pairs as 'local-or-disposable' — which fails OPEN when .env is missing
+    or unparseable (the guard then passes everything). Now: a NON-local
+    target that cannot be verified against .env's production pairs is
+    'unknown-remote', and write-capable scripts refuse it — only an
+    explicitly local target, or a remote verified against a readable .env,
+    may be written."""
     prod = _production_targets()
+    env_ok = bool(prod) or not (REPO / ".env").exists()
     offending: List[str] = []
     worst = "local-or-disposable"
     for label, url in sorted(urls.items()):
@@ -67,13 +88,19 @@ def classify_targets(urls: Dict[str, str]) -> Tuple[str, List[str]]:
         if parsed and parsed in prod:
             offending.append(label)
             worst = "production"
+        elif not env_ok and parsed and not _is_local(url):
+            if worst != "production":
+                offending.append(label)
+                worst = "unknown-remote"
     return worst, offending
 
 
 def refuse_production_writes(urls: Dict[str, str], script_name: str) -> None:
     """Hard refusal for write-capable scripts. There is deliberately NO
     flag to override this — a production write must never be one argument
-    away (the audit-tool lesson)."""
+    away (the audit-tool lesson). Unknown-remote targets fail closed too:
+    if .env is missing or unparseable, a remote target cannot be verified
+    as non-production, so it is refused."""
     worst, offending = classify_targets(urls)
     if worst == "production":
         print("REFUSED: the effective database target is PRODUCTION "
@@ -82,6 +109,12 @@ def refuse_production_writes(urls: Dict[str, str], script_name: str) -> None:
         print("  Point it at a seeded disposable stack")
         print("  (scripts/local_stack_bootstrap.py --database-url ...).")
         print("  There is deliberately no flag to override this refusal.")
+        sys.exit(1)
+    if worst == "unknown-remote":
+        print("REFUSED: the database target is a remote that could not be")
+        print(f"  verified as non-production ({', '.join(offending)}) — .env is")
+        print("  missing or has no readable DB URLs. Failing closed: writes")
+        print("  to an unverifiable remote are refused.")
         sys.exit(1)
 
 

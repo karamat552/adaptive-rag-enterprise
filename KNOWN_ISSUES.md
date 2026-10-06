@@ -158,3 +158,14 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 - Redis Stage 1: trigger-gated on k6 results (p95 degradation or second worker); ADR-016 has the 9-play roadmap ready
 - Incremental PDF diffing: deferred (SHA-256 comparison is correct for 3 filings; page-level diffing is a roadmap item for >20 sources)
 - Suite determinism: live-LLM tests (test_main.py auth, test_answer_accuracy.py) are the known flake class; offline suite is deterministic (311 tests, 3 live skipped in bare environments)
+
+### N. Fact-store mislabelled rows: segment-revenue labels carrying cost-of-sales values
+Span scan (2026-10-06, corrected per-digit matching, all 234 fact_rows):
+**0 of 8 reconciled rows mismatch; 15 of 226 unreconciled rows have
+value-not-in-own-span.** The misses are structured, not random: Apple
+`segment_products_revenue` rows carry 42,586 / 46,387 / 189,282 / 201,471 —
+the segment COST-OF-SALES column values, not revenues — and the services
+rows mirror the same pattern. Impact: none on served answers (reconciled
+rows are clean and are the only FastPath anchors) — these are retrieval-
+context rows only. The repo's "0 span mismatches" claims verify span-TEXT
+byte-fidelity, a different check that this scan confirms.

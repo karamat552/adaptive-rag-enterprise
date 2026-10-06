@@ -427,6 +427,8 @@ def _is_quota_error(exc: Exception) -> bool:
     """429 / rate-limit / token-budget exhaustion class. Timeout and 5xx are
     NOT quota errors — they do not trigger endpoint switch (the global
     circuit breaker owns those)."""
+    if isinstance(exc, LLMBudgetExceeded):
+        return False   # a budget trip is OUR cap, not a provider rate limit
     text = str(exc).lower()
     return ("429" in text or "rate limit" in text or "rate_limit" in text
             or "quota" in text or "tokens per day" in text
@@ -435,9 +437,11 @@ def _is_quota_error(exc: Exception) -> bool:
 
 class LLMBudgetExceeded(RuntimeError):
     """Per-run call budget exhausted (the 49.7-calls finding, 2026-10-06).
-    Message deliberately contains 'rate limit' so _is_quota_error classifies
-    it as a QUOTA event (endpoint cooldown) — never a circuit failure (the
-    ADR-008 ownership rule: budget exhaustion is not a systemic failure)."""
+    Its OWN class, named truthfully: a budget trip is not a provider rate
+    limit and must never be logged as one (the project's name-the-true-cause
+    rule). The except-paths below pass it through untouched: no circuit
+    failure, no endpoint cooldown, no peer fallback — a budget trip is not
+    an endpoint problem (every endpoint shares the run's budget)."""
 
 
 def _run_llm_calls() -> int:
@@ -1173,7 +1177,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
     # the terminal behavior); never unbounded.
     if _run_llm_calls() >= get_settings().max_llm_calls_per_run:
         raise LLMBudgetExceeded(
-            f"rate limit: per-run LLM call budget exhausted "
+            f"per-run LLM call budget exhausted "
             f"({_run_llm_calls()} calls >= "
             f"{get_settings().max_llm_calls_per_run}) — failing closed "
             f"instead of retrying")
@@ -1192,6 +1196,8 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
             logger.info("[%s] ok (failover-eligible) | tokens in=%d out=%d", stage, i, o)
             return result, collector
         except Exception as exc:
+            if isinstance(exc, LLMBudgetExceeded):
+                raise   # budget: no circuit, no cooldown — pass through
             if not _is_quota_error(exc):
                 _circuit.record_failure()
             raise
@@ -1213,6 +1219,8 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         # failover branch documents (ADR-008's consult-fix: a quota storm
         # must not trip the 5-failure global circuit and stall every stage
         # for 60s). Recorded here only for NON-quota failures.
+        if isinstance(exc, LLMBudgetExceeded):
+            raise   # budget: no circuit, no cooldown, no peer — pass through
         is_quota = _is_quota_error(exc)
         if not is_quota:
             _circuit.record_failure()
