@@ -225,8 +225,14 @@ def main() -> int:
     base = WORK / "base"
     if base.exists():
         shutil.rmtree(base)
+    # Windows fix (2026-10-06, live-caught): copying vendored site-packages
+    # (.ci_venv/, venv/) died with WinError 206 (path too long) before any
+    # mutation ran — the mutant is executed with sys.executable, so the
+    # copies never needed venvs. Also exclude bulky build/eval dirs.
     shutil.copytree(REPO, base, ignore=shutil.ignore_patterns(
-        ".git", "node_modules", "__pycache__", "*.pyc", ".venv"))
+        ".git", "node_modules", "__pycache__", "*.pyc", ".venv",
+        ".ci_venv", "venv", ".tools_node", ".tools_venv", "dist",
+        "eval_out", ".archify"))
 
     print("=" * 78)
     print("PIPELINE AUDIT — MUTATION CONTROLS (can the audit detect breakage?)")

@@ -118,9 +118,19 @@ def step3_audit() -> bool:
             [sys.executable, str(REPO / "scripts" / "pipeline_audit.py"),
              "--only", stage, "--json"],
             capture_output=True, text=True, timeout=900, cwd=str(REPO))
-        tail = (proc.stdout or "").strip().splitlines()[-3:]
-        for ln in tail:
-            print(f"    {ln}")
+        # parse the audit JSON: report PASS/FAIL/SKIP counts, not raw tails
+        try:
+            payload = json.loads(proc.stdout or "[]")
+            items = payload if isinstance(payload, list) else payload.get("checks", [])
+            counts: Dict[str, int] = {}
+            for c in items:
+                st = str(c.get("status", "?")).upper()
+                counts[st] = counts.get(st, 0) + 1
+            print(f"    stage {stage}: {counts}")
+        except Exception:
+            tail = (proc.stdout or "").strip().splitlines()[-2:]
+            for ln in tail:
+                print(f"    {ln}")
         if proc.returncode != 0:
             all_ok = False
             print(f"    audit stage {stage} exit={proc.returncode} (failures above)")
@@ -133,15 +143,21 @@ def step4_mutations(skip: bool) -> bool:
         return True
     print("STEP 4: re-run the two affected mutation controls")
     # The two controls that need Path-A serving + a grounded receipt:
-    want = ("patha", "demotion", "tamper")   # substring classes, audit's --only
     listing = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "pipeline_audit_mutations.py"),
          "--list"],
         capture_output=True, text=True, timeout=300, cwd=str(REPO))
-    names = [ln.strip().split()[0] for ln in
+    # --list lines are "[stage] NAME"; the mutations --only filter matches
+    # substrings of stage or NAME, so we pass the full NAME.
+    names = [ln.strip().split("] ", 1)[1].strip() for ln in
              (listing.stdout or "").splitlines()
-             if ln.strip() and ln.strip()[0].isalpha()]
-    chosen = [n for n in names if any(w in n.lower() for w in want)][:2]
+             if ln.strip().startswith("[") and "] " in ln]
+    # The two controls the causal chain affects: Path-A demotion (needs
+    # reconciled rows to have a served query to demote) and receipt span
+    # tamper (needs a grounded receipt to exist).
+    demotion = [n for n in names if "demotion set" in n.lower()]
+    tamper = [n for n in names if "span is not hashed" in n.lower()]
+    chosen = (demotion[:1] + tamper[:1])[:2]
     if not chosen:
         print("  could not identify the two affected mutation names via --list;")
         print(f"  --list output head: {(listing.stdout or '')[:200]!r}")
@@ -152,11 +168,15 @@ def step4_mutations(skip: bool) -> bool:
             [sys.executable, str(REPO / "scripts" / "pipeline_audit_mutations.py"),
              "--only", name],
             capture_output=True, text=True, timeout=900, cwd=str(REPO))
-        tail = (proc.stdout or "").strip().splitlines()[-2:]
-        for ln in tail:
-            print(f"    {ln}")
+        last = [ln for ln in (proc.stdout or "").splitlines()
+                if ln.strip()][-1:]
+        for ln in last:
+            print(f"    {ln.strip()}")
         if proc.returncode != 0:
             ok = False
+            print(f"    mutation {name} exit={proc.returncode} (NOT caught)")
+        else:
+            print(f"    mutation {name} CAUGHT (exit 0)")
     return ok
 
 
@@ -166,6 +186,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     help="skip step 4 (mutation re-runs)")
     args = ap.parse_args(argv)
     db = _import_db()
+    import target_guard
+    target_guard.refuse_production_writes(
+        {"runtime": db.get_settings().database_url or "",
+         "admin": db.get_settings().admin_database_url or ""},
+        "sync_xbrl_and_verify.py")
 
     print("CAUSAL CHAIN: xbrl_facts -> reconciliation -> Path A -> audit")
     before = counts(db)

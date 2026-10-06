@@ -29,10 +29,22 @@ DEFINITION (so the numbers cannot be read loosely)
     made-up figure. The cost denominator is the SAME set as the latency
     denominator (answered runs only).
 
+TARGET GUARD (this script WRITES — refusal receipts)
+    bench_latency runs the real pipeline, which stores receipts. It must
+    never run against the production database. scripts/target_guard.py
+    classifies EVERY effective URL (runtime AND admin identities) against
+    the production (host, database) pairs from .env and REFUSES production.
+    There is deliberately NO flag to override: a production write must
+    never be one argument away (the audit-tool lesson, 2026-10-05). A
+    disposable database on the production HOST is allowed — classification
+    is per (host, database), never host alone.
+
 PREREQUISITES
-    A reachable database + (for model stages) a provider key. Under
-    --deterministic-only no key is needed: stages that would call a model
-    are reported SKIPPED, never 0ms — a zero would read as "instant".
+    A reachable seeded database (scripts/local_stack_bootstrap.py) + (for
+    model stages) a provider key. Under --deterministic-only no key is
+    needed: provider keys are stripped from THIS process so model stages
+    cannot run; stages that would call a model are reported SKIPPED, never
+    0ms — a zero would read as "instant".
 
 Exit codes: 0 = at least one answered run measured; 1 = refused / nothing
 measurable (including answered 0/N).
@@ -54,6 +66,8 @@ _sys.path.insert(0, str(REPO))   # repo root for `import db` / adaptive_rag
 BATTERY_PATH = REPO / "tests" / "battery_phase1_preregistered.json"
 REFUSAL_OUTCOMES = {"verified_refusal", "unverified_system", "out_of_domain"}
 USAGE_KEYS = ("usage_in", "usage_out", "usage_total", "llm_calls")
+PROVIDER_KEY_VARS = ("GROQ_API_KEY", "NIM_API_KEY", "APINEX_API_KEY",
+                    "OPENROUTER_API_KEY", "GEMINI_API_KEY")
 
 
 def _import_pipeline():
@@ -64,47 +78,13 @@ def _import_pipeline():
     except Exception as exc:
         print("REFUSED: cannot import the pipeline layer (adaptive_rag/db).")
         print(f"  import error: {type(exc).__name__}: {exc}")
-        print("  prerequisite missing: a working local Python stack for db.py")
-        print("  (on the dev machine: the mmh3 Application-Control DLL block")
-        print("   reached via db.py -> fastembed). No numbers without it.")
+        print("  prerequisite missing: a working local Python stack for db.py.")
+        print("  No numbers without it.")
         sys.exit(1)
 
 
 def has_provider_key() -> bool:
-    return bool(os.getenv("GROQ_API_KEY")
-                or os.getenv("NIM_API_KEY")
-                or os.getenv("APINEX_API_KEY")
-                or os.getenv("OPENROUTER_API_KEY")
-                or os.getenv("GEMINI_API_KEY"))
-
-
-
-
-def _production_host() -> str:
-    env_path = REPO / ".env"
-    if not env_path.exists():
-        return ""
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith("DB_DATABASE_URL="):
-            return (line.split("=", 1)[1].strip().strip('"')
-                    .split("@")[-1].split("/")[0])
-    return ""
-
-
-def _guard_production(db_url: str, allow_flag: bool, what: str) -> None:
-    """Refuse the production host unless explicitly opted in. The 2026-10-05
-    audit-tool lesson: a measurement script that silently trusts the ambient
-    .env target is a production footgun, even read-only."""
-    from urllib.parse import urlparse
-    target = urlparse(db_url).netloc.rpartition("@")[-1]  # strip user:pass
-    prod = _production_host()
-    if prod and target == prod and not allow_flag:
-        print("REFUSED: the database target is the PRODUCTION host")
-        print(f"  ({prod}). {what} must run against a seeded disposable stack")
-        print("  (scripts/local_stack_bootstrap.py), not production, unless")
-        print("  you pass --allow-production deliberately.")
-        sys.exit(1)
+    return any(os.getenv(v) for v in PROVIDER_KEY_VARS)
 
 
 def load_questions() -> List[Dict[str, Any]]:
@@ -119,7 +99,7 @@ def load_questions() -> List[Dict[str, Any]]:
 def time_one(question: str, adaptive_rag) -> Dict[str, Any]:
     """Stream one question; attribute inter-yield deltas to the node that
     just completed. graph.astream is an ASYNC generator — iterate with
-    `async for` under asyncio.run (the first version used sync iteration
+    `async for` under asyncio.run (an earlier version used sync iteration
     and died on 'async_generator is not iterable')."""
     async def _stream() -> Dict[str, Any]:
         graph = adaptive_rag.get_graph()
@@ -198,31 +178,36 @@ def cost_columns(summary: Dict[str, Any], price_in: float, price_out: float) -> 
 
 def run_all(args: argparse.Namespace) -> int:
     adaptive_rag, db = _import_pipeline()
-    _guard_production(db.get_settings().database_url,
-                      args.allow_production, "a latency benchmark that runs the real pipeline (writes refusal receipts)")
+
+    # TARGET GUARD: this script writes (refusal receipts). Production is
+    # refused with NO override flag; classification covers both identities.
+    import target_guard  # scripts/ is on sys.path when run directly
+    target_guard.refuse_production_writes(
+        {"runtime": db.get_settings().database_url or "",
+         "admin": db.get_settings().admin_database_url or ""},
+        "bench_latency.py")
+
     questions = load_questions()[:args.n]
     if args.deterministic_only:
         # Make the mode literal: strip provider keys from THIS process so no
         # model stage can run. The graph's fail-closed paths then produce
         # refusals (router unavailable) and only deterministic stages run —
-        # matching the spec's "--deterministic-only needs no provider key".
-        stripped = [k for k in ("GROQ_API_KEY", "NIM_API_KEY", "APINEX_API_KEY",
-                                "OPENROUTER_API_KEY", "GEMINI_API_KEY")
-                    if os.environ.pop(k, None)]
+        # matching "--deterministic-only needs no provider key".
+        stripped = [k for k in PROVIDER_KEY_VARS if os.environ.pop(k, None)]
         if stripped:
-            print(f"  deterministic-only: stripped {len(stripped)} provider key(s) "
-                  f"from this process — model stages cannot run.")
+            print(f"  deterministic-only: stripped {len(stripped)} provider "
+                  f"key(s) from this process — model stages cannot run.")
     if not has_provider_key() and not args.deterministic_only:
         print("REFUSED: no provider key configured and --deterministic-only not")
         print("  passed. Model stages would fail-closed into refusals, and a")
         print("  refusal-only run is not a latency measurement of the pipeline.")
         return 1
 
-    target = db.get_settings().database_url
-    masked = (target.split("@")[-1] if target and "@" in target else "n/a")
+    target = db.get_settings().database_url or ""
+    masked = target.split("@")[-1] if "@" in target else "n/a"
     print("\nBENCHING: per-stage latency + token cost")
     print(f"  questions    : {len(questions)} (pre-registered battery, first n)")
-    print(f"  db target    : {masked}")
+    print(f"  db target    : {masked} (disposable/local — production refused)")
     print(f"  provider key : {'present' if has_provider_key() else 'ABSENT'}"
           f"{' (deterministic-only mode)' if args.deterministic_only else ''}")
     print(f"  refusal rule : outcomes in {sorted(REFUSAL_OUTCOMES)} are EXCLUDED")
@@ -238,7 +223,6 @@ def run_all(args: argparse.Namespace) -> int:
         r = time_one(q["q"], adaptive_rag)
         r["question"] = q["q"]
         runs.append(r)
-        stages = ", ".join(f"{k}={v}ms" for k, v in sorted(r["stage_ms"].items()))
         print(f"  [{q['id']}] outcome={r['outcome']} answered={r['answered']} "
               f"total={r['ms_total']}ms tokens={r['tokens']['usage_total']}")
 
@@ -258,7 +242,7 @@ def run_all(args: argparse.Namespace) -> int:
           f"(refusals excluded from latency statistics)")
     print(f"  p50 = {summary['p50_ms']}ms   p95 = {summary['p95_ms']}ms "
           f"(over answered runs only)")
-    print(f"  stage ms (sum over answered, deterministic order):")
+    print("  stage ms (sum over answered, deterministic order):")
     for st, ms in sorted(summary["stage_ms_sum_over_answered"].items()):
         print(f"    {st:24s} {ms}ms")
     if args.deterministic_only:
@@ -267,7 +251,8 @@ def run_all(args: argparse.Namespace) -> int:
             print("  model-dependent stages SKIPPED (no key / deterministic-only):")
             for st in skipped:
                 print(f"    {st:24s} SKIPPED")
-    print(f"  tokens/query (mean over answered): {summary['tokens_per_answered_query_mean']}")
+    print(f"  tokens/query (mean over answered): "
+          f"{summary['tokens_per_answered_query_mean']}")
     print(f"  cost: {cost_columns(summary, args.price_in, args.price_out)}")
 
     if args.json:
@@ -288,8 +273,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--n", type=int, default=5,
                     help="number of battery questions to run (default 5)")
-    ap.add_argument("--allow-production", action="store_true",
-                    help="explicitly allow the production host as target")
     ap.add_argument("--deterministic-only", action="store_true",
                     help="no provider key needed; model stages report SKIPPED, never 0ms")
     ap.add_argument("--price-in", type=float, default=0.0,

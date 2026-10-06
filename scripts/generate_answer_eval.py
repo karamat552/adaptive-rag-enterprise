@@ -149,17 +149,24 @@ def build_packet(out_dir: Path) -> None:
 
 def run_answers(packet_path: Path, out_dir: Path, n: int) -> Optional[Path]:
     """RUN stage — real pipeline, real tokens. Refuses without a key."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()   # adaptive_rag.py:67 does this at import; the key check
+                        # runs BEFORE that import, so load .env explicitly here
+    except ImportError:
+        pass
     if not has_provider_key():
         print("REFUSED: RUN needs a provider key (real pipeline, real tokens).")
         print("  prerequisite missing: GROQ_API_KEY / NIM_API_KEY / APINEX_API_KEY /")
         print("  OPENROUTER_API_KEY / GEMINI_API_KEY — none set.")
         return None
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     try:
         import adaptive_rag  # noqa: PLC0415
     except Exception as exc:
         print("REFUSED: cannot import the pipeline layer for RUN.")
         print(f"  import error: {type(exc).__name__}: {exc}")
-        print("  (dev machine: the mmh3 Application-Control DLL block).")
         return None
     import asyncio
 
@@ -170,10 +177,18 @@ def run_answers(packet_path: Path, out_dir: Path, n: int) -> Optional[Path]:
     with answers_path.open("w", encoding="utf-8") as fh:
         for q in questions:
             result = asyncio.run(adaptive_rag.arun_query(q["q"]))
+            # arun_query returns per_model telemetry (no nested "usage" key
+            # — the first capture read the wrong key and recorded 0 for every
+            # run; live-caught 2026-10-06). Sum per-model totals instead.
+            per_model = result.get("per_model") or {}
+            tokens_total = sum(
+                (m.get("input") or 0) + (m.get("output") or 0)
+                for m in per_model.values())
             rec = {"id": q["id"], "q": q["q"], "answer": result.get("answer"),
                    "outcome": result.get("outcome"),
                    "grounded": result.get("grounded"),
                    "run_id": result.get("run_id"),
+                   "tokens_total": tokens_total,
                    "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                 time.gmtime())}
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -195,6 +210,11 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
     the prompt. Judge gotcha (hit in the reference build): judges wrap JSON
     in markdown fences; strip before json.loads, and a parse failure is
     score None / verdict judge_error — never a zero and never a pass."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
     if not has_provider_key():
         print("REFUSED: GRADE needs a provider key for the judge model.")
         return None
@@ -209,6 +229,7 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
                          "https://api.groq.com/openai/v1")
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=120)
 
+    judge_tokens_total = 0
     answers = [json.loads(ln) for ln in
                answers_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
     rows: List[Dict[str, Any]] = []
@@ -228,6 +249,8 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
             resp = client.chat.completions.create(
                 model=judge_model, max_tokens=400,
                 messages=[{"role": "user", "content": prompt}])
+            judge_tokens_total += int(getattr(getattr(resp, "usage", None),
+                                              "total_tokens", 0) or 0)
             raw = (resp.choices[0].message.content or "").strip()
             parsed = json.loads(_strip_fences(raw))
             score = parsed.get("score")
@@ -259,6 +282,8 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
                            if r.get("outcome") in
                            ("verified_refusal", "unverified_system",
                             "out_of_domain")],
+        "judge_tokens_total": judge_tokens_total,
+        "run_tokens_total": sum(int(a.get("tokens_total") or 0) for a in answers),
         "caution": "an opinion of one judge model against a fixed rubric; "
                    "quote with the model named, never as ground truth",
     }
@@ -272,11 +297,13 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    stage = ap.add_mutually_exclusive_group(required=True)
-    stage.add_argument("--build-only", action="store_true",
-                       help="emit packet.jsonl + rubric.md; no keys, no DB, no network")
-    stage.add_argument("--run", action="store_true", help="run the pipeline over the packet")
-    stage.add_argument("--grade", action="store_true", help="judge-grade the answers")
+    ap.add_argument("--build-only", action="store_true",
+                   help="emit packet.jsonl + rubric.md; no keys, no DB, no network")
+    ap.add_argument("--run", action="store_true", help="run the pipeline over the packet")
+    ap.add_argument("--grade", action="store_true", help="judge-grade the answers")
+    # --run and --grade COMPOSE (the owner's invocation is --run --grade --n 12):
+    # stages are separable AND chainable; requiring at least one stage keeps
+    # a bare invocation from silently doing nothing.
     ap.add_argument("--answers", default="", help="answers.jsonl to grade (default OUT/answers.jsonl)")
     ap.add_argument("--out", default="eval_out", help="output directory (default eval_out/)")
     ap.add_argument("--n", type=int, default=42, help="limit questions for RUN")
@@ -287,6 +314,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     out_dir = (REPO / args.out) if not Path(args.out).is_absolute() else Path(args.out)
 
     try:
+        if not (args.build_only or args.run or args.grade):
+            ap.error("choose at least one stage: --build-only / --run / --grade")
+            return 1
         if args.build_only:
             build_packet(out_dir)
             return 0

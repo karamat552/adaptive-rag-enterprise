@@ -22,7 +22,8 @@ PREREQUISITES / SAFETY
        pass, and db.py consumes it verbatim.
     2. REFUSES the production host: if --database-url matches the Neon
        production host found in .env, the script refuses unless
-       --i-know-this-is-production is passed. Seeding REPLACES corpus rows
+       (classification is per (host, database): a disposable on the
+       production HOST is allowed; the production DATABASE is refused).
        (delete+reinsert + epoch bump) — pointing this at production would
        churn the live corpus. This guard is deliberate: the audit-tool
        lesson (2026-10-05) is that write-capable scripts must never silently
@@ -48,20 +49,6 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 
-def _production_host() -> str:
-    env_path = REPO / ".env"
-    if not env_path.exists():
-        return ""
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith("DB_DATABASE_URL="):
-            try:
-                return urlparse(line.split("=", 1)[1].strip().strip('"')).netloc
-            except Exception:
-                return ""
-    return ""
-
-
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--database-url", default=os.getenv("DB_DATABASE_URL", ""),
@@ -73,8 +60,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--skip-facts", action="store_true",
                     help="skip fact_rows reconciliation (recall over reconciled "
                          "rows will then correctly REFUSE: nothing reconciled)")
-    ap.add_argument("--i-know-this-is-production", action="store_true",
-                    help="override the production-host refusal (not recommended)")
     args = ap.parse_args(argv)
 
     if not args.database_url or not args.admin_url:
@@ -83,26 +68,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("  ambient .env default — that is how production gets churned.")
         return 1
 
-    prod_host = _production_host()
-    target_host = urlparse(args.database_url).netloc.rpartition("@")[-1]
-    if (prod_host and target_host == prod_host
-            and not args.i_know_this_is_production):
-        print("REFUSED: the target URL's host matches the PRODUCTION database")
-        print(f"  host in .env ({prod_host}). Seeding REPLACES corpus rows and")
-        print("  bumps the epoch — that must never run against production.")
-        print("  Pass --i-know-this-is-production to override deliberately.")
-        return 1
+    import target_guard
+    target_guard.refuse_production_writes(
+        {"runtime": args.database_url, "admin": args.admin_url},
+        "local_stack_bootstrap.py")
 
     # Point db.py at the target BEFORE importing it (settings read env once).
     os.environ["DB_DATABASE_URL"] = args.database_url
     os.environ["DB_ADMIN_DATABASE_URL"] = args.admin_url
 
     print("SEEDING local measurement stack")
-    print(f"  target : {target_host}")
-    print(f"  guard  : production host = {prod_host or 'n/a'} "
-          f"({'refused on match' if prod_host else 'not found in .env'})")
+    from urllib.parse import urlparse as _urlparse
+    _t = _urlparse(args.database_url)
+    print(f"  target : {_t.netloc.rpartition('@')[-1]}/{_t.path.lstrip('/')}")
+    print("  guard  : production (host, database) pairs refused; no override flag")
 
     try:
+        if not os.getenv("APP_RAG_PASSWORD"):
+            # silent .env read (never printed): the dev machine keeps it there;
+            # an explicit env var always wins.
+            env_path = REPO / ".env"
+            if env_path.exists():
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    if line.strip().startswith("APP_RAG_PASSWORD="):
+                        os.environ["APP_RAG_PASSWORD"] = line.split("=", 1)[1].strip().strip('"')
+                        break
         if not os.getenv("APP_RAG_PASSWORD"):
             print("REFUSED: APP_RAG_PASSWORD must be set for role bootstrap")
             print("  (scripts/bootstrap_roles.py creates the non-superuser,")
