@@ -101,6 +101,13 @@ class RagSettings(BaseSettings):
     llm_timeout_s: float = 45.0
     db_timeout_s: float = 20.0
     max_retries: int = 2
+    # PER-RUN LLM-CALL BUDGET (2026-10-06, the 49.7-calls finding): the
+    # healthy pipeline is ~10-13 LLM calls per question (measured per-node:
+    # gateway 1 + fleet 3 + synthesis 1-5 + audit 1); the pathological tail
+    # (retry loop x3 pipeline passes + in-client retries + peer rescues
+    # under quota weather) measured 49.7 calls / ~178K tokens per question.
+    # Beyond this cap the run fails closed to the existing refusal paths.
+    max_llm_calls_per_run: int = 24
     max_concurrent_runs: int = 8
     # Near-exact replay only — see db.Settings.cache_similarity for the
     # 2026-09-13 measurement that killed the 0.92 default (bge-small
@@ -424,6 +431,18 @@ def _is_quota_error(exc: Exception) -> bool:
     return ("429" in text or "rate limit" in text or "rate_limit" in text
             or "quota" in text or "tokens per day" in text
             or "tpd" in text or "too many requests" in text)
+
+
+class LLMBudgetExceeded(RuntimeError):
+    """Per-run call budget exhausted (the 49.7-calls finding, 2026-10-06).
+    Message deliberately contains 'rate limit' so _is_quota_error classifies
+    it as a QUOTA event (endpoint cooldown) — never a circuit failure (the
+    ADR-008 ownership rule: budget exhaustion is not a systemic failure)."""
+
+
+def _run_llm_calls() -> int:
+    """Total LLM calls made this question (per-question telemetry)."""
+    return sum(int(e.get("calls", 0)) for e in _MODEL_USAGE.values())
 
 
 def _is_timeout_error(exc: Exception) -> bool:
@@ -1148,6 +1167,16 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
     stage): pinned to the primary model — a quota wall means fail-closed
     quarantine upstream, NEVER a weaker backup certifying a financial brief."""
     _circuit.check()
+    # PER-RUN CALL BUDGET (the 49.7-calls finding, 2026-10-06): bound the
+    # pathological tail — retry loop x3 pipeline passes + in-client retries
+    # + peer rescues. Beyond the cap: fail closed (the refusal paths own
+    # the terminal behavior); never unbounded.
+    if _run_llm_calls() >= get_settings().max_llm_calls_per_run:
+        raise LLMBudgetExceeded(
+            f"rate limit: per-run LLM call budget exhausted "
+            f"({_run_llm_calls()} calls >= "
+            f"{get_settings().max_llm_calls_per_run}) — failing closed "
+            f"instead of retrying")
     model_name = _runnable_model_id(runnable)
     if allow_failover and get_failover_endpoints():
         # Failover path: primary attempt + backups handled inside the runner.
@@ -1207,6 +1236,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         # gemini-3.5-flash) — community lanes (APInex etc.) remain
         # fleet-only per ADR-008's ruling.
         if is_quota and \
+                not isinstance(exc, LLMBudgetExceeded) and \
                 os.getenv("RAG_EXEC_PEER_FAILOVER",
                           "").lower() not in ("0", "false", "no"):
             peer = await _exec_peer_fallback(messages, stage,
