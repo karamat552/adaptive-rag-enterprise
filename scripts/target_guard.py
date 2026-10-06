@@ -27,14 +27,25 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _parse(url: str) -> Optional[Tuple[str, str]]:
-    """(host, database) from a postgres URL; credentials are ignored."""
+    """(host, database) from a postgres URL; credentials AND port stripped
+    (live-caught 2026-10-07: netloc keeps 'localhost:5432', so a
+    port-bearing local URL failed the local test). Unix-socket URLs
+    (empty host, absolute path) return ('', database) — local by shape."""
     if not url:
         return None
     try:
         parsed = urlparse(url)
-        host = (parsed.netloc or "").rpartition("@")[-1]
-        path = (parsed.path or "").lstrip("/")
-        return (host, path) if host else None
+        db = (parsed.path or "").lstrip("/")
+        host = parsed.hostname or ""   # hostname: no port, lowercased
+        if not host:
+            # bare (unbracketed) IPv6 literal: urlparse cannot take its
+            # hostname ("postgresql://u:p@::1/x") — fall back to the netloc.
+            raw_host = (parsed.netloc or "").rpartition("@")[-1]
+            if raw_host and all(c in "0123456789abcdef:" for c in raw_host.lower()):
+                host = raw_host
+        if not host and (parsed.netloc or "").endswith("@") and parsed.path.startswith("/"):
+            return ("", db)            # unix-socket form
+        return (host, db) if host else None
     except Exception:
         return None
 
@@ -62,8 +73,7 @@ def _is_local(url: str) -> bool:
     if not parsed:
         return False
     host = parsed[0].lower()
-    return (host in ("localhost", "127.0.0.1", "::1")
-            or host.startswith("/"))
+    return (host in ("localhost", "127.0.0.1", "::1") or host == "")
 
 
 def classify_targets(urls: Dict[str, str]) -> Tuple[str, List[str]]:
@@ -80,7 +90,12 @@ def classify_targets(urls: Dict[str, str]) -> Tuple[str, List[str]]:
     explicitly local target, or a remote verified against a readable .env,
     may be written."""
     prod = _production_targets()
-    env_ok = bool(prod) or not (REPO / ".env").exists()
+    # env_ok = the production pairs could actually be read. A missing or
+    # unparseable .env means a remote target CANNOT be verified as
+    # non-production -> fail closed (unknown-remote). The inverted version
+    # of this line (not (REPO/".env").exists()) was the exact fail-open the
+    # test caught live 2026-10-07: a missing .env passed every remote.
+    env_ok = bool(prod)
     offending: List[str] = []
     worst = "local-or-disposable"
     for label, url in sorted(urls.items()):

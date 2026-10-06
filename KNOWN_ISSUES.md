@@ -82,7 +82,7 @@ capacity shortfalls INCOMPLETE, never as logic drift.
 
 ## Epistemic limits (never "solved" — narrowed and exposed)
 
-### 8. The retrieval blind spot
+### 10. The retrieval blind spot
 The audit verifies drafts against the chunks retrieval found; text that was
 never retrieved cannot contradict a draft. Mitigations: multi-query
 expansion (conditional), per-entity sub-retrieval, and — uniquely — the
@@ -90,7 +90,7 @@ receipt shows exactly which chunks were seen, per answer, so a human can
 audit the audit. Every RAG system has this hole; ours is the one where you
 can see it.
 
-### 9. The audit audits the LLM's draft against the LLM's evidence
+### 11. The audit audits the LLM's draft against the LLM's evidence
 "Circularity" is mitigated by five deterministic zero-token gates, XBRL
 ground truth, cross-specialist extraction, and the receipt chain — but the
 LLM auditor is the final authority on qualitative claims, and two of its
@@ -159,7 +159,7 @@ value. We do not bypass it; see ADR-015's rejected-proposals section.
 - Incremental PDF diffing: deferred (SHA-256 comparison is correct for 3 filings; page-level diffing is a roadmap item for >20 sources)
 - Suite determinism: live-LLM tests (test_main.py auth, test_answer_accuracy.py) are the known flake class; offline suite is deterministic (311 tests, 3 live skipped in bare environments)
 
-### N. Fact-store mislabelled rows: segment-revenue labels carrying cost-of-sales values
+### 12. Fact-store mislabelled rows: segment-revenue labels carrying cost-of-sales values
 Span scan (2026-10-06, corrected per-digit matching, all 234 fact_rows):
 **0 of 8 reconciled rows mismatch; 15 of 226 unreconciled rows have
 value-not-in-own-span.** The misses are structured, not random: Apple
