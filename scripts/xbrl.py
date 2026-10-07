@@ -60,6 +60,18 @@ CONCEPTS: Dict[str, List[str]] = {
     "revenue": ["RevenueFromContractWithCustomerExcludingAssessedTax"],
     "net_income": ["NetIncomeLoss"],
     "eps_diluted": ["EarningsPerShareDiluted"],
+    # COVERAGE EXPANSION (2026-10-07, owner-approved — KNOWN_ISSUES limit 2):
+    # three more standard us-gaap concepts for the EXISTING companies. The
+    # PDF spans ALREADY exist (the fact extractor captured gross_margin /
+    # operating_income / rd_expense rows — verified span-clean in the
+    # 2026-10-06 scan); the dual-key only needed the SEC side. Flow metrics:
+    # Q4 = FY - 9mo is valid (the per-share caveat does not apply here).
+    # Segment revenues (Products/Services, FoA, automotive, iPhone,
+    # advertising) are DIMENSIONAL facts the companyfacts API does not
+    # expose — they stay fleet-class, correctly.
+    "gross_margin": ["GrossProfit"],
+    "operating_income": ["OperatingIncomeLoss"],
+    "rd_expense": ["ResearchAndDevelopmentExpense"],
 }
 
 COMPANIES: List[Dict[str, str]] = [
