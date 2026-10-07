@@ -27,6 +27,19 @@ if not (os.getenv("DB_DATABASE_URL") or os.getenv("NEON_DATABASE_URL")
 import pytest  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _clean_per_run_state():
+    """Per-run state is module-global (the budget counter, the circuit) —
+    without this fixture one test's leftover state trips the next test's
+    calls (live-caught 2026-10-07: the budget tests left _MODEL_USAGE at
+    24 calls and every failover test's first _llm_call hit the cap)."""
+    import adaptive_rag as _ar
+    _ar._MODEL_USAGE.clear()
+    _ar._circuit._failures = 0
+    yield
+    _ar._MODEL_USAGE.clear()
+
+
 # ============================== retry-hint parsing =========================
 def test_parse_groq_tpd_hint():
     from adaptive_rag import parse_retry_hint
@@ -728,7 +741,9 @@ def test_exec_peer_failover_on_by_default(monkeypatch):
 
     async def _fake_fallback(messages, stage, schema=None):
         rescued["n"] += 1
-        return object()
+        from types import SimpleNamespace as _NS
+        return _NS(content="peer"), _NS(input_tokens=0, output_tokens=0,
+                                        calls=1, totals=lambda: (0, 0, 0, 1))
 
     import unittest.mock as mock
     monkeypatch.delenv("RAG_EXEC_PEER_FAILOVER", raising=False)
@@ -753,7 +768,9 @@ def test_exec_peer_failover_disabled_explicitly(monkeypatch):
 
     async def _fake_fallback(messages, stage, schema=None):
         rescued["n"] += 1
-        return object()
+        from types import SimpleNamespace as _NS
+        return _NS(content="peer"), _NS(input_tokens=0, output_tokens=0,
+                                        calls=1, totals=lambda: (0, 0, 0, 1))
 
     import unittest.mock as mock
     monkeypatch.setenv("RAG_EXEC_PEER_FAILOVER", "0")

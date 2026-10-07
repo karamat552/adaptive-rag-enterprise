@@ -1250,6 +1250,12 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
             peer = await _exec_peer_fallback(messages, stage,
                                              schema=peer_schema)
             if peer is not None:
+                # THE BUDGET'S BLIND SPOT (the retry dig, 2026-10-07): peer
+                # rescues never counted toward the per-run budget — under
+                # the 429 wall the storm was peer-heavy and the cap never
+                # fired (37 calls > 24). Tracked at the CALL SITE so every
+                # peer path counts, whatever implements it.
+                _track_model_usage("exec-peer", peer[1])
                 return peer
         raise
     _circuit.record_success()
@@ -3713,11 +3719,16 @@ def pathing_triage(state: MultiAgentState) -> str:
 
 
 def evaluate_retry_thresholds(state: MultiAgentState) -> str:
+    """THE DECISION (the retry dig, 2026-10-07, scripts/token_dig.py): the
+    retry NEVER converted a refusal into an answer in any observed case —
+    the stormy runs (A01/A03: 186-188K) refused after full passes, the
+    healthy runs (B01/D01) answered on pass 1, and the middle-case dig ran
+    THREE full pipeline passes ending in the SAME refusal. The retry
+    re-run is dead: unverified -> refuse. The sharpen pass (contradiction
+    re-retrieval) is a separate, one-shot mechanism and stays."""
     if state.get("grounded"):
         return END
-    if state.get("retry_count", 0) >= get_settings().max_retries:
-        return "refuse"        # v1 sent this to the hallucination node
-    return "rewrite"
+    return "refuse"        # the retry loop is dead — the dig proved it
 
 
 def route_after_rewrite(state: MultiAgentState) -> str:

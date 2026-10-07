@@ -56,3 +56,46 @@ def test_healthy_run_below_cap_proceeds(monkeypatch):
     result, _collector = asyncio.run(
         ar._llm_call(_engine(), [("human", "q")], "test", allow_failover=False))
     assert result.content == "ok [1]"
+
+
+def test_peer_rescue_counts_toward_budget(monkeypatch):
+    """The budget's BLIND SPOT (found by the retry dig, 2026-10-07): peer
+    rescues never called _track_model_usage, so the budget counter missed
+    every peer call — under the 429 wall the storm was peer-heavy and the
+    cap never fired (37 calls > 24). Peer calls must count."""
+    ar._MODEL_USAGE.clear()
+    ar._MODEL_USAGE["primary"] = {"input": 0, "output": 0, "calls": 23}
+    s = ar.get_settings()
+    monkeypatch.setattr(s, "max_llm_calls_per_run", 24, raising=False)
+
+    async def _fail_429(messages, config=None):
+        raise RuntimeError("429 tokens per day exhausted")
+    engine = SimpleNamespace(ainvoke=_fail_429)
+    monkeypatch.setattr(ar, "_exec_peer_fallback",
+                        async_peer_stub := (lambda messages, stage, schema=None:
+                                            _async_peer()))
+    async def _async_peer():
+        return SimpleNamespace(content="peer ok"), \
+            SimpleNamespace(input_tokens=0, output_tokens=0, calls=1,
+                            totals=lambda: (0, 0, 0, 1))
+    # call 1: primary fails 429 -> peer rescue -> the peer call must count
+    result, _ = asyncio.run(ar._llm_call(engine, [("human", "q")], "test",
+                                         allow_failover=False))
+    assert result.content == "peer ok"
+    total = ar._run_llm_calls()
+    assert total >= 24, (f"the peer rescue was not tracked: total calls "
+                         f"{total} after a peer rescue at 23")
+    # call 2: the budget must now fire (the peer call counted toward it)
+    with pytest.raises(ar.LLMBudgetExceeded):
+        asyncio.run(ar._llm_call(engine, [("human", "q")], "test",
+                                 allow_failover=False))
+
+
+def test_retry_is_dead_route_to_refusal():
+    """THE DECISION (the retry dig, 2026-10-07): three full pipeline passes
+    on A01 ended in the SAME refusal — the retry never converted a refusal
+    into an answer in ANY observed case (the extremes and now the middle).
+    Killing it saves ~18K per refused question and bounds every storm."""
+    state = {"grounded": False, "retry_count": 0}
+    assert ar.evaluate_retry_thresholds(state) == "refuse", \
+        "the retry re-run must be dead: unverified -> refuse, not rewrite"
