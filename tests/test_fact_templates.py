@@ -159,11 +159,15 @@ def test_shadow_never_raises_and_never_mutates_state():
 @pytest.mark.live
 def test_shadow_coverage_miss_is_not_a_disagreement():
     """Out-of-coverage questions log a miss, write nothing to the
-    ledger (V1 serves them; only covered questions count in A.2)."""
+    ledger (V1 serves them; only covered questions count in A.2).
+    Originally used gross margin — but ADR-024 (2026-10-07) grew
+    coverage to it, so the question now AGREES. Apple's diluted EPS is
+    the deliberate remaining gap: the september-fiscal skip leaves no
+    reconciled Apple EPS row. Revisit if that row ever lands."""
     out = asyncio.run(_run_shadow_safely({
-        "original_question": "What was Apple's gross margin in Q4 2023?",
+        "original_question": "What was Apple's diluted EPS in Q4 2023?",
         "tenant_id": "default", "run_id": "unit-1",
-        "final_executive_report": "Gross margin was $40,427 million [1].",
+        "final_executive_report": "Diluted EPS was $1.46 [1].",
     }))
     assert out.get("shadow_coverage_miss") == "triple_not_in_fact_store"
 

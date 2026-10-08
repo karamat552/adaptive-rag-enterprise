@@ -55,7 +55,12 @@ GOLD_SET = [
     ("What was Meta's total revenue in Q4 2023?",
      ["40,111"]),
     ("What was Meta's advertising revenue in Q4 2023?",
-     ["38,706", "38.7"]),
+     # GOLD SEMANTICS FIX (2026-10-07): this row demanded BOTH 38,706 AND
+     # 38.7, but 38.7B is an ALTERNATIVE RENDERING of the same fact
+     # (38,706M == 38.706B) and _numeric_variants("38.7") gains no comma
+     # form — the conjunction was unsatisfiable by design. The mandated
+     # verbatim value is the gold (same precedent as the 25% row below).
+     ["38,706"]),
     # --- Derived metrics ---
     # GOLD SEMANTICS FIX (2026-09-13): this row demanded BOTH 24.7 AND 25,
     # but _gold_missing is a conjunction ("all gold values must appear")

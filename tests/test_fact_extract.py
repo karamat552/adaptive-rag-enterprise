@@ -1276,5 +1276,9 @@ def test_sync_fact_rows_end_to_end(live_db):
     rows = db.get_fact_rows(reconciled_only=True)
     assert rows
     assert all(r["verifier_class"] == "span_xbrl_reconciled" for r in rows)
-    assert all(r["metric_key"] in ("revenue", "net_income", "eps_diluted")
-               for r in rows), "B.1.1: only consolidated metrics reconcile"
+    # ADR-024 (2026-10-07): the whitelist grew beyond the original three
+    # (gross_margin, operating_income, rd_expense) — track the live
+    # whitelist so routing and this gate can never disagree.
+    from fact_extract import PATH_A_METRICS
+    assert all(r["metric_key"] in PATH_A_METRICS
+               for r in rows), "B.1.1/ADR-024: only whitelisted metrics reconcile"
