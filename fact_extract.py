@@ -172,7 +172,16 @@ _TRACKED_LABELS: Dict[str, str] = {
 }
 
 # Metrics an XBRL fact exists for at Phase 0 (B.1.1 — consolidated only).
-PATH_A_METRICS = frozenset({"revenue", "net_income", "eps_diluted"})
+PATH_A_METRICS = frozenset({
+    "revenue", "net_income", "eps_diluted",
+    # COVERAGE EXPANSION (2026-10-07, owner-approved): the three new
+    # us-gaap concepts reconcile the same way (value_usd vs the XBRL fact
+    # within 0.5%; flow metrics, so the per-share caveat never applies).
+    # The PDF spans already exist and were span-verified clean in the
+    # 2026-10-06 scan. Segment revenues stay OUT (dimensional facts the
+    # companyfacts API does not expose — ADR-011).
+    "gross_margin", "operating_income", "rd_expense",
+})
 
 _NOISE_CHARS = frozenset("!$\u2014\u2013-. ")
 
@@ -565,6 +574,21 @@ _METRIC_PHRASES: List[Tuple[str, str]] = [
     ("gross margin", "gross_margin"),
     ("gross profit", "gross_margin"),
     ("operating income", "operating_income"),
+    # COVERAGE EXPANSION (2026-10-07): the STATEMENT-LABEL phrasings the
+    # fact rows carry — control claims render the row's own label
+    # ("income from operations") and the verifier shares THIS map, so a
+    # guard that routes and a verifier that certifies cannot disagree
+    # (live-caught: 13/15 controls failing with unjudged_metric_none).
+    ("income from operations", "operating_income"),
+    ("operating income (loss)", "operating_income"),
+    ("loss income from operations", "operating_income"),
+    # COVERAGE EXPANSION (2026-10-07): the R&D expense phrase — the fact
+    # is reconciled (rd_expense in PATH_A_METRICS) but the triage had no
+    # phrase for the QUESTION's phrasing, so it demoted to the fleet.
+    ("research and development expense", "rd_expense"),
+    ("research and development", "rd_expense"),
+    ("r&d expense", "rd_expense"),
+    ("r&d", "rd_expense"),
 ]
 
 # INTERPRETIVE-CLAUSE DEMOTION (battery finding D05, 2026-09-14): a

@@ -19,6 +19,11 @@ failover lanes.
 
 ## A. Span-level retrieval recall (production, READ-ONLY enforced + self-checked)
 
+> 2026-10-07 UPDATE: the coverage expansion (16 XBRL facts, was 8;
+> 15 reconciled triples, was 7; B01/B04/B05 re-classed in_coverage_exact)
+> changes the battery's expected-units set — the recall figures below were
+> measured PRE-expansion; re-run for the post-expansion numbers.
+
 ```
 key [reconciled_only]  (33 units, 22 questions contributing):
   recall@5    = 0.3939  (13/33 units)

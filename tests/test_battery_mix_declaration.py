@@ -1,24 +1,19 @@
-"""Red-pin the battery's mix_declaration defect — so the fix must be deliberate.
+"""The battery's mix_declaration — reconciled state, pinned deliberately.
 
-THE DEFECT (independently confirmed twice — 2026-10-05 by the reference
-implementation, 2026-10-05/06 by measure_recall.py): the battery's
-registered `.mix_declaration` says in_coverage_exact: 14 and
-in_coverage_alias_phrasing: 8, but the actual question['class'] counts are
-9 and 9. Both sum to 42; every other class matches exactly.
+RECONCILED 2026-10-07 (deliberate): the coverage expansion
+(GrossProfit/OperatingIncomeLoss/ResearchAndDevelopmentExpense fetched
+from SEC companyfacts for the existing three companies; 16 facts, was 8)
+re-classed B01/B04/B05, and the declaration was reconciled to the actual
+classes in the same commit — with the story recorded in the battery's
+invariants.
 
-THREE defects, in fact — the third found by this file's own invariant
-test (2026-10-07): the declaration's per-class counts sum to 46, not its
-claimed total of 42 — internally inconsistent on top of being wrong about
-the actual classes.
-
-The battery's registered invariant says questions are FIXED at
-registration; no additions, edits, or removals after measurement starts.
-Either five questions were re-labelled after registration (invariant
-violated) or the declaration was never updated (benign) — with the git
-history rewound there is no earlier revision to diff, so nobody asserts
-which. This test pins the CURRENT state so that a silent "fix" of the
-declaration turns it RED: reconciling the declaration must be a deliberate
-act that also updates this test, never a quiet edit.
+History: the declaration was registered as 14/8 (vs the then-actual 9/9)
+and its own per-class counts summed to 46 != 42 — never updated after
+registration (benign; the git rewind left no earlier revision to diff, so
+nobody asserted otherwise). The red pins below now pin the RECONCILED
+state so any future out-of-band edit of the battery's mix turns them RED:
+reconciling must be a deliberate act that also updates this test, never a
+quiet edit.
 
 Offline: reads the battery JSON only; no DB, no network, no keys.
 """
@@ -46,28 +41,36 @@ def _actual() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# THE RED PIN: these assert the CURRENT mismatched state. Fixing the
-# declaration turns them red — that is the design, not a failure.
+# THE PINS: these assert the RECONCILED state. An out-of-band edit of the
+# battery's mix turns them red — that is the design, not a failure.
 # ---------------------------------------------------------------------------
-def test_red_pin_in_coverage_exact_is_mismatched():
-    """declared=14 vs actual=9 — pinned. If you reconcile the declaration,
-    this test goes red: update it consciously, note WHY in the battery,
-    and say whether five questions were re-labelled."""
+def test_reconciled_exact_matches_actual():
+    """in_coverage_exact 12 == actual 12 (was declared 14 vs actual 9). If
+    the battery's mix changes again outside a deliberate reconciliation,
+    this goes red: update it consciously, note WHY in the battery's
+    invariants."""
     d, a = _declared(), _actual()
-    assert d["in_coverage_exact"] == 14 and a["in_coverage_exact"] == 9, (
-        f"the pinned mismatch changed: declared={d['in_coverage_exact']} "
-        f"actual={a['in_coverage_exact']} — if this was a deliberate "
-        f"reconciliation, update this test and record the reason in the "
-        f"battery's invariants; if not, the battery was edited outside "
-        f"registration")
+    assert d["in_coverage_exact"] == a["in_coverage_exact"], (
+        f"declared={d['in_coverage_exact']} actual={a['in_coverage_exact']} "
+        f"— an out-of-band edit; reconcile deliberately and record why")
 
 
-def test_red_pin_alias_phrasing_is_mismatched():
-    """declared=8 vs actual=9 — pinned; same contract as the exact pin."""
+def test_reconciled_alias_matches_actual():
+    """in_coverage_alias_phrasing 9 == actual 9 (was declared 8 vs actual 9)."""
     d, a = _declared(), _actual()
-    assert d["in_coverage_alias_phrasing"] == 8 and a["in_coverage_alias_phrasing"] == 9, (
-        f"the pinned mismatch changed: declared={d['in_coverage_alias_phrasing']} "
-        f"actual={a['in_coverage_alias_phrasing']} — deliberate? record it.")
+    assert d["in_coverage_alias_phrasing"] == a["in_coverage_alias_phrasing"], (
+        f"declared={d['in_coverage_alias_phrasing']} "
+        f"actual={a['in_coverage_alias_phrasing']} — reconcile deliberately")
+
+
+def test_reconciled_declaration_sums_to_total():
+    """The internal inconsistency is dead: the declaration's per-class
+    counts now sum to exactly its total (was 46 != 42)."""
+    d = _declared()
+    total = (_spec().get("mix_declaration") or {}).get("total")
+    assert sum(d.values()) == total == len(_spec()["questions"]), (
+        f"sum={sum(d.values())} total={total} — the declaration was "
+        f"edited out-of-band; reconcile deliberately")
 
 
 # ---------------------------------------------------------------------------
@@ -78,21 +81,6 @@ def test_total_matches_questions():
     one number that survives any relabelling."""
     d = _spec().get("mix_declaration") or {}
     assert d.get("total") == len(_spec()["questions"]) == 42
-
-
-def test_red_pin_declaration_is_internally_inconsistent():
-    """THIRD defect (found by this test's own invariant, 2026-10-07): the
-    declaration's per-class counts sum to 46, not its claimed total of 42
-    (14+8+4+8+6+6=46). The declaration is internally inconsistent ON TOP of
-    being wrong about the actual classes. Pinned like the others: a
-    deliberate reconciliation turns this red — update it consciously."""
-    d = _declared()
-    total = (_spec().get("mix_declaration") or {}).get("total")
-    assert sum(d.values()) == 46 and total == 42, (
-        f"the pinned inconsistency changed: sum={sum(d.values())} "
-        f"total={total} — if deliberately reconciled, update this test "
-        f"and record the reason; if not, the declaration was edited "
-        f"outside registration")
 
 
 def test_every_actual_class_is_declared():
