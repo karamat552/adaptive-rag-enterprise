@@ -2,7 +2,9 @@
 
 Written for the owner: what each stage is, why it exists, and — honestly —
 where it is weak today. Everything below reflects the system as measured in
-October 2026, including the B4 findings. Last updated: 2026-10-02.
+October 2026, including the B4 findings and the 2026-10-07 reading pass over
+every file (ingest.py, segmented_audit.py, the audit tool, the offline
+verifier, the client). Last updated: 2026-10-07.
 
 ## The one-sentence version
 
@@ -11,6 +13,67 @@ retrieved SEC-filing text; five deterministic gates and one LLM auditor check
 the answer against that text before it is served; every answer (and every
 refusal) is stored as a cryptographic receipt that can be re-verified offline
 by anyone.
+
+## Lifecycle A — Ingestion (offline, deterministic, ZERO LLM tokens)
+
+The system has TWO loops and keeping them separate is most of the design:
+ingestion builds the ground truth ONCE; querying spends tokens per question.
+
+**1. Download (`ingest.py`).** Resilient fetch of the three SEC-hosted PDFs:
+atomic publish (a `.part` file is `os.replace()`d into place — a failed run
+can never destroy a previously-good corpus), a magic-byte PDF check, size
+caps, jittered exponential backoff on transient errors, fail-fast on
+permanent ones (404/403/non-PDF). Idempotent re-runs reuse the verified local
+copy and still fingerprint it (SHA-256).
+
+**2. Layout-aware parsing.** Text blocks are sorted into (top-to-bottom,
+left-to-right) reading order; headings are detected BEFORE chunk-splitting so
+every chunk provably belongs to the section it appeared under (titles carry
+forward across pages). Tables get their own extraction: two layouts by
+structure — headed tables render every row as
+`Label :: Column=value | ...` (the column semantics travel WITH the number;
+a chunk boundary can never sever them), balance-sheet-style tables stay
+grid-only (fabricating column names would be worse than none). Footnotes from
+the same page are appended beneath their tables — a figure modified by a
+footnote is never retrievable without that footnote nearby. An additive
+arithmetic check runs per table chunk: a Total row that disagrees with the
+sum of its members is FLAGGED (`arithmetic_ok=False`), surfaced to the fleet
+and `/verify` — never silently dropped, and never proof of a parse error
+either (legit non-additive totals exist).
+
+**3. The transcript spine (the foundation of ALL proof).** The page
+transcript is built FROM the emitted chunks themselves (joined `"\n\n"`),
+while a running offset counter records each chunk's span. The invariant,
+true BY CONSTRUCTION and verified on every chunk:
+
+```
+transcript[char_start:char_end] == chunk.text    (byte-exact)
+chunk_hash = sha256(company ⊣ source ⊣ page ⊣ slice)   (unit separator prevents collisions)
+```
+
+There is no `find()`-search anywhere — a span cannot be ambiguous or drift.
+This is why the span scans come back clean: the spans are exact because
+nothing ever had to locate them after the fact.
+
+**4. Embed + persist + epoch (`db.py`).** Each chunk is embedded with a LOCAL
+ONNX model (bge-small-en-v1.5 — no API), stored with pgvector HNSW +
+trigram indexes (hybrid RRF at query time), transcripts persisted per epoch.
+Any corpus change bumps `corpus_state.epoch` — stale cache answers become
+invisible instantly, no deletes.
+
+**5. The fact store (ADR-017) + the XBRL ground truth.** A pure-Python sweep
+of the transcripts extracts `company · metric · period · value · unit · basis`
+rows, each span-anchored — misbinding is attacked AT WRITE TIME, so a later
+lookup cannot invent a binding the way an LLM extraction can. SEC's
+machine-readable facts are fetched (fair access: declared User-Agent, ≤10
+req/s, jittered pacing); fiscal Q4 never appears as a primary XBRL fact, so
+it is DERIVED (`Q4 = Full-Year − 9-Month`), lineage-hashed. A row reconciles
+only when both sources agree within the 0.5% rounding-slack tolerance;
+unreconciled rows stay in the store for retrieval but can never anchor an
+answer. Today: 16 XBRL facts, 15 reconciled triples (the 2026-10-07
+expansion added gross margin / operating income / R&D).
+
+## Lifecycle B — Query (the stages below)
 
 ## Stage by stage
 
@@ -86,13 +149,19 @@ Any gate FLAG rejects the run (fail-closed) — it refuses rather than serves.
 
 **10. LLM auditor.** The final semantic check: the draft plus its evidence
 goes to the executive model, which must ground every claim. Unavailable
-auditor (quota, timeout) = refusal, never a pass. (Measured weaknesses —
-see below.)
+auditor (quota, timeout) = refusal, never a pass. There is also a BUILT
+segmented-audit mode (`RAG_SEGMENTED_AUDIT=1`, **deliberately dark**): the
+triage splits the draft's claims — span-verbatim, hedge-free,
+connective-free claims are Python-certified at zero tokens; only the
+interpretive clauses get a small-context executive call — and receipts
+record which guarantee backs each sentence. It stays dark until its own
+disagreement-rate measurement exists (the code's own warning: "do not
+enable mid-A.2-gate"). (Measured weaknesses — see below.)
 
 **11. Receipts.** Every grounded answer and every refusal stores a receipt:
 question, answer, per-claim verifier stamps, evidence spans with hashes,
 page-transcript anchors, corpus epoch, model lineage — plus a SHA-256 chain
-and an Ed25519-signable offline bundle (`/export`), re-verifiable by an
+and an offline bundle (`/export`), re-verifiable by an
 auditor with zero access to this system.
 
 **12. Tenancy.** Postgres row-level security isolates each tenant's corpus,

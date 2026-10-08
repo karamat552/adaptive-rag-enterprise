@@ -5,9 +5,34 @@ what happens, where, why, what it costs, and how it fails. Written for the
 maintainer and the senior interviewer. Grounded in the actual code; every
 component names its file.
 
+**CORRECTIONS 2026-10-07 (measured after this doc was written; the body
+below is kept as the design record — where it and reality disagree, this
+list wins):**
+1. **The TokenRouter lane is RETIRED** (§4's fabric): the fleet's failover
+   lanes are now APInex → NIM → OpenRouter (the free model was retired
+   upstream; the assembly cannot ship a dead lane).
+2. **The retry loop is DEAD** (Stage 8's "loops back to a bounded rewrite,
+   max_retries=2"): the retry dig (scripts/token_dig.py, 2026-10-07)
+   proved the retry NEVER converted a refusal into an answer — three full
+   pipeline passes ended in the same refusal. Unverified -> refuse, now.
+   A per-run call budget (`RAG_MAX_LLM_CALLS_PER_RUN=24`) bounds the rest.
+3. **The export bundle is UNSIGNED in production** (Stage 11's
+   "Ed25519-signed bundle"): no attestation key is configured (verified:
+   0-byte PUBLIC_KEY.pem, signature.status = "unsigned"). Enabling it is
+   one command + an env var (scripts/generate_attestation_key.py).
+4. **The canary is PAUSED** (§5's "measured nightly by the canary") and
+   the nightly shadow battery's schedule is paused too (eight consecutive
+   90-minute timeout kills; ADR-022 draft). The per-question SHADOW-ROW
+   capture means the next run leaves data even if killed.
+5. **The cost map (§5) is pre-token-dig**: measured 2026-09-13; the
+   current measured profiles are in TOKEN_COST_DIAGNOSIS.md (covered 0 /
+   healthy ~17-21K / the pathological tail — now bounded).
+
 **Companions:** `ARCHITECTURE_V2_PROPOSAL.md` (ADR-017, the locked refactor
-spec) · `KNOWN_ISSUES.md` (the 22-class failure ledger) ·
-`ARCHITECTURE_DECISIONS.md` (ADRs 005–016) · `README.md` (the demo face).
+spec) · `KNOWN_ISSUES.md` (the failure ledger, 12 entries) ·
+`ARCHITECTURE_DECISIONS.md` (the ADR ledger, recovered 2026-10-07) ·
+`README.md` (the demo face) · `ARCHITECTURE.md` (the plain-language doc,
+now covering both lifecycles).
 
 ---
 
