@@ -4,7 +4,7 @@ Written for the owner: what each stage is, why it exists, and — honestly —
 where it is weak today. Everything below reflects the system as measured in
 October 2026, including the B4 findings and the 2026-10-07 reading pass over
 every file (ingest.py, segmented_audit.py, the audit tool, the offline
-verifier, the client). Last updated: 2026-10-07.
+verifier, the client). Last updated: 2026-10-08.
 
 ## The one-sentence version
 
@@ -72,6 +72,15 @@ only when both sources agree within the 0.5% rounding-slack tolerance;
 unreconciled rows stay in the store for retrieval but can never anchor an
 answer. Today: 16 XBRL facts, 15 reconciled triples (the 2026-10-07
 expansion added gross margin / operating income / R&D).
+
+**6. The failure-mode battery (`tests/test_ingest_failure_modes.py`,
+added 2026-10-08).** The ingestion engine's safety nets are exercised
+deliberately, not assumed: a non-PDF URL and a 404 fail fast with the
+`.part` cleaned, a 429 retries, a mid-download drop cleans the `.part`
+(a partial file can never reach the corpus), an oversize row stays
+whole, a non-additive table total is flagged, and a dead run never
+clobbers the committed corpus. The transcript spine is verified
+byte-exact on all 223 chunks of the live corpus in the same battery.
 
 ## Lifecycle B — Query (the stages below)
 
