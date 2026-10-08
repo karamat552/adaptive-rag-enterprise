@@ -16,10 +16,15 @@ list wins):**
    proved the retry NEVER converted a refusal into an answer — three full
    pipeline passes ended in the same refusal. Unverified -> refuse, now.
    A per-run call budget (`RAG_MAX_LLM_CALLS_PER_RUN=24`) bounds the rest.
-3. **The export bundle is UNSIGNED in production** (Stage 11's
-   "Ed25519-signed bundle"): no attestation key is configured (verified:
-   0-byte PUBLIC_KEY.pem, signature.status = "unsigned"). Enabling it is
-   one command + an env var (scripts/generate_attestation_key.py).
+3. **FIXED 2026-10-08 — the export bundle is now SIGNED in production**
+   (Stage 11's "Ed25519-signed bundle" is real): the owner set
+   ATTESTATION_PRIVATE_KEY on Render (2026-10-08) and the path was
+   verified end to end — /export returned a fully signed bundle
+   (key_id adaptive-rag-attest-1), the shipped offline verifier PASSED
+   (chain + Ed25519), and the bundle's embedded public key matches the
+   owner's key exactly. Until then production bundles were unsigned
+   (verified 2026-10-07: 0-byte PUBLIC_KEY.pem, signature.status =
+   "unsigned").
 4. **The canary is PAUSED** (§5's "measured nightly by the canary") and
    the nightly shadow battery's schedule is paused too (eight consecutive
    90-minute timeout kills; ADR-022 draft). The per-question SHADOW-ROW
