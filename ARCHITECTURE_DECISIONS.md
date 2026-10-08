@@ -1009,3 +1009,81 @@ benchmark-passed, equal-or-better models:
 (NOT the tiny 20/day 3.6-flash), benchmark-passed on the live pipeline.
 
 32 failover-suite tests green including the four new invariants.
+
+---
+
+# DECISIONS RECOVERED (recorded late — the ledger stopped at 2026-09-10; caught by the owner's record-keeping review 2026-10-07)
+
+These were decided and shipped by commits and code comments without ledger
+entries. Recorded here so the ledger is the whole story again.
+
+## ADR-017 (recovered): ADR-017 Fact Store — span-anchored, dual-key, fail-closed
+Shipped: commits e0dd4f6 / 3013067 / e61d8b0 (Phase 0/1). Numbers are
+LOOKED UP, not generated: fact_rows are span-anchored to the exact
+transcript bytes; a fact is dual-key (a PDF span AND an SEC XBRL value
+agree) before it anchors an answer; absence of contradiction is NEVER
+agreement; disconfirmed facts carry no reconciliation authority (B.1.5).
+
+## ADR-021 (recovered, PARKED): dual-epoch tenancy — per-tenant epochs
+Designed (db/migration_008_tenancy.sql + 009 grants — review artifacts,
+NEVER wired into the runner); the dual-epoch cache predicates + the
+isolation suite exist on branch phase1/dual-epoch (a4e1886-era; NOT
+merged). Uploads are PAUSED, so 008 stays unapplied by owner decision.
+
+## ADR-022 (DRAFT, on main): the A.2 gate amendment
+docs/ADR-022_a2_gate_amendment.md — the nightly was killed at its own
+90-minute timeout eight straight nights (zero verdicts, zero artifacts);
+the schedule is now PAUSED (owner decision); A.2 is a CONFIRMATION gate,
+not a promotion gate (the fastpath flag is already ON by owner decision).
+---
+
+# NEW DECISIONS (2026-10-07)
+
+## ADR-023: Per-Run LLM Call Budget + the Retry Kill
+**Decision:** `RAG_MAX_LLM_CALLS_PER_RUN` (default 24) bounds every
+question's LLM calls; `LLMBudgetExceeded` fails closed into the existing
+refusal paths, is its OWN truthful class (never logged as a provider rate
+limit; no circuit, no cooldown, no peer), and peer rescues count toward
+the budget (the blind spot: they never did — 37 calls > 24 under the 429
+wall). **The retry loop is DEAD:** `evaluate_retry_thresholds` routes
+unverified -> refuse. The retry dig (scripts/token_dig.py) proved it
+never converted: three full pipeline passes ended in the same refusal;
+every observed case (stormy extremes, healthy pass-1, the middle) shows
+zero conversions.
+**Evidence:** the three measured profiles (covered 0 tokens; healthy
+uncovered ~17-21K / 10-13 calls; pathological 49.7 calls / ~178K) —
+MEASUREMENTS_2026-10-06.md + TOKEN_COST_DIAGNOSIS.md.
+**Gates:** failing-first tests (test_call_budget.py, 5/5); offline suite
+406/0; battery 42/42 15/15 15/15 GREEN.
+
+## ADR-024: FastPath Coverage Expansion via SEC companyfacts (2026-10-07)
+**Decision:** the concept map grew by three standard us-gaap concepts
+(GrossProfit / OperatingIncomeLoss / ResearchAndDevelopmentExpense) for
+the EXISTING companies — 16 facts (was 8), 15 reconciled triples (was 7),
+0 span mismatches. Segment revenues stay OUT: they are DIMENSIONAL facts
+the companyfacts API does not expose (ADR-011: decline-to-judge beats a
+misattributed check). The battery's registration was reconciled in the
+same commit (B01/B04/B05 re-classed; the declaration now sums to 42 — the
+46!=42 defect died; the red pins updated with the story).
+**The blocker found:** reconcile_rows declined the new facts via the
+PATH_A_METRICS whitelist before any value comparison; also the verifier's
+canonical_metric map lacked "income from operations" — routing and
+verification disagreed (13/15 controls); both fixed (the shared-map rule).
+**Gates:** battery 42/42 · 15/15 · 15/15 GREEN (was RED 39/42 + 13/15
+mid-expansion); span scan 0 mismatches on the new reconciled rows.
+
+## ADR-025: Capability-Split Write Guards (the target_guard convention)
+**Decision:** write-capable scripts (bench_latency, sync_xbrl_and_verify,
+local_stack_bootstrap, pipeline_audit) refuse the production (host,
+database) pair via scripts/target_guard.py — classification covers EVERY
+effective URL (runtime + admin identities, most-dangerous-wins), fails
+CLOSED on unknown remotes (a missing/unparseable .env refuses remotes —
+the old version failed open), and there is deliberately NO override flag
+(a production write must never be one argument away). Read-only
+measurements (measure_recall) may target production because they are
+ENFORCED read-only at the Postgres level
+(`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`) with a per-run
+self-check (attempt a no-op write; refuse unless Postgres rejects it).
+**The holes are pinned by tests** (tests/test_target_guard.py, 7/7) — the
+tests caught two live bugs in the guard itself (the inverted env_ok
+fail-open; the port-bearing/unix-socket/IPv6 parse).

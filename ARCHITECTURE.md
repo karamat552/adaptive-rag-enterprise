@@ -38,8 +38,12 @@ flag is ON in production** (owner-set `RAG_FACT_FASTPATH=1` in the Render
 env, verified via the Render dashboard 2026-10-02); the code default is
 OFF and the check is exact-match (`!= "1"` — a stray space or trailing
 newline silently disables it), and the nightly runners never set it (the
-shadow battery must measure V1). Today the fact store covers 7 triples
-across three companies, all span-verified 2026-10-02.
+shadow battery must measure V1). Today the fact store covers **15
+reconciled triples** across three companies — the 2026-10-07 coverage
+expansion added gross_margin / operating_income / rd_expense via SEC
+companyfacts (16 facts, was 8) — all span-verified with zero mismatches;
+segment revenues stay fleet-class by design (dimensional facts the
+companyfacts API does not expose).
 
 **4. Router.** A small LLM classifies the question (financial-comparison /
 risk / product / out-of-domain). Out-of-domain questions never reach the
@@ -98,6 +102,16 @@ migration 008) are designed but PAUSED by owner decision.
 
 ## Known weaknesses (measured, October 2026 — do not paper over these)
 
+0. **FIXED 2026-10-07 — the token story, corrected:** covered questions
+   cost ZERO (the FastPath); a healthy uncovered question costs ~17-21K
+   tokens / 10-13 LLM calls; the 178K/49.7-call monster was an UNBOUNDED
+   retry loop — three full pipeline passes per unverified outcome, ending
+   in the same refusal (the retry dig, scripts/token_dig.py). **The retry
+   is now DEAD** (unverified -> refuse; the dig proved it never converted)
+   and a per-run call budget (`RAG_MAX_LLM_CALLS_PER_RUN=24`, peer calls
+   tracked — the blind spot fixed) bounds everything else. See
+   TOKEN_COST_DIAGNOSIS.md.
+
 1. **The scale gate almost never engages on the real corpus** — the units
    declaration ("(In millions…)") is chunked separately from the figures it
    describes, so the gate abstained on 37/37 real-evidence drafts (B4).
@@ -118,14 +132,19 @@ migration 008) are designed but PAUSED by owner decision.
    worth keeping: GAAP/non-GAAP basis distinctions live with the audit,
    and the fact store carries no basis label on claims.
 6. **The segment-vs-consolidated misbind** (a gross-margin question answered
-   with the Services segment revenue) is real and reproduced; B2's design
-   (ingest-time scope tagging + a scope gate) awaits approval.
+   with the Services segment revenue) is real and reproduced; the v1
+   runtime scope gate EXISTS on branch `trackb/b2-segment-scope` (a1a808d:
+   line-level classification, 0/9 golds and 0/15 real receipts
+   wrong-rejected, 3/5 synthetic swaps caught) — not merged; the 6 live
+   regression tests + a deploy decision are the gate.
 7. **The LLM auditor's catch rate is unmeasured** — it is the only check for
    46% of the seeded errors; its benchmark (B4's LLM phase) is scheduled
    post-quota-reset.
 8. **The nightly battery never reaches a verdict** — killed at its 90-minute
-   timeout every night; the A.2 gate cannot turn green (ADR-022 draft).
-9. **Receipt accumulation**: each nightly attempt writes 33-41 receipts to
+   timeout every night; the schedule is PAUSED (owner decision) and the
+   ADR-022 draft defines the amendment; the per-question SHADOW-ROW capture
+   (a4e1886) means the next run leaves data even if killed.
+9. **Receipt accumulation**: each nightly attempt wrote 33-41 receipts to
    the production database by design; retention is an open owner decision.
 
 ## What is deliberately NOT claimed

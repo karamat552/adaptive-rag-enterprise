@@ -4,6 +4,17 @@ Goal: more dual-key-reconciled facts means more zero-LLM FastPath coverage —
 but dual-key REQUIRES both the XBRL fact AND a matching PDF span, so every
 expanded company needs its filing ingested too.
 
+## 0. STATUS UPDATE 2026-10-07 — PART LANDED
+
+The metric-expansion half of this plan is DONE (ADR-024): three standard
+us-gaap concepts (GrossProfit / OperatingIncomeLoss / ResearchAnd-
+DevelopmentExpense) fetched for the EXISTING companies — 16 facts, 15
+reconciled triples, 0 span mismatches, gross margin / operating income /
+R&D now serve at zero tokens. The blocker found and fixed: the
+PATH_A_METRICS whitelist + the verifier's missing label phrases.
+STILL PAUSED: new COMPANIES (needs their PDFs ingested too) and segment
+revenues (dimensional facts the API does not expose).
+
 ## 1. Sources and mechanics
 
 - **XBRL:** SEC `companyfacts` API per company
