@@ -1,0 +1,66 @@
+# HEARTBEAT — health-only drift watcher (zero tokens, zero LLM calls).
+# Polls the production API's health surfaces every 15 minutes and FAILS
+# (GitHub emails the workspace) the moment any surface degrades. This is
+# the SAFE subset of the paused canary: no LLM calls, no Groq window
+# drain, no timeout risk — safe to keep always-on while the canary and
+# shadow battery stay paused (the A.2 gate owns the fresh window).
+#
+# What it checks:
+#   /health  — 200 + JSON with the graph/llm_circuit/provider/models state
+#   /ready   — 200 (readiness)
+#   /metrics — 200 (the counters endpoint)
+
+name: heartbeat
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}     # manual trigger for ad-hoc checks
+
+jobs:
+  health-poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Poll /health
+        run: |
+          set -e
+          BASE="https://adaptive-rag-enterprise.onrender.com"
+          H=$(curl -sf --max-time 30 "$BASE/health") || {
+            echo "::error::/health failed — the API is down or unhealthy"
+            exit 1
+          }
+          echo "$H"
+          # the graph state must parse; llm_circuit 'open' is a degraded
+          # signal (the circuit breaker tripped — check the service logs)
+          echo "$H" | python3 -c "
+          import json, sys
+          h = json.load(sys.stdin)
+          circuit = h.get('llm_circuit')
+          failures = h.get('circuit_failures', 0)
+          print('graph:', h.get('graph'), '| llm_circuit:', circuit,
+                '| circuit_failures:', failures)
+          print('models:', h.get('models'))
+          if circuit == 'open':
+              print('::warning::llm_circuit is OPEN — the circuit breaker tripped')
+          "
+
+      - name: Poll /ready
+        run: |
+          set -e
+          BASE="https://adaptive-rag-enterprise.onrender.com"
+          curl -sf --max-time 30 "$BASE/ready" > /dev/null || {
+            echo "::error::/ready failed — the service is not ready"
+            exit 1
+          }
+          echo "/ready: 200 OK"
+
+      - name: Poll /metrics
+        run: |
+          set -e
+          BASE="https://adaptive-rag-enterprise.onrender.com"
+          curl -sf --max-time 30 "$BASE/metrics" > /dev/null || {
+            echo "::error::/metrics failed"
+            exit 1
+          }
+          echo "/metrics: 200 OK"
