@@ -223,10 +223,18 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
     except Exception as exc:
         print(f"REFUSED: cannot import the OpenAI-compatible client: {exc}")
         return None
-    api_key = (os.getenv("GROQ_API_KEY") or os.getenv("OPENROUTER_API_KEY")
-               or os.getenv("NIM_API_KEY") or os.getenv("APINEX_API_KEY"))
+    # JUDGE CLIENT (fix 2026-10-08): the api_key must FOLLOW the base_url —
+    # the old first-set provider-key chain sent Groq's key to whatever
+    # RAG_JUDGE_BASE_URL pointed at (a 401 on any non-Groq judge endpoint,
+    # e.g. the NIM judge). The key is resolved from the judge URL's host.
     base_url = os.getenv("RAG_JUDGE_BASE_URL",
                          "https://api.groq.com/openai/v1")
+    _KEY_BY_HOST = (("api.groq.com", "GROQ_API_KEY"),
+                    ("openrouter.ai", "OPENROUTER_API_KEY"),
+                    ("integrate.api.nvidia.com", "NIM_API_KEY"),
+                    ("apiinex", "APINEX_API_KEY"))
+    api_key = next((os.getenv(env) for host, env in _KEY_BY_HOST
+                    if host in base_url and os.getenv(env)), None)
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=120)
 
     judge_tokens_total = 0
@@ -246,13 +254,29 @@ def grade(answers_path: Path, out_dir: Path, judge_model: str) -> None:
             "If the answer is a refusal, apply R4/R2 using the "
             "pipeline-recorded outcome to judge whether the named cause is true.")
         try:
+            # JUDGE OUTPUT ROOM (fix 2026-10-08): max_tokens=400 truncated
+            # the JSON mid-reason on 3 of 12 graded answers (judge_error);
+            # the judge model is a REASONING model — it burns reasoning
+            # tokens BEFORE content, so the cap must cover both. 2000 does.
             resp = client.chat.completions.create(
-                model=judge_model, max_tokens=400,
+                model=judge_model, max_tokens=2000, temperature=0.0,
                 messages=[{"role": "user", "content": prompt}])
             judge_tokens_total += int(getattr(getattr(resp, "usage", None),
                                               "total_tokens", 0) or 0)
             raw = (resp.choices[0].message.content or "").strip()
-            parsed = json.loads(_strip_fences(raw))
+            try:
+                parsed = json.loads(_strip_fences(raw))
+            except json.JSONDecodeError:
+                # LENIENT FALLBACK (fix 2026-10-08): the reasoning can eat
+                # the cap mid-JSON; the score field comes FIRST in the
+                # mandated shape, so a truncated response still carries it
+                # verbatim — extract rather than lose the score.
+                m = re.search(r'"score"\s*:\s*([1-5])', raw)
+                if not m:
+                    raise
+                parsed = {"score": int(m.group(1)),
+                          "verdict": "graded from truncated judge output",
+                          "judge_reason": raw[:1000]}
             score = parsed.get("score")
             if not isinstance(score, int) or not (1 <= score <= 5):
                 raise ValueError(f"score out of range: {score!r}")
