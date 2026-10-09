@@ -79,6 +79,9 @@ class RagSettings(BaseSettings):
     router_model: Optional[str] = None      # router + query rewriter
     fleet_model: Optional[str] = None       # 3x specialist extraction + general knowledge
     executive_model: Optional[str] = None   # synthesis + grounding audit
+    audit_model: Optional[str] = None       # THE SPLIT (ADR-026): the auditor's
+                                            # own model; unset -> executive_model
+                                            # (the pre-split same-model default)
 
     # Generic OpenAI-compatible seam (RAG_PROVIDER=openai_compatible):
     # any Cerebras / SambaNova / NVIDIA NIM / vLLM endpoint, zero glue code.
@@ -167,12 +170,20 @@ def get_settings() -> RagSettings:
     return _S
 
 
-def get_stage_model(stage: Literal["router", "fleet", "executive"]) -> str:
-    """Explicit env override wins; otherwise provider-aware default."""
+def get_stage_model(stage: Literal["router", "fleet", "executive",
+                                   "audit"]) -> str:
+    """Explicit env override wins; otherwise provider-aware default.
+    The audit stage falls back to the executive model when RAG_AUDIT_MODEL
+    is unset — deployments that never set it keep the exact pre-split
+    behavior (one model for synthesis and audit); the split engages only
+    when the audit model is explicit."""
     s = get_settings()
     explicit = {"router": s.router_model, "fleet": s.fleet_model,
-                "executive": s.executive_model}[stage]
-    model = explicit or _PROVIDER_MODEL_DEFAULTS[s.provider][stage]
+                "executive": s.executive_model,
+                "audit": s.audit_model or s.executive_model}[stage]
+    provider_defaults = _PROVIDER_MODEL_DEFAULTS[s.provider]
+    model = explicit or provider_defaults.get(stage) \
+        or provider_defaults.get("executive")
     if not model and s.provider == "openai_compatible":
         raise ValueError(
             f"RAG_PROVIDER=openai_compatible needs a model for stage '{stage}': "
@@ -333,12 +344,40 @@ def _provider_key() -> str:
     return key
 
 
+# Per-model endpoint routes (the maker/checker split, ADR-026): a VETTED
+# executive-class model whose home provider differs from the global
+# RAG_PROVIDER carries its own (base_url, api_key_env) route — the same
+# shape as the vetted peer pool and the fleet registry. Only models that
+# passed the 16-point benchmark belong here; a route never applies to
+# router/fleet models (community lanes stay fleet-only per ADR-008).
+_MODEL_ENDPOINT_ROUTES: Dict[str, Tuple[str, str]] = {
+    "nvidia/nemotron-3-super-120b-a12b":
+        ("https://integrate.api.nvidia.com/v1", "NIM_API_KEY"),
+}
+
+
 def _build_engine(model_name: str):
     """Build a LangChain chat model for the active provider. Groq, OpenRouter
     and the generic openai_compatible seam all speak the OpenAI protocol ->
     ChatOpenAI with a custom base_url. Google keeps its native SDK (better
-    usage_metadata fidelity for token telemetry)."""
+    usage_metadata fidelity for token telemetry).
+    A model with a vetted endpoint route (_MODEL_ENDPOINT_ROUTES) is built
+    against ITS home endpoint instead — fail-closed when the route's key
+    env var is unset (a NIM model name sent to the global provider would
+    400 model-not-found)."""
     s = get_settings()
+    route = _MODEL_ENDPOINT_ROUTES.get(model_name)
+    if route:
+        from langchain_openai import ChatOpenAI  # lazy: only needed for these providers
+        base_url, api_key_env = route
+        key = os.getenv(api_key_env)
+        if not key:
+            raise ValueError(
+                f"model '{model_name}' routes to {base_url} but {api_key_env} "
+                "is not set — set the env var or remove the route (fail-closed).")
+        return ChatOpenAI(model=model_name, temperature=0.0,
+                          timeout=s.llm_timeout_s, max_retries=3,
+                          base_url=base_url, api_key=key)
     if s.provider in ("groq", "openrouter", "openai_compatible"):
         from langchain_openai import ChatOpenAI  # lazy: only needed for these providers
         if s.provider == "groq":
@@ -718,8 +757,12 @@ def _get_rewriter():
 
 def _get_checker():
     if "checker" not in _structured:
+        # THE SPLIT (ADR-026): the auditor resolves its OWN model (falls
+        # back to the executive model when RAG_AUDIT_MODEL is unset) —
+        # maker (synthesis) and checker need not share blind spots
+        # (KNOWN_ISSUES #11's circularity, narrowed: uncorrelated errors).
         _structured["checker"] = _repairing_structured(
-            _get_engine(get_stage_model("executive")), GroundingCheck)
+            _get_engine(get_stage_model("audit")), GroundingCheck)
     return _structured["checker"]
 
 
@@ -3905,10 +3948,10 @@ def get_health() -> Dict[str, Any]:
             "circuit_failures": _circuit.failures,
             "provider": s.provider,
             "models": {stage: get_stage_model(stage)
-                       for stage in ("router", "fleet", "executive")},
+                       for stage in ("router", "fleet", "executive", "audit")},
             "failover": {"endpoints": len(eps),
                          "cooling": cooling,
-                         "executive_pinned": True}}
+                         "executive_pinned": not s.audit_model}}
 
 
 # ===========================================================================

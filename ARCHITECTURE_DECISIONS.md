@@ -1087,3 +1087,38 @@ self-check (attempt a no-op write; refuse unless Postgres rejects it).
 **The holes are pinned by tests** (tests/test_target_guard.py, 7/7) — the
 tests caught two live bugs in the guard itself (the inverted env_ok
 fail-open; the port-bearing/unix-socket/IPv6 parse).
+
+---
+
+# NEW DECISIONS (2026-10-08)
+
+## ADR-026: The Maker/Checker Split — RAG_AUDIT_MODEL + the vetted endpoint route
+**Decision:** the executive stage (synthesis + audit) may now run TWO
+different strong models: `RAG_AUDIT_MODEL` gives the auditor its own model
+(unset -> the executive model — the pre-split same-model default, so
+existing deployments change nothing); and a vetted per-model endpoint
+route table (`_MODEL_ENDPOINT_ROUTES` in adaptive_rag.py) points a
+benchmark-vetted model at its home provider's endpoint, so
+`nvidia/nemotron-3-super-120b-a12b` (synthesis, on the owner's NIM
+credits) is built against `integrate.api.nvidia.com` + `NIM_API_KEY`
+instead of being silently sent to the global provider (a 400
+model-not-found there would quarantine every synthesis — fail-closed at
+BUILD time when the route's key env is unset).
+**Why:** (1) the dig measured synthesis at 8.4-9.1K tokens (50% of a
+healthy question) + audit 3.5K — the executive is the bottleneck AND the
+stage Groq's day-capped TPD killed every morning battery; (2)
+KNOWN_ISSUES #11's same-model circularity: a same-model auditor shares
+the maker's blind spots — the split narrows it (uncorrelated errors) at
+zero extra cost; (3) the NIM model is already benchmark-vetted for the
+executive class (the peer pool, ADR-008's amendment).
+**Rules that stand:** ADR-008 (community lanes stay fleet-only; NIM is a
+vetted executive-class lane); the 16-point benchmark gate (any stage
+model passes it before adoption); the strength pin (never a weaker model
+certifying — both split models are 120B-class); reasoning-headroom floor
+(`RAG_REASONING_HEADROOM` when synthesis runs a reasoning model — the
+2026-09-09 empty-draft lesson).
+**Gates:** tests/test_stage_model_split.py (11/11: fallback semantics,
+blank-env parity, the split-not-swap, the provider-defaults fallback, the
+openai_compatible fail-loud, behavioral + source wiring pins, the NIM
+route's endpoint/key/fail-closed, fleet-models immunity, the health
+report's honest pin state).
