@@ -1035,6 +1035,27 @@ docs/ADR-022_a2_gate_amendment.md — the nightly was killed at its own
 90-minute timeout eight straight nights (zero verdicts, zero artifacts);
 the schedule is now PAUSED (owner decision); A.2 is a CONFIRMATION gate,
 not a promotion gate (the fastpath flag is already ON by owner decision).
+
+**UPDATE 2026-10-10 — the FIRST COMPLETE LIVE NIGHT (local, disposable
+stack, the workflow's exact flags, FastPath OFF):** the run FINISHED —
+no timeout kill (the FastPath + the budget cap + the dead retry made the
+live pass fit the window; 42/42 shadow rows, ~73 min, ~423K tokens).
+Verdict: INCOMPLETE (7 capacity blocks — the clock does not advance,
+honestly). The deterministic layers: matrix 42/42, corrupted 15/15,
+zero fabrications. **The agreement 23.8% decomposes ENTIRELY in V1's
+disfavor, never V2's:** 17 shape-disagreements = V1 REFUSED (quota
+walls + the scale gate correctly rejecting the peer-rescued bad-scale
+figures) while the FastPath candidate would have answered; 3
+value-disagreements (A01/A11/A18) = V1's KNOWN segment-soup weakness
+(KNOWN_ISSUES #8 — the geographic-segment breakdown instead of the
+consolidated total, e.g. 40,115/22,463/15,084/5,505/6,331) while V2
+gave the correct 89,498 every time. **The gate-design finding: the
+98%-agreement criterion assumes V1 healthy = the gold standard; under
+quota weather V1 is the DEGRADED side and the rate collapses in V1's
+disfavor.** A who_answers=v2 shape-disagreement is V1's unavailability,
+not V2's error — the classifier should subclass it from disagree_value
+(a real mismatch) before quoting agreement percentages under stormy
+conditions. The FastPath's answers were never caught being wrong.
 ---
 
 # NEW DECISIONS (2026-10-07)
