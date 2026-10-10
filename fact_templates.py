@@ -42,6 +42,10 @@ _METRIC_NOUNS = {
     "revenue": "revenue",
     "net_income": "net income",
     "eps_diluted": "diluted earnings per share (EPS)",
+    # COVERAGE EXPANSION (2026-10-10): the fallback nouns when the row's
+    # own label is absent (the labels are span-true when present).
+    "pretax_income": "income before income taxes",
+    "sga_expense": "selling, general and administrative expenses",
 }
 
 

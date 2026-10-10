@@ -72,6 +72,17 @@ CONCEPTS: Dict[str, List[str]] = {
     "gross_margin": ["GrossProfit"],
     "operating_income": ["OperatingIncomeLoss"],
     "rd_expense": ["ResearchAndDevelopmentExpense"],
+    # COVERAGE EXPANSION (2026-10-10, owner-approved): pretax income and
+    # SG&A — standard us-gaap FLOW concepts on the INCOME statement; the
+    # PDF rows already exist (tracked-only) and now reconcile.
+    "pretax_income":
+        ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"],
+    "sga_expense": ["SellingGeneralAndAdministrativeExpense"],
+    # operating cash flow: the SEC side is synced (future-ready) but NOT
+    # Path-A-eligible — the cash-flow pages are deliberately out of the
+    # sweep (the Tesla-NCI guard). The routing maps the question honestly
+    # to a coverage miss; see fact_extract.PATH_A_METRICS.
+    "operating_cash_flow": ["NetCashProvidedByUsedInOperatingActivities"],
 }
 
 COMPANIES: List[Dict[str, str]] = [

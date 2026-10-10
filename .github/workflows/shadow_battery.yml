@@ -11,12 +11,16 @@
 name: shadow-battery
 
 on:
-  # PAUSED 2026-10-02 (owner decision, ADR-022 draft): eight consecutive
-  # 90-minute timeout kills (runs #9-#16) produced zero verdicts and zero
-  # artifacts while consuming most of the Groq daily wall (~33-41 real
-  # receipts/night). Resume by uncommenting the two schedule lines below.
-  # schedule:
-  #   - cron: "0 1 * * *"   # 01:00 UTC — same fresh Groq window as the canary
+  # RESUMED 2026-10-10 (owner decision): the first COMPLETE live night
+  # ran locally (42/42 shadow rows, ~73 min, no timeout kill — the
+  # FastPath + the budget cap + the dead retry made the live pass fit
+  # the window), so the timeout risk that paused this schedule is gone.
+  # The canary STAYS PAUSED: the A.2 gate gets the fresh Groq window
+  # exclusively until 7 green nights clear (the 2026-09-17 starvation
+  # lesson). The APInex lane is gone from the assembly (402 — the
+  # dead-lane rule).
+  schedule:
+    - cron: "0 1 * * *"   # 01:00 UTC — the fresh Groq window, exclusively
   workflow_dispatch: {}     # manual trigger (ad-hoc A.2 measurement)
 
 jobs:
