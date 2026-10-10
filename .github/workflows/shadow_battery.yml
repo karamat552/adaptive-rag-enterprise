@@ -37,28 +37,24 @@ jobs:
       # present — a missing secret can never poison the battery with a
       # dead/empty-key lane (the TokenRouter lesson: its free model was
       # retired upstream overnight and the static lane went dead).
-      # Lane order = probe results 2026-09-17: union-alpha (3.6-12s,
-      # strict-JSON + [n]-citation clean) -> APInex gemini free (10-67s)
-      # -> NIM. Executive stage stays PINNED (ADR-008); these are
+      # Lane order = 2026-10-10 (APInex removed — 402): NIM -> glm-5.2:free.
+      # Executive stage stays PINNED (ADR-008); these are
       # router+fleet lanes only.
       - name: Assemble failover chain from present secrets
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
         run: |
           python - <<'EOF'
           import json, os
           lanes = []
-          # order = 2026-09-18 vetting evidence: APInex steady (10-67s),
-          # NIM vetted, glm-5.2:free LAST (upstream shared-pool congestion
-          # measured live: benchmark corpus runs refused at 443s/464s;
-          # tamper 4/4 PASS but ADR-008 bar not met)
-          if os.getenv("APINEX_API_KEY"):
-              lanes.append({"base_url": "https://api.apinex.bond/v1",
-                            "api_key_env": "APINEX_API_KEY",
-                            "model": "free/gemini-3.8-flash",
-                            "timeout_s": 120, "max_tokens": 4000})
+          # order 2026-10-10: APInex REMOVED — 402 Payment Required
+          # (subscription-gated upstream, live-caught during the A.2
+          # battery run); the dead-lane rule: the assembly cannot ship
+          # a dead lane. NIM vetted, glm-5.2:free LAST (upstream
+          # shared-pool congestion measured live 2026-09-18: benchmark
+          # corpus runs refused at 443s/464s; tamper 4/4 PASS but
+          # ADR-008 bar not met).
           if os.getenv("NIM_API_KEY"):
               lanes.append({"base_url": "https://integrate.api.nvidia.com/v1",
                             "api_key_env": "NIM_API_KEY",
@@ -69,7 +65,7 @@ jobs:
                             "model": "z-ai/glm-5.2:free",
                             "timeout_s": 60, "max_tokens": 4000})
           assert lanes, ("no failover lanes available — add at least one "
-                         "of OPENROUTER_API_KEY / APINEX_API_KEY / NIM_API_KEY "
+                         "of NIM_API_KEY / OPENROUTER_API_KEY "
                          "as a repository secret")
           chain = json.dumps(lanes, separators=(",", ":"))
           with open(os.environ["GITHUB_ENV"], "a") as f:
@@ -82,7 +78,6 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DB_DATABASE_URL: ${{ secrets.DB_DATABASE_URL }}
           DB_ADMIN_DATABASE_URL: ${{ secrets.DB_ADMIN_DATABASE_URL }}
