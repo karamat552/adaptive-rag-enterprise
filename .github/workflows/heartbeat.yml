@@ -1,66 +1,66 @@
-# HEARTBEAT — health-only drift watcher (zero tokens, zero LLM calls).
-# Polls the production API's health surfaces every 15 minutes and FAILS
-# (GitHub emails the workspace) the moment any surface degrades. This is
-# the SAFE subset of the paused canary: no LLM calls, no Groq window
-# drain, no timeout risk — safe to keep always-on while the canary and
-# shadow battery stay paused (the A.2 gate owns the fresh window).
+# HEARTBEAT — the DEEP health check, drain-bounded (the Neon-drain lesson).
 #
-# What it checks:
-#   /health  — 200 + JSON with the graph/llm_circuit/provider/models state
-#   /ready   — 200 (readiness)
-#   /metrics — 200 (the counters endpoint)
+# NEON-DRAIN LESSON (the keep-alive's documented root cause, 2026-09-17):
+# /health and /ready both call the DB health check — polling them
+# frequently wakes Neon, resets its 5-minute idle timer, defeats
+# scale-to-zero, and converts the free tier into always-on compute
+# (0.25 CU x ~720h ~= 180 compute-hours/month ~= the ENTIRE free
+# allowance) — the root cause of the September mid-month quota wall that
+# took the database and the A.2 battery down.
+#
+# DIVISION OF LABOR (fixed 2026-10-10 — the first version of this file
+# polled /health + /ready + /metrics every 15 min and had that exact
+# bug):
+#   keep_alive.yml — /live every 10 min: Render-warm, dependency-free,
+#     NEVER wakes Neon; the PROCESS-down detector (fails loudly).
+#   heartbeat.yml (this file) — /health every 6 HOURS: the DEEP check
+#     (DB reachability, resolved per-stage models, boot-smoke verdict,
+#     llm_circuit). Four wakes/day cost ~20 min of Neon compute (~2.5
+#     compute-hours/month — negligible against the 180h allowance) and
+#     bound the DB-outage detection latency to 6 hours.
+#
+# What a /health failure means: the API is up but the database or a
+# model lane is degraded — check the service logs; the keep-alive's
+# green run proves the process itself is alive.
 
 name: heartbeat
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch: {}     # manual trigger for ad-hoc checks
+    - cron: "17 */6 * * *"
+  workflow_dispatch: {}     # manual trigger for ad-hoc deep checks
 
 jobs:
-  health-poll:
+  deep-health:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Poll /health
+      - name: Deep /health check
         run: |
           set -e
           BASE="https://adaptive-rag-enterprise.onrender.com"
-          H=$(curl -sf --max-time 30 "$BASE/health") || {
-            echo "::error::/health failed — the API is down or unhealthy"
+          H=$(curl -sf --max-time 60 "$BASE/health") || {
+            echo "::error::/health failed — the API is up but degraded, or down"
             exit 1
           }
           echo "$H"
-          # the graph state must parse; llm_circuit 'open' is a degraded
-          # signal (the circuit breaker tripped — check the service logs)
           echo "$H" | python3 -c "
           import json, sys
           h = json.load(sys.stdin)
-          circuit = h.get('llm_circuit')
-          failures = h.get('circuit_failures', 0)
-          print('graph:', h.get('graph'), '| llm_circuit:', circuit,
-                '| circuit_failures:', failures)
-          print('models:', h.get('models'))
-          if circuit == 'open':
-              print('::warning::llm_circuit is OPEN — the circuit breaker tripped')
+          db = h.get('db') or {}
+          print('db status  :', db.get('status'))
+          print('graph      :', h.get('graph'), '| llm_circuit:',
+                h.get('llm_circuit'), '| circuit_failures:',
+                h.get('circuit_failures'))
+          print('models     :', h.get('models'))
+          print('boot_smoke :', h.get('boot_smoke'))
+          failed = []
+          if db.get('status') != 'reachable':
+              failed.append('db unreachable')
+          if h.get('llm_circuit') == 'open':
+              failed.append('llm_circuit OPEN — the circuit breaker tripped')
+          if failed:
+              for f in failed:
+                  print('::error::' + f)
+              sys.exit(1)
           "
-
-      - name: Poll /ready
-        run: |
-          set -e
-          BASE="https://adaptive-rag-enterprise.onrender.com"
-          curl -sf --max-time 30 "$BASE/ready" > /dev/null || {
-            echo "::error::/ready failed — the service is not ready"
-            exit 1
-          }
-          echo "/ready: 200 OK"
-
-      - name: Poll /metrics
-        run: |
-          set -e
-          BASE="https://adaptive-rag-enterprise.onrender.com"
-          curl -sf --max-time 30 "$BASE/metrics" > /dev/null || {
-            echo "::error::/metrics failed"
-            exit 1
-          }
-          echo "/metrics: 200 OK"
