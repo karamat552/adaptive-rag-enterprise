@@ -140,6 +140,16 @@ ADR-008). The vetted peers only rescue the day-capped-TPD class.
   snapshot. After restore, RE-VERIFY with the receipt chain:
   `/verify/<run_id>` recomputes the deterministic chain; a restored DB
   that fails verification is a wrong restore, not a code bug.
+  **The drill (PRACTICED 2026-10-10):** `scripts/drill_restore.py
+  --target-url <disposable>` simulates the recovery end to end — dumps
+  the 8 data tables from the .env DB (READ-ONLY enforced), restores into
+  a disposable target (the migrations fresh, TRUNCATE-then-COPY for the
+  seeded tables, the id sequences reset), and VERIFIES with the receipt
+  chain: every evidence chunk-hash must re-derive from the restored
+  row's own fields, the transcript spine must hold byte-exact, the fact
+  rows must be consistent. First run: PASSED — 8/8 tables, 693 receipts,
+  8,772 evidence chunk-hashes re-derived. The procedure is known-good,
+  not just written.
 - **target_guard (ADR-025):** write-capable scripts refuse the production
   (host, database) pair — fail-closed, no override flag. Read-only
   measurements may target production only with Postgres-enforced
