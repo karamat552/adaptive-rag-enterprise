@@ -154,7 +154,20 @@ export default function App() {
         )}
 
         {phase === "idle" && (
-          <section className="grid animate-rise gap-4 md:grid-cols-3">
+          <section className="bento animate-rise">
+            {/* WIDE — the system's promise, measured */}
+            <div className="glass glass-hover bento-tile-wide p-5">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[11.5px]">
+                <span className="text-emerald-450">0 fabricated answers</span>
+                <span className="text-mist-300">~100ms instant answers</span>
+                <span className="text-mist-300">20 verified metrics</span>
+                <span className="text-mist-300">every refusal receipted</span>
+              </div>
+              <p className="mt-2 text-[11px] text-mist-400">
+                Measured on the live pipeline — not aspirational copy.
+              </p>
+            </div>
+
             {[
               {
                 t: "Provably grounded",
@@ -166,11 +179,6 @@ export default function App() {
                 d: "Covered financial figures are looked up from a dual-key fact store — SEC XBRL reconciled — at zero LLM tokens, with template-verified citations.",
                 icon: "M13 10V3L4 14h7v7l9-11h-7z",
               },
-              {
-                t: "Fail-closed, always",
-                d: "Five zero-token gates run before the auditor. If anything cannot be verified, the system refuses — it never serves an unverified answer.",
-                icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4",
-              },
             ].map((c) => (
               <div key={c.t} className="glass glass-hover p-5">
                 <svg className="h-5 w-5 text-brand-400" fill="none" viewBox="0 0 24 24"
@@ -181,6 +189,48 @@ export default function App() {
                 <p className="mt-1.5 text-xs leading-relaxed text-mist-400">{c.d}</p>
               </div>
             ))}
+
+            {/* A certified example — show, don't tell */}
+            <div className="glass glass-hover p-5">
+              <span className="pill animate-pop">✓ CERTIFIED · DETERMINISTIC</span>
+              <div className="mt-3 font-mono text-3xl font-bold tracking-tight text-mist-200">
+                $89,498M
+              </div>
+              <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-mist-400">
+                Apple · Total net sales · Q4 FY2023
+              </div>
+              <p className="mt-2 text-xs text-mist-400">
+                Served from the dual-verified fact store — no AI, no tokens,
+                citation bound to the filing page.
+              </p>
+            </div>
+
+            <div className="glass glass-hover p-5">
+              <svg className="h-5 w-5 text-brand-400" fill="none" viewBox="0 0 24 24"
+                   stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
+              </svg>
+              <h3 className="mt-3 text-sm font-semibold text-mist-200">Fail-closed, always</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-mist-400">
+                Five zero-token gates run before the auditor. If anything cannot
+                be verified, the system refuses — it never serves an unverified answer.
+              </p>
+            </div>
+
+            {/* WIDE — the coverage, the real reconciled triples */}
+            <div className="glass glass-hover bento-tile-wide p-5">
+              <h3 className="text-sm font-semibold text-mist-200">What it answers today</h3>
+              <div className="mt-3 space-y-2 font-mono text-[10.5px] text-mist-400">
+                <p><span className="text-mist-200">APPLE</span> · revenue · net income · gross margin · operating income · R&D · pretax income · SG&A</p>
+                <p><span className="text-mist-200">META</span> · revenue · net income · operating income · R&D · pretax income</p>
+                <p><span className="text-mist-200">TESLA</span> · revenue · net income · EPS · gross margin · operating income · R&D · pretax income · SG&A</p>
+              </div>
+              <p className="mt-2.5 text-[11px] text-mist-400">
+                20 dual-verified fact triples — PDF text reconciled against SEC
+                XBRL — and the corpus grows deterministically.
+              </p>
+            </div>
           </section>
         )}
       </main>
