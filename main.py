@@ -447,10 +447,12 @@ app = FastAPI(title="Adaptive RAG — Enterprise Financial Intelligence",
               version="2.1.0", lifespan=lifespan)
 
 # Browser origins allowed to call this API: the Streamlit client, the React
-# console (dev), and whatever the production frontend origin is — set
-# ALLOWED_ORIGINS (comma-separated) to override, e.g. the Vercel domain.
+# console (dev), and the console's PRODUCTION origins on Vercel — set
+# ALLOWED_ORIGINS (comma-separated) to override, e.g. for custom domains.
 _DEFAULT_ORIGINS = ("http://localhost:8501,http://127.0.0.1:8501,"
-                    "http://localhost:5173,http://127.0.0.1:5173")
+                    "http://localhost:5173,http://127.0.0.1:5173,"
+                    "https://frontend-three-rose-67.vercel.app,"
+                    "https://adaptive-rag-console-git-main-karamat-shirgaonkar.vercel.app")
 app.add_middleware(CORSMiddleware,
                    allow_origins=[o.strip() for o in
                                   os.getenv("ALLOWED_ORIGINS",
