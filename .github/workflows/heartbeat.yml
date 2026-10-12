@@ -39,7 +39,14 @@ jobs:
         run: |
           set -e
           BASE="https://adaptive-rag-enterprise.onrender.com"
-          H=$(curl -sf --max-time 60 "$BASE/health") || {
+          # WARM-UP (the false-alarm fix): the keep-alive's scheduled runs
+          # arrive hours apart (GitHub's documented scheduler delays), so
+          # Render may be spun down when this fires — /live wakes it
+          # WITHOUT touching the DB, and the cold start burns itself out
+          # during the settle sleep. /health then probes the warm stack.
+          curl -sf --max-time 90 "$BASE/live" > /dev/null || true
+          sleep 12
+          H=$(curl -sf --max-time 120 "$BASE/health") || {
             echo "::error::/health failed — the API is up but degraded, or down"
             exit 1
           }
@@ -55,8 +62,10 @@ jobs:
           print('models     :', h.get('models'))
           print('boot_smoke :', h.get('boot_smoke'))
           failed = []
-          if db.get('status') != 'reachable':
-              failed.append('db unreachable')
+          # health_check returns EXACTLY two statuses: 'healthy' or
+          # 'unreachable' (db.py:1923) — anything else is a contract break
+          if db.get('status') != 'healthy':
+              failed.append('db not healthy: ' + str(db.get('status')))
           if h.get('llm_circuit') == 'open':
               failed.append('llm_circuit OPEN — the circuit breaker tripped')
           if failed:
