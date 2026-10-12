@@ -82,6 +82,66 @@ def test_fastpath_covered_question_makes_zero_llm_calls(covered_ready,
     assert out.get("evidence_records"), "the served answer has no evidence"
 
 
+# --------------------------------------------- the 2026-10-10 expansion pin
+_NEW_COVERED = [
+    # (question, company-lower, metric_key) — the coverage expansion:
+    # pretax income and SG&A joined the FastPath (PATH_A_METRICS + the
+    # CONCEPTS + the lexicon). The same zero-LLM contract as the
+    # original coverage.
+    ("What was Meta's pretax income in Q4 2023?", "meta", "pretax_income"),
+    ("What was Tesla's SG&A expenses in Q4 2023?", "tesla", "sga_expense"),
+]
+
+
+@pytest.mark.parametrize("question,company,metric", _NEW_COVERED)
+def test_fastpath_expanded_coverage_zero_llm(covered_ready, monkeypatch,
+                                             question, company, metric):
+    """THE EXPANSION'S PIN: the new metrics serve under the SAME zero-LLM
+    contract — and the receipt's claims carry the deterministic
+    provenance stamp (verifier='deterministic'), captured from the
+    stubbed save. Skips if the metric's reconciled triple is absent —
+    this pin tests the COST property, not the fact store's content
+    (the same rule as covered_ready)."""
+    from db import get_fact_rows
+    keys = {(str(r["company"]).lower(), r["metric_key"], r["period"])
+            for r in get_fact_rows(reconciled_only=True)}
+    if (company, metric, "Q4-2023") not in keys:
+        pytest.skip(f"no reconciled ({company}, {metric}, Q4-2023) triple")
+    monkeypatch.setenv("RAG_FACT_FASTPATH", "1")
+    receipts: list = []
+
+    def _capturing_receipt(*a, **k):
+        receipts.append(k.get("claims") or
+                        (a[3] if len(a) > 3 else None))
+
+    monkeypatch.setattr(ar, "save_verification_receipt", _capturing_receipt)
+    monkeypatch.setattr("db.save_verification_receipt", _capturing_receipt)
+    calls = {"n": 0}
+
+    async def _counting_stub(*a, **k):
+        calls["n"] += 1
+        raise AssertionError("the FastPath must not invoke the LLM")
+
+    monkeypatch.setattr(ar, "_llm_call", _counting_stub)
+    state = {"original_question": question,
+             "run_id": "unit-expansion-pin", "tenant_id": "default"}
+    out = asyncio.run(ar.fact_fastpath(state))
+    assert out.get("fastpath_served") is True, \
+        f"the expanded coverage must SERVE (got: {out.get('fastpath_reason')!r})"
+    assert out.get("outcome") == "vectorstore"
+    assert out.get("grounded") is True
+    assert calls["n"] == 0, "the expansion invoked the LLM"
+    assert out.get("evidence_records"), "no evidence for the expanded metric"
+    # the provenance stamp: the receipt's claims are stamped
+    # verifier='deterministic' (B.1.4) — captured from the stubbed save
+    assert receipts and receipts[-1], "no claims reached the receipt save"
+    for c in receipts[-1]:
+        assert c.get("verifier") == "deterministic", \
+            f"a claim lost its deterministic stamp: {c.get('verifier')!r}"
+        assert c.get("deterministic_certification") == \
+            "known-context-exclusions-applied"
+
+
 # ------------------------------------------------------- the kill-switch
 def test_fastpath_flag_off_is_dormant(monkeypatch):
     """The one-env-var kill-switch (ADR-017 §3): RAG_FACT_FASTPATH unset
