@@ -174,14 +174,33 @@ ADR-008). The vetted peers only rescue the day-capped-TPD class.
 
 ## 6. Local-dev quirks (Windows)
 
-- **The jiter DLL block (hit 2026-10-08):** Windows app-control flagged
-  jiter 0.17.0's DLL — every ChatOpenAI client init died
-  (`ImportError: DLL load failed ... Application Control policy`), which
-  killed the whole pipeline locally. **Fix: `pip install jiter==0.16.0`**
-  (a fresh file hash passes the cloud verdict). Production (Linux) was
-  never affected. `tests/conftest.py` pre-warms the langchain import
-  (module + one client instantiation) before onnxruntime loads — once
-  jiter is cached the process is immune.
+- **The app-control DLL blocks (jiter 2026-10-08; psycopg2 2026-10-10):**
+  Windows **Smart App Control** (confirmed On via
+  `Get-MpComputerStatus`) flags legitimate package DLLs by cloud
+  reputation — each block kills every client/DB init
+  (`ImportError: DLL load failed ... Application Control policy`).
+  Production (Linux) is never affected. The known-good file
+  fingerprints for THIS machine:
+  | package | BLOCKED (cloud-flagged) | KNOWN-GOOD |
+  |---|---|---|
+  | jiter | 0.17.0 | **0.16.0** |
+  | psycopg2-binary | 2.9.13, 2.9.12 | **2.9.11** |
+  **The override mechanism:** the lock's pins are hard, so a constraints
+  file cannot override — install the lock, then force the two:
+  `pip install -r requirements.lock && pip install jiter==0.16.0 psycopg2-binary==2.9.11`
+  (`constraints-dev.local.txt`, gitignored, records the known-good
+  set). Re-run after ANY lock reinstall.
+  **The permanent fix in flight:** the false-positive submission to
+  Microsoft (the package: `drill/mp_submission/false_positive_submission.zip`,
+  portal: microsoft.com/wdsi/filesubmission) — when the verdicts clear,
+  reinstall the lock versions and the overrides retire.
+  **The escalation trigger:** if a package whose EVERY version is
+  flagged blocks the work, move the dev loop into a Linux container
+  (Smart App Control does not govern Linux binaries) — the Dockerfile
+  exists; treat it as a deliberate setup, not an ad-hoc fix.
+  `tests/conftest.py` pre-warms the langchain import (module + one
+  client instantiation) before onnxruntime loads — once jiter is cached
+  the process is immune.
 - **The retry loop is DEAD** (ADR-023): unverified → refuse. If you see
   multi-pass retry storms in logs, something regressed — check
   `RAG_MAX_LLM_CALLS_PER_RUN` (24) is set.
