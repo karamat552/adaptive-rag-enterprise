@@ -79,3 +79,10 @@ frontend/dist/
 /hash_recall.json
 /recall_prod.json
 /recall_disp.json
+
+# DR drill scratch — production data dumps NEVER get committed
+/drill/
+
+# latency bench raw artifacts (the numbers are frozen in MEASUREMENTS_*.md)
+/bench_fastpath_*.json
+/bench_fastpath_*.md
