@@ -86,6 +86,13 @@ jobs:
           DB_DATABASE_URL: ${{ secrets.DB_DATABASE_URL }}
           DB_ADMIN_DATABASE_URL: ${{ secrets.DB_ADMIN_DATABASE_URL }}
           RAG_EXEC_PEER_FAILOVER: "1"
+          # THE ROTATING COHORT (ADR-022 amendment, 2026-10-25): each night
+          # runs one stride slice of the battery (every 4th question); the
+          # 4 cohorts' union is the full 42 with no overlap. The token burn
+          # per night drops ~4x — the difference between structurally
+          # hitting the free-tier walls every night (14 INCOMPLETE nights,
+          # Oct 12-25) and fitting comfortably.
+          COHORT_ROTATION: "4"
           # Fresh measurement, like the canary: no cache replays — every
           # question pays the full pipeline so agreement is measured, not
           # replayed. Shadow ledger rows are keyed by run_id (never deduped).
@@ -95,8 +102,10 @@ jobs:
           # RAG_FAILOVER_ENDPOINTS is assembled by the preflight step
           # above (GITHUB_ENV) — only lanes with present secrets run.
         run: |
+          COHORT=$((GITHUB_RUN_NUMBER % COHORT_ROTATION))
+          echo "rotating cohort: $COHORT (run $GITHUB_RUN_NUMBER)"
           python scripts/battery_phase1.py --shadow --corrupted \
-            --report shadow_battery_report.json
+            --cohort "$COHORT" --report shadow_battery_report.json
 
       - name: Upload A.2 report (every run, pass or fail)
         if: always()

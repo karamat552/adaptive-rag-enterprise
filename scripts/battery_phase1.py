@@ -164,14 +164,12 @@ def _sum_tokens(per_model: Optional[Dict[str, Any]]) -> int:
     return total
 
 
-async def shadow_pass(limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Live V1-vs-V2 measurement over the battery (the shadow node rides
-    every full pipeline run). Records per-question outcome, tokens,
-    capacity state, and the ledger row written by THIS run."""
-    spec = _spec()
-    questions = spec["questions"]
-    if limit:
-        questions = questions[:limit]
+async def shadow_pass(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Live V1-vs-V2 measurement over the CALLER-RESOLVED battery slice
+    (the rotating cohort and the smoke limit are applied upstream — this
+    function measures whatever it is handed, per question). The shadow
+    node rides every full pipeline run. Records per-question outcome,
+    tokens, capacity state, and the ledger row written by THIS run."""
     from adaptive_rag import arun_query
     rows: List[Dict[str, Any]] = []
     for q in questions:
@@ -280,14 +278,27 @@ def main() -> int:
                     help="report path (written when --shadow/--corrupted)")
     ap.add_argument("--limit", type=int, default=None,
                     help="smoke subset of questions — verdict is never GREEN")
+    ap.add_argument("--cohort", type=int, default=None, choices=[0, 1, 2, 3],
+                    help="the rotating cohort (ADR-022 amendment, 2026-10-25): "
+                         "the stride split of the battery — cohort N takes "
+                         "every 4th question; the 4 cohorts' union is the "
+                         "full battery with no overlap. Omitted = the full "
+                         "42. The nightly runs rotate via the run number.")
     ns = ap.parse_args()
 
     report: Dict[str, Any] = {
         "run_at": datetime.now(timezone.utc).isoformat(),
         "battery": BATTERY.name,
         "limited": bool(ns.limit),
+        "cohort": ns.cohort,
     }
     try:
+        questions = _spec()["questions"]
+        if ns.cohort is not None:
+            questions = [q for i, q in enumerate(questions)
+                         if i % 4 == ns.cohort]
+        if ns.limit:
+            questions = questions[:ns.limit]
         matrix_fails = deterministic_pass()
         report["deterministic_matrix"] = {
             "total": len(_spec()["questions"]), "fails": matrix_fails}
@@ -302,7 +313,7 @@ def main() -> int:
 
         rows: List[Dict[str, Any]] = []
         if ns.shadow:
-            rows = asyncio.run(shadow_pass(ns.limit))
+            rows = asyncio.run(shadow_pass(questions))
             verdict, rollup = evaluate(rows, false_passes,
                                        control_failures, matrix_fails,
                                        bool(ns.limit))

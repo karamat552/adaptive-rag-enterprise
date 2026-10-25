@@ -1056,6 +1056,24 @@ disfavor.** A who_answers=v2 shape-disagreement is V1's unavailability,
 not V2's error — the classifier should subclass it from disagree_value
 (a real mismatch) before quoting agreement percentages under stormy
 conditions. The FastPath's answers were never caught being wrong.
+
+**AMENDMENT 2026-10-25 — the rotating cohort (the owner's decision):**
+the nightly battery runs ONE stride cohort of the pre-registered battery
+(every 4th question; the 4 cohorts' union is the full 42 with no
+overlap; the sizes 10-11; each cohort carries both serving paths — the
+invariants pinned by tests/test_battery_cohorts.py). The rotation:
+run_number % 4 (deterministic, stateless — no night-state to lose).
+WHY: the full-battery live pass burns ~400-600K tokens/night against
+the free-tier per-model TPDs (200K) — 14 consecutive INCOMPLETE nights
+(Oct 12-25) proved the structural mismatch; the cohort drops the burn
+~4x and fits the window. The green night = the cohort's clean run (all
+the cohort's covered questions measured, the agreement >= 98% on the
+cohort, the corrupted 15/15, zero fabrications); 7 consecutive green
+cohort-nights clears the A.2 gate — the full corpus is covered ~every
+4 nights, so 7 nights sample it ~1.75x. The matrix (42/42, zero tokens)
+and the corrupted gates (15/15) run FULL every night — the drift
+detectors stay whole. Verified: the cohort smoke (matrix 42/42,
+corrupted 15/15, controls 20/20, cohort 0 recorded, zero tokens).
 ---
 
 # NEW DECISIONS (2026-10-07)

@@ -27,7 +27,8 @@ def test_shadow_pass_emits_per_question_records(monkeypatch, capsys):
     monkeypatch.setattr(battery_phase1, "_fetch_ledger_row",
                         lambda rid, q: {"agreement_class": "agree",
                                         "agreement_detail": "d"})
-    rows = asyncio.run(battery_phase1.shadow_pass(limit=3))
+    questions = battery_phase1._spec()["questions"][:3]
+    rows = asyncio.run(battery_phase1.shadow_pass(questions))
     out = capsys.readouterr().out
     lines = [ln for ln in out.splitlines() if ln.startswith("SHADOW-ROW ")]
     assert len(lines) == 3 == len(rows), f"want 3 SHADOW-ROW lines, got {len(lines)}"
