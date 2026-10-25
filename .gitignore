@@ -86,3 +86,8 @@ frontend/dist/
 # latency bench raw artifacts (the numbers are frozen in MEASUREMENTS_*.md)
 /bench_fastpath_*.json
 /bench_fastpath_*.md
+
+# the SAC-blocked-machine constraint overrides (never commit: this is
+# machine-specific — the known-good file fingerprints for THIS Windows
+# machine; see the RUNBOOK §6)
+constraints-dev.local.txt
