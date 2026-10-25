@@ -6,14 +6,19 @@
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
 
 // Resolution order:
-//   1. VITE_API_BASE           — explicit override (production builds set it)
+//   1. VITE_API_BASE           — explicit override (custom deployments set it)
 //   2. "/api" in dev           — same-origin, proxied to the gateway by Vite
 //                                (vite.config.js). Works behind ANY host or
 //                                proxy with no CORS config, because the
 //                                browser never makes a cross-origin request.
-//   3. localhost:8000          — production build with no override: unchanged
-//                                from the previous behaviour.
-const API_BASE = ENV.VITE_API_BASE || (ENV.DEV ? "/api" : "http://localhost:8000");
+//   3. the production gateway  — the deployed console's fallback. The old
+//                                default (localhost:8000) made the Vercel
+//                                deployment ask the VISITOR'S machine for the
+//                                backend — "backend offline" for everyone.
+//                                Found live 2026-10-25; the CORS allow-list
+//                                (main.py) carries this origin since 68dd9ab.
+const API_BASE = ENV.VITE_API_BASE ||
+  (ENV.DEV ? "/api" : "https://adaptive-rag-enterprise.onrender.com");
 
 const KEY_STORAGE = "arag.apikey";
 const ADMIN_STORAGE = "arag.adminkey";
