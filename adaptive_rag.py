@@ -92,6 +92,14 @@ class RagSettings(BaseSettings):
     # JSON list of {"base_url": ..., "api_key_env": ..., "model": ...}
     failover_endpoints: Optional[str] = None
 
+    # THE LATENCY KNOB (the experiment harness, 2026-10-25): the synthesis
+    # prompt's evidence is capped to the TOP-N chunks (the rerank order —
+    # a PREFIX slice, so citation positions [1..N] stay identical to the
+    # full list and the receipt chain is untouched). 0 = unlimited (the
+    # default behavior, byte-identical). The latency-vs-quality Pareto
+    # experiment varies this per run; the judge scores the answers.
+    synth_evidence_max_chunks: int = 0
+
     # v3.3 output discipline (the 413 fix): extraction is compression, not essays
     fleet_max_tokens: int = 800
     synth_max_tokens: int = 1800
@@ -1958,6 +1966,15 @@ async def synthesize_csuite_report(state: MultiAgentState) -> MultiAgentState:
             logger.info("[synthesize] evidence dedup: %d/%d chunks "
                         "collapsed to stubs (already quoted in specialist "
                         "reports).", quoted_stubs, len(doc_list))
+        # THE LATENCY KNOB: the prefix-slice cap (0 = unlimited). A PREFIX
+        # slice keeps citation positions [1..N] identical to the full list,
+        # so the answer's citations and the receipt chain stay consistent
+        # with the synthesis seeing less — the whole point of the knob.
+        cap = int(get_settings().synth_evidence_max_chunks or 0)
+        if cap > 0 and len(doc_list) > cap:
+            logger.info("[synthesize] evidence cap: %d -> %d chunks "
+                        "(RAG_SYNTH_EVIDENCE_MAX_CHUNKS)", len(doc_list), cap)
+            doc_list = doc_list[:cap]
 
     numbered_evidence = "\n\n".join(
         f"Evidence [{i+1}]:\n<evidence>\n{doc}\n</evidence>"
