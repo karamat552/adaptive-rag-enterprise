@@ -4,6 +4,7 @@ import QueryConsole from "./components/QueryConsole.jsx";
 import PipelineRail from "./components/PipelineRail.jsx";
 import AnswerPanel from "./components/AnswerPanel.jsx";
 import ReceiptExplorer from "./components/ReceiptExplorer.jsx";
+import VerifyViewer from "./components/VerifyViewer.jsx";
 import { fetchHealth, fetchReceipt, streamQuery } from "./api.js";
 import { ToastProvider } from "./toast.jsx";
 
@@ -14,7 +15,12 @@ const EXAMPLES = [
   "What are the main risks Tesla faces in its energy business?",
 ];
 
+// a real production run, pre-filled so a first-time visitor can verify a
+// receipt without hunting for an id (the README's demo receipt)
+const SAMPLE_RUN_ID = "250f578be128";
+
 export default function App() {
+  const [view, setView] = useState("console"); // console | verify
   const [phase, setPhase] = useState("idle"); // idle | streaming | done | error
   const [question, setQuestion] = useState("");
   const [transitions, setTransitions] = useState([]);
@@ -82,7 +88,7 @@ export default function App() {
   return (
     <ToastProvider>
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6">
-      <Header health={health} pingMs={pingMs} />
+      <Header health={health} pingMs={pingMs} view={view} onView={setView} />
 
       <p
         role="note"
@@ -92,6 +98,12 @@ export default function App() {
         retrieval-and-verification pipeline over public SEC filings.
       </p>
 
+      {view === "verify" ? (
+        <main className="flex flex-1 flex-col gap-6">
+          <VerifyViewer />
+        </main>
+      ) : (
+      <>
       <main className="flex flex-1 flex-col gap-6">
         <QueryConsole
           onAsk={ask}
@@ -166,6 +178,19 @@ export default function App() {
               <p className="mt-2 text-[11px] text-mist-400">
                 Measured on the live pipeline — not aspirational copy.
               </p>
+              {health && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-ink-700 pt-3 font-mono text-[10.5px] text-mist-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="dot dot-live" /> LIVE
+                  </span>
+                  <span>epoch {health.db?.epoch ?? "–"}</span>
+                  <span>{health.db?.chunks ?? "–"} chunks indexed</span>
+                  <span>boot smoke: {(health.boot_smoke || {}).status || "—"}</span>
+                  <span className="text-emerald-450/80">
+                    verify any receipt in the 🔍 tab
+                  </span>
+                </div>
+              )}
             </div>
 
             {[
@@ -234,6 +259,8 @@ export default function App() {
           </section>
         )}
       </main>
+      </>
+      )}
 
       <footer className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-ink-700 pt-4 text-[11px] text-mist-400">
         <span>

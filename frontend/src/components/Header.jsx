@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { getApiKey, setApiKey, getAdminKey, setAdminKey } from "../api.js";
 
-export default function Header({ health, pingMs }) {
+export default function Header({ health, pingMs, view, onView }) {
   const [key, setKey] = useState(getApiKey());
   const [admin, setAdmin] = useState(getAdminKey());
   const [editing, setEditing] = useState(null); // "query" | "admin" | null
@@ -33,6 +33,20 @@ export default function Header({ health, pingMs }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        {onView && (
+          <button
+            onClick={() => onView(view === "verify" ? "console" : "verify")}
+            className={`pill font-mono transition-colors ${
+              view === "verify"
+                ? "border-brand-500/60 bg-brand-500/15 text-brand-400"
+                : "hover:border-brand-500/50"
+            }`}
+            title={view === "verify"
+              ? "Back to the query console"
+              : "Verify any past answer's receipt — zero trust, no key"}>
+            🔍 {view === "verify" ? "back to console" : "verify a receipt"}
+          </button>
+        )}
         <span className="pill">
           <span className={`dot ${live ? "dot-live" : "dot-pending"}`} />
           {live ? "live" : "offline"}
