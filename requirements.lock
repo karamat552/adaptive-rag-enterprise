@@ -147,7 +147,7 @@ langgraph-checkpoint==4.2.0
     #   langgraph-prebuilt
 langgraph-prebuilt==1.1.0
     # via langgraph
-langgraph-sdk==0.4.5
+langgraph-sdk==0.4.14
     # via langgraph
 langsmith==0.14.2
     # via langchain-core
@@ -212,7 +212,7 @@ py-rust-stemmers==0.1.8
     # via fastembed
 pyarrow==25.0.1
     # via streamlit
-pyasn1==0.6.4
+pyasn1==0.6.5
     # via pyasn1-modules
 pyasn1-modules==0.4.2
     # via google-auth
