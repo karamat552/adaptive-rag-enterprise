@@ -1535,6 +1535,50 @@ async def _multi_query_search(search_q: str, *, category: Optional[str],
 # ===========================================================================
 # 7. SPECIALIST EXTRACTION (fleet model, quarantine-aware)
 # ===========================================================================
+
+# Intent-boost rules: (the query substring to detect, the content phrases
+# that indicate the consolidated-line chunk). When the query matches the
+# intent AND any chunk contains the target phrase, that chunk is promoted
+# to the front of the retrieval results — before the specialist extraction
+# and synthesis see them. Deterministic, zero tokens, the same discipline
+# as the corrupted-claim gates.
+_INTENT_BOOST_RULES: List[Tuple[str, Tuple[str, ...]]] = [
+    ("total", ("total net sales", "total revenues", "total revenue",
+               "total operating income")),
+]
+
+
+def _intent_boost(query: str,
+                  chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The retrieval intent-hint: when the query asks for a TOTAL figure,
+    promote chunks containing the consolidated-line text above the segment
+    breakdowns. The segment table is textually more similar to the
+    question, so the reranker ranks it higher — but the user wants the ONE
+    number, not the breakdown. Deterministic, zero tokens. Only fires when
+    the query contains the intent keyword AND a chunk contains the
+    consolidated-line phrase — no false positives on unrelated queries.
+    (KNOWN_ISSUES #8: the segment-soup class, narrowed.)"""
+    low = query.lower()
+    for keyword, phrases in _INTENT_BOOST_RULES:
+        if keyword not in low:
+            continue
+        boosted = []
+        rest = []
+        for c in chunks:
+            content = (c.get("content") or "").lower()
+            if any(p in content for p in phrases):
+                boosted.append(c)
+            else:
+                rest.append(c)
+        if boosted and rest:
+            logger.info("[intent-boost] %d/%d chunks promoted "
+                        "(the consolidated-line chunk outranks the segment "
+                        "breakdowns for the '%s' intent)",
+                        len(boosted), len(chunks), keyword)
+            return boosted + rest
+    return chunks
+
+
 async def _specialist(name: str, system_prompt: str, category: str,
                       search_q: str, original_q: str,
                       top_k: int = 5,
@@ -1597,6 +1641,7 @@ async def _specialist(name: str, system_prompt: str, category: str,
             return out
 
         records = list({r["chunk_hash"]: r for r in raw}.values())
+
         passages = [{"id": idx, "text": _format_record(r)}
                     for idx, r in enumerate(records)]
 
@@ -1612,6 +1657,15 @@ async def _specialist(name: str, system_prompt: str, category: str,
             top = []
         if not top:
             top = records[:top_k]
+
+        # THE INTENT BOOST (the soup fix, KNOWN_ISSUES #8): when the query
+        # asks for a TOTAL figure, promote chunks containing the
+        # consolidated-line text above the segment breakdowns. The reranker
+        # ranks by similarity — the segment table is more "similar" to the
+        # question than the one-line consolidated total. The intent boost
+        # re-orders the final results so the writer sees the right evidence
+        # first. Deterministic, zero tokens.
+        top = _intent_boost(original_q, top)
 
         context_str = "\n\n---\n\n".join(
             f"<evidence>\n{_format_record(r)}\n</evidence>" for r in top)
