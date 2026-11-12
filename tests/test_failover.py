@@ -836,13 +836,13 @@ def test_exec_peer_pool_is_allowlist_only():
     failover registry, never 8B/20B fleet models, never community lanes."""
     import adaptive_rag as ar
     models = [p["model"] for p in ar._EXEC_PEER_POOL]
-    assert "nvidia/nemotron-3-super-120b-a12b" in models
+    assert "nvidia/nemotron-3.5-super-vl-120b-a12b" in models
     assert "gemini-3.5-flash" in models
 
     import re as _re
 
     def _param_count(m: str):
-        # 'nemotron-3-super-120b-a12b' -> 120; 'gemini-3.5-flash' -> None
+        # 'nemotron-3.5-super-vl-120b-a12b' -> 120; 'gemini-3.5-flash' -> None
         mm = _re.search(r"-(\d+)b", m.lower())
         return int(mm.group(1)) if mm else None
 

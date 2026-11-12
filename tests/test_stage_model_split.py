@@ -141,9 +141,9 @@ def test_nim_route_builds_against_nim_endpoint(monkeypatch):
     400 model-not-found and quarantine every synthesis."""
     calls = _install_fake_chat(monkeypatch)
     monkeypatch.setenv("NIM_API_KEY", "test-key")
-    ar._build_engine("nvidia/nemotron-3-super-120b-a12b")
+    ar._build_engine("nvidia/nemotron-3.5-super-vl-120b-a12b")
     assert calls, "the engine builder must construct a chat engine"
-    assert calls[0]["model"] == "nvidia/nemotron-3-super-120b-a12b"
+    assert calls[0]["model"] == "nvidia/nemotron-3.5-super-vl-120b-a12b"
     assert calls[0]["base_url"] == "https://integrate.api.nvidia.com/v1"
     assert calls[0]["api_key"] == "test-key"
 
@@ -153,7 +153,7 @@ def test_nim_route_fail_closed_without_key(monkeypatch):
     never a NIM model name silently sent to the global provider."""
     monkeypatch.delenv("NIM_API_KEY", raising=False)
     with pytest.raises(ValueError):
-        ar._build_engine("nvidia/nemotron-3-super-120b-a12b")
+        ar._build_engine("nvidia/nemotron-3.5-super-vl-120b-a12b")
 
 
 def test_route_never_applies_to_fleet_models(monkeypatch):

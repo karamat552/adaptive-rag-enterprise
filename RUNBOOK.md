@@ -49,9 +49,9 @@ pill shows it. Nothing to fix.
 ### The failover chain (automatic — know it, don't fight it)
 
 ```
-PRIMARY (Groq) ──429/timeout──▶ APInex ──▶ NIM ──▶ OpenRouter   (fleet lanes)
+PRIMARY (Groq) ──429/timeout──▶ NIM ──▶ OpenRouter   (fleet lanes)
 EXECUTIVE (Groq gpt-oss-120b) ──quota-class──▶ vetted peer pool:
-                                    NIM nemotron-120b → Gemini 3.5-flash
+                          NIM nemotron-3.5-super-vl-120b → Gemini 3.5-flash
 ```
 
 A quota wall at the EXECUTIVE ends in a **verified refusal** — never a
@@ -100,7 +100,17 @@ ADR-008). The vetted peers only rescue the day-capped-TPD class.
 - **Symptom:** a model 404s or the boot smoke fails after a quiet period.
 - **Mechanics:** free catalogs are NOT contracts — providers rotate them
   (llama-3.1-8b-instant and llama-4-scout were retired; TokenRouter's
-  glm-5.3-free vanished).
+  glm-5.3-free vanished). **2026-11-12 rotation caught LIVE during the
+  fleet-latency profile:** NIM's `nemotron-3-super-120b-a12b` chat call
+  began 404ing ("Function …: Not found for account" — the catalog still
+  lists it; the account binding is gone) and OpenRouter retired
+  `z-ai/glm-5.2:free` ("use z-ai/glm-5.2" — the paid slug; NOT adopted,
+  a paid lane must never be one 429 away). Both lanes were live-probed
+  (200 + sane completion) and replaced the same hour:
+  `nvidia/nemotron-3.5-super-vl-120b-a12b` (NIM) and
+  `nvidia/nemotron-3-ultra-550b-a55b:free` (OpenRouter) — in `.env`,
+  `.env.example`, the `_EXEC_PEER_POOL`/`_MODEL_ENDPOINT_ROUTES` code
+  pins, and the Render env (mirror the .env values there).
 - **Do:** `python scripts/list_models.py <provider> <base_url> <key_env>`
   to enumerate; then the 16-point gauntlet
   (`scripts/vet_exec_candidate.py`) BEFORE assigning any stage model.

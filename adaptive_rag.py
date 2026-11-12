@@ -359,7 +359,12 @@ def _provider_key() -> str:
 # passed the 16-point benchmark belong here; a route never applies to
 # router/fleet models (community lanes stay fleet-only per ADR-008).
 _MODEL_ENDPOINT_ROUTES: Dict[str, Tuple[str, str]] = {
-    "nvidia/nemotron-3-super-120b-a12b":
+    # LIVE-REPLACED 2026-11-12: the old slug (nemotron-3-super-120b-a12b)
+    # began 404ing at chat time — "Function 'ac74…': Not found for account"
+    # (the catalog still lists it; the account's function binding is gone).
+    # Caught live during the fleet-latency profile; the replacement is the
+    # newer 120B-class generation, probed 200 with a real completion.
+    "nvidia/nemotron-3.5-super-vl-120b-a12b":
         ("https://integrate.api.nvidia.com/v1", "NIM_API_KEY"),
 }
 
@@ -1280,7 +1285,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
         # escalate to a strictly-vetted PEER pool of equal-or-better models.
         # This is NOT the general failover registry: the peer pool is an
         # explicit allowlist of vetted 120B-class executives (NIM
-        # nemotron-3-super-120b-a12b, Google gemini-3.5-flash), never the
+        # nemotron-3.5-super-vl-120b-a12b, Google gemini-3.5-flash), never the
         # 8B/20B fleet models and never community/free proxies. A non-quota
         # failure still fails closed exactly as before; the peer tier only
         # answers the day-capped-TPD class that killed both morning
@@ -1324,7 +1329,7 @@ async def _llm_call(runnable: Any, messages: list, stage: str,
 _EXEC_PEER_POOL: List[Dict[str, str]] = [
     {"base_url": "https://integrate.api.nvidia.com/v1",
      "api_key_env": "NIM_API_KEY",
-     "model": "nvidia/nemotron-3-super-120b-a12b"},
+     "model": "nvidia/nemotron-3.5-super-vl-120b-a12b"},
     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
      "api_key_env": "GEMINI_API_KEY",
      "model": "gemini-3.5-flash"},
