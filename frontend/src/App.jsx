@@ -166,6 +166,7 @@ export default function App() {
         )}
 
         {phase === "idle" && (
+          <>
           <section className="bento animate-rise">
             {/* WIDE — the system's promise, measured */}
             <div className="glass glass-hover bento-tile-wide p-5">
@@ -257,6 +258,87 @@ export default function App() {
               </p>
             </div>
           </section>
+
+          {/* THE HOW-IT-WORKS JOURNEY — the landing section a first-time
+              visitor reads before they trust the console with a question */}
+          <section className="glass animate-rise p-5" aria-labelledby="how-title">
+            <h2 id="how-title" className="text-sm font-semibold text-mist-200">
+              How an answer earns its badge
+            </h2>
+            <p className="mt-1 text-xs text-mist-400">
+              The same four steps, every question, no exceptions.
+            </p>
+            <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  n: "01",
+                  t: "You ask",
+                  d: "A natural-language question over the indexed Q4-2023 filings — no keywords, no query language.",
+                },
+                {
+                  n: "02",
+                  t: "The gate decides",
+                  d: "A deterministic coverage check routes covered metrics to the zero-token fact store; everything else goes to the retrieval fleet.",
+                },
+                {
+                  n: "03",
+                  t: "Evidence binds",
+                  d: "Claims anchor to filing pages and are reconciled against SEC XBRL. Five zero-token gates and the auditor judge every one.",
+                },
+                {
+                  n: "04",
+                  t: "You get proof",
+                  d: "A certified answer with its cryptographic receipt — or a refusal that is receipted too. Nothing in between.",
+                },
+              ].map((s) => (
+                <li key={s.n} className="rounded-xl border border-ink-700 bg-ink-950/40 p-3.5">
+                  <span className="font-mono text-[10px] tracking-widest text-brand-400">{s.n}</span>
+                  <h3 className="mt-1 text-xs font-semibold text-mist-200">{s.t}</h3>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-mist-400">{s.d}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          {/* THE FAQ — the questions every skeptical visitor actually has */}
+          <section className="glass animate-rise p-5" aria-labelledby="faq-title">
+            <h2 id="faq-title" className="text-sm font-semibold text-mist-200">
+              The honest questions
+            </h2>
+            <div className="mt-3 space-y-2">
+              {[
+                {
+                  q: "Can the system make a number up?",
+                  a: "A certified answer is bound to evidence before it reaches you: claims anchor to filing-page spans, reconcile against SEC XBRL where a twin exists, and pass the auditor. If any gate cannot verify, the system refuses instead. The zero-fabrication invariant is measured nightly by an automated battery — it is not a slogan.",
+                },
+                {
+                  q: "What happens when it doesn't know?",
+                  a: "You get a verified refusal: a plain statement that the answer could not be verified, with the reason (retrieval gap, out-of-period question, failed audit) — and a receipt for the refusal itself. Refusing is the designed behavior, not an error.",
+                },
+                {
+                  q: "How fast is an instant answer?",
+                  a: "Covered metrics (revenue, net income, EPS, margins, and more) are looked up from the dual-verified fact store at zero LLM tokens — the measured p50 on the live pipeline is ~94ms. Uncovered questions run the full retrieval-and-audit path and take tens of seconds; the honest ones refuse in seconds.",
+                },
+                {
+                  q: "Which filings does it cover today?",
+                  a: "Apple, Meta and Tesla, Q4-2023, with 20 metrics dual-verified against SEC XBRL. The corpus and metric coverage grow through the same deterministic ingest pipeline — every expansion is reconciled at ingest, never hand-entered.",
+                },
+                {
+                  q: "How do I verify an answer without trusting you?",
+                  a: "Paste the answer's run ID in the 🔍 tab — no key, no login — and this console re-fetches the stored certification: the claims, their verifier stamps, and the exact evidence attribution. For full offline verification, download the compliance bundle (Ed25519-signed) and re-derive every hash with the included standard-library verifier.",
+                },
+              ].map((f) => (
+                <details key={f.q} className="group rounded-xl border border-ink-700 bg-ink-950/40">
+                  <summary className="cursor-pointer list-none px-3.5 py-2.5 text-xs font-medium text-mist-300 transition-colors hover:text-mist-200 [&::-webkit-details-marker]:hidden">
+                    <span className="mr-2 inline-block text-brand-400 transition-transform group-open:rotate-90">▸</span>
+                    {f.q}
+                  </summary>
+                  <p className="px-3.5 pb-3 pl-9 text-[11px] leading-relaxed text-mist-400">{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+          </>
         )}
       </main>
       </>

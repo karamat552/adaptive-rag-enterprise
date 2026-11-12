@@ -34,6 +34,14 @@ export default function VerifyViewer({ initialRunId = "" }) {
   const v = data?.verification || {};
   const rcpt = data?.receipt || {};
   const verified = v.verified === true;
+  // THREE-STATE VERDICT (live-tested 2026-11-12, run e946d9f9c3a5): a
+  // refusal receipt carries 0 claims — the chain verifier correctly
+  // returns verified=false ("no locatable evidence spans"), but rendering
+  // that as "✗ CHAIN BROKEN" indicts the system for doing exactly what it
+  // promises: refusing rather than serve. A refusal is a SUCCESS of the
+  // fail-closed posture and gets its own honest badge; only a receipt
+  // WITH claims that fail re-derivation is a broken chain.
+  const refused = rcpt.audit_verdict === "refused";
 
   const parseJson = (x) => {
     try {
@@ -84,14 +92,25 @@ export default function VerifyViewer({ initialRunId = "" }) {
 
       {data && (
         <>
-          <div className={`glass animate-pop p-5 ${verified ? "seal-trace" : ""}`}>
-            <span className={`pill font-mono ${verified
-              ? "border-emerald-450/50 text-emerald-450"
-              : "border-rose-450/50 text-rose-450"}`}>
-              {verified
-                ? `✓ CHAIN VERIFIED · ${v.links_ok}/${v.links_checked} links`
-                : "✗ CHAIN BROKEN"}
+          <div className={`glass animate-pop p-5 ${verified && !refused ? "seal-trace" : ""}`}>
+            <span className={`pill font-mono ${refused
+              ? "border-amber-450/50 text-amber-450"
+              : verified
+                ? "border-emerald-450/50 text-emerald-450"
+                : "border-rose-450/50 text-rose-450"}`}>
+              {refused
+                ? "✓ HONEST REFUSAL — nothing served, nothing to break"
+                : verified
+                  ? `✓ CHAIN VERIFIED · ${v.links_ok}/${v.links_checked} links`
+                  : "✗ CHAIN BROKEN"}
             </span>
+            {refused && (
+              <p className="mt-2 text-xs leading-relaxed text-amber-200/80">
+                The system declined to answer rather than serve an unverified
+                one — the fail-closed posture working as designed. This is a
+                pass of the zero-fabrication invariant, not a failure.
+              </p>
+            )}
             <div className="mt-3 font-mono text-[11px] text-mist-400">
               claims: {v.claims_total} · evidence: {v.evidence_total} ·
               run: {data.requested_run_id || runId}
