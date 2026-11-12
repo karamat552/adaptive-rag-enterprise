@@ -23,6 +23,12 @@ export default function VerifyViewer({ initialRunId = "" }) {
       setData(await fetchReceipt(rid));
     } catch (e) {
       setError(e.message || "verify failed — no receipt for this run id?");
+    } finally {
+      // LIVE-CAUGHT 2026-11-12 (second receipt, same visit): loading was
+      // never reset, so the button stayed "Verifying…" and the loading
+      // guard silently swallowed every verification after the first —
+      // the page was one-verify-per-reload since launch.
+      setLoading(false);
     }
   };
 
