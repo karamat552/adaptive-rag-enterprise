@@ -48,13 +48,19 @@ sys.path.insert(0, str(REPO))
 BATTERY_PATH = REPO / "tests" / "battery_phase1_preregistered.json"
 
 
-def fleet_questions(limit: Optional[int]) -> List[Dict[str, Any]]:
+def fleet_questions(limit: Optional[int], offset: int = 0) -> List[Dict[str, Any]]:
     """The PRE-REGISTERED battery's fleet-class questions — the questions
     the FastPath correctly does NOT serve, where the synthesis latency
-    actually lives. No post-hoc questions: the battery is fixed."""
+    actually lives. No post-hoc questions: the battery is fixed. The
+    battery orders the fleet slice B-class (uncovered-but-served) first,
+    then C-class (out-of-period honest refusals), then D-class
+    (qualitative narrative); --offset windows into the later regimes
+    (FLEET-PROFILE 2026-11-12: C/D latencies were never measured — the
+    earlier runs only sampled the first four B-class questions)."""
     spec = json.loads(BATTERY_PATH.read_text(encoding="utf-8"))
     qs = [q for q in spec["questions"] if q.get("expect_path") == "fleet"]
-    return qs[:limit] if limit else qs
+    window = qs[offset:]
+    return window[:limit] if limit else window
 
 
 def run_strategy(args) -> int:
@@ -73,16 +79,24 @@ def run_strategy(args) -> int:
 
     import adaptive_rag as ar
 
-    questions = fleet_questions(args.limit)
+    questions = fleet_questions(args.limit, getattr(args, "offset", 0))
     if not questions:
         print("REFUSED: no fleet-class questions resolved.")
         return 1
+
+    # CACHE DISABLED — the experiment measures the pipeline's live latency,
+    # not the semantic cache's replay speed. Without this, the second
+    # strategy would hit the cache for the same questions and return
+    # 0.1s / 0 tokens, making the comparison meaningless (found live
+    # 2026-10-25: the cap8 run measured the cache, not the strategy).
+    os.environ["RAG_DISABLE_CACHE_READ"] = "1"
+    os.environ["RAG_DISABLE_CACHE_WRITE"] = "1"
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     rows: List[Dict[str, Any]] = []
     print(f"[{label}] evidence-max={args.evidence_max} | "
-          f"questions={len(questions)}")
+          f"questions={len(questions)} | cache: DISABLED")
 
     for i, q in enumerate(questions, 1):
         t0 = time.perf_counter()
@@ -185,6 +199,9 @@ def main(argv=None) -> int:
                        help="strategy label for the output files")
     run_p.add_argument("--limit", type=int, default=6,
                        help="fleet-class questions to run (default 6)")
+    run_p.add_argument("--offset", type=int, default=0,
+                       help="skip the first N fleet-class questions (windows "
+                            "into the C/D regimes; 0 = from the top)")
     run_p.add_argument("--out", default="drill/latexp",
                        help="output directory")
 
